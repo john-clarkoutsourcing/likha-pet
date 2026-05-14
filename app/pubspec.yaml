@@ -1,0 +1,48 @@
+name: likha_pet
+description: Filipino-inspired AI pet strategy game with 3v3 turn-based battles.
+version: 1.0.0+1
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Battle engine (pure Dart, no Flutter imports)
+  likha_pet_battle_engine:
+    path: ../battle_engine
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^15.1.2
+
+  cupertino_icons: ^1.0.8
+  google_fonts: ^8.1.0
+  flame: ^1.37.0
+  flame_spine: ^0.3.0+5
+  spine_flutter: ^4.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/bg2/
+    - assets/images/cards/
+    - assets/images/ui/
+    - assets/sprites/
+    - assets/spines/aquatic/
+    - assets/spines/plant/
+    - assets/spines/beast/
+    - assets/spines/bug/
+    - assets/spines/reptile/
+    - assets/spines/bird/
+    - assets/audio/

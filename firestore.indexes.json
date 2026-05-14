@@ -1,0 +1,37 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "matchPool",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trophies",  "order": "ASCENDING" },
+        { "fieldPath": "queuedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "battles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "participants.teamA.playerId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "battles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "participants.teamB.playerId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerId",   "order": "ASCENDING" },
+        { "fieldPath": "hatchedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

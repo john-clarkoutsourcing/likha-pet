@@ -1,0 +1,5 @@
+name: likha_pet_battle_engine
+description: Pure-logic Dart battle engine for Likha Pet (no UI, no Flutter).
+version: 1.0.0
+environment:
+  sdk: '>=3.0.0 <4.0.0'
