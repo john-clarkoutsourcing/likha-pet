@@ -8,11 +8,11 @@ class LikhaPetApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return MaterialApp.router(
+    return MaterialApp(
       title: 'Likha Pet',
       theme: AppTheme.dark,
-      routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
+      home: const RouterGuard(),
     );
   }
 }

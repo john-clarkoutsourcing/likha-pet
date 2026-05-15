@@ -284,7 +284,7 @@ section "Starting Express API server"
 
 SERVER_LOG="$SCRIPT_DIR/.server.log"
 
-npm run dev --prefix server > "$SERVER_LOG" 2>&1 &
+FIRESTORE_EMULATOR_HOST=localhost:8090 npm run dev --prefix server > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 PIDS+=($SERVER_PID)
 log "Server PID: $SERVER_PID  (log → .server.log)"

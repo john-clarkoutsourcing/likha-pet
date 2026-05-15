@@ -1,4 +1,6 @@
-import { DNAAttributes, Rarity } from '../models/BasePet';
+import { DNAAttributes } from '../models/BasePet';
+
+type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary';
 
 const COLORS = ['#E74C3C', '#2ECC71', '#3498DB', '#9B59B6', '#F1C40F', '#1ABC9C', '#E67E22', '#EC407A'];
 const ELEMENTS = ['Fire', 'Water', 'Earth', 'Wind', 'Light', 'Shadow', 'Thunder', 'Ice'];

@@ -70,21 +70,37 @@ class GeneDecoder {
     // Helper to extract 2-char hex substring and convert to int
     int byte(int start) => int.parse(dna.substring(start, start + 2), radix: 16);
 
-    final bodyClass = _classFromByte(byte(0));
-    final hornClass = _classFromByte(byte(2));
-    final backClass = _classFromByte(byte(4));
-    final tailClass = _classFromByte(byte(6));
+    final bodyClass  = _classFromByte(byte(0));
+    final hornClass  = _classFromByte(byte(2));
+    final backClass  = _classFromByte(byte(4));
+    final tailClass  = _classFromByte(byte(6));
     final mouthClass = _classFromByte(byte(8));
 
+    // Byte 9  (hex 18-19): upper nibble = horn variant index (0-15 → mod 6)
+    //                       lower nibble = back variant index (0-15 → mod 6)
+    // Byte 10 (hex 20-21): upper nibble = tail variant index (0-15 → mod 6)
+    //                       lower nibble = mouth variant index (0-15 → mod 4)
+    // OwnedPet._partId() applies the modulo against the available-variant arrays.
+    final variantByte1  = byte(18);
+    final variantByte2  = byte(20);
+    final hornVariant   = variantByte1 >> 4;    // 0-15
+    final backVariant   = variantByte1 & 0xF;   // 0-15
+    final tailVariant   = variantByte2 >> 4;    // 0-15
+    final mouthVariant  = variantByte2 & 0xF;   // 0-15
+
     return DecodedGenes(
-      dna: dna,
-      bodyClass: bodyClass,
-      hornClass: hornClass,
-      backClass: backClass,
-      tailClass: tailClass,
-      mouthClass: mouthClass,
-      color: _colors[byte(10) % _colors.length],
-      rarity: _parseRarity(byte(12)),
+      dna:         dna,
+      bodyClass:   bodyClass,
+      hornClass:   hornClass,
+      backClass:   backClass,
+      tailClass:   tailClass,
+      mouthClass:  mouthClass,
+      hornVariant:  hornVariant,
+      backVariant:  backVariant,
+      tailVariant:  tailVariant,
+      mouthVariant: mouthVariant,
+      color:   _colors[byte(10) % _colors.length],
+      rarity:  _parseRarity(byte(12)),
       element: _elements[byte(14) % _elements.length],
       pattern: _patterns[byte(16) % _patterns.length],
     );
@@ -128,6 +144,11 @@ class DecodedGenes {
   final CreatureClass backClass;
   final CreatureClass tailClass;
   final CreatureClass mouthClass;
+  /// 0 = base part (no suffix), 1 = _2 variant
+  final int hornVariant;
+  final int backVariant;
+  final int tailVariant;
+  final int mouthVariant;
   final String color;
   final String rarity;
   final String element;
@@ -140,6 +161,10 @@ class DecodedGenes {
     required this.backClass,
     required this.tailClass,
     required this.mouthClass,
+    this.hornVariant  = 0,
+    this.backVariant  = 0,
+    this.tailVariant  = 0,
+    this.mouthVariant = 0,
     required this.color,
     required this.rarity,
     required this.element,

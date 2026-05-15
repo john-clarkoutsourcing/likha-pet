@@ -1,6 +1,18 @@
-import { PetState, DNAAttributes } from '../../../shared/types';
+// Local type definitions (shared with app and client)
+export enum PetState {
+  EGG = 'Egg',
+  HATCHED = 'Hatched',
+}
 
-export { PetState, DNAAttributes };
+export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary';
+
+export interface DNAAttributes {
+  color: string;
+  rarity: Rarity;
+  basePower: number;
+  element: string;
+  pattern: string;
+}
 
 export abstract class BasePet {
   readonly id: string;

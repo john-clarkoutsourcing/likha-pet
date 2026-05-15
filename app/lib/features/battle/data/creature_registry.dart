@@ -230,19 +230,79 @@ final Map<String, BodyDefinition> kBodyCatalogue = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PARTS CATALOGUE
-// All 24 available parts (6 classes × 4 slots).
-// Any part can be equipped on any body — class mixing is intentional.
+// PARTS CATALOGUE  (programmatically generated — 132 entries)
 //
-// Card-art variant numbers derived from Spine skeleton names:
-//   04-ena-plant → 04  |  03-puffy-aquatic → 04 (nearest)
-//   05-dps-beast → 04 (nearest) |  08-machito-reptile → 08
-//   12-momo-bird → 12  |  06-pomodoro-bug → 06
+// Key format: {class}_{slot}_{variant}  e.g. 'beast_horn_04'
+//
+// Horn/Back/Tail — 6 variants: 02 04 06 08 10 12  (all in local atlas + card art)
+// Mouth          — 4 variants: 02 04 08 10         (card art availability)
+//
+// Traits tier:
+//   Variants 02/04 → tier-1 base trait
+//   Variants 06/08/10/12 → tier-2 trait (horn + back have tier-2; tail + mouth reuse tier-1)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-final Map<String, PartDefinition> kPartCatalogue = {
+// Available variants per slot (matching local card art and atlas)
+const _kHornBackTailVariants = ['02', '04', '06', '08', '10', '12'];
+const _kMouthVariants        = ['02', '04', '08', '10'];
 
-  // ── Beast parts ────────────────────────────────────────────────────────────
+// Map (class, slot, variant) → trait factory
+Trait Function() _traitFor(CreatureClass cls, String slot, String v) {
+  final tier2 = ['06', '08', '10', '12'].contains(v);
+  if (slot == 'horn') return switch (cls) {
+    CreatureClass.beast   => tier2 ? () => TraitLibrary.beastHorn2   : () => TraitLibrary.beastHorn,
+    CreatureClass.plant   => tier2 ? () => TraitLibrary.plantHorn2   : () => TraitLibrary.plantHorn,
+    CreatureClass.aquatic => tier2 ? () => TraitLibrary.aquaticHorn2 : () => TraitLibrary.aquaticHorn,
+    CreatureClass.bird    => tier2 ? () => TraitLibrary.birdHorn2    : () => TraitLibrary.birdHorn,
+    CreatureClass.bug     => tier2 ? () => TraitLibrary.bugHorn2     : () => TraitLibrary.bugHorn,
+    CreatureClass.reptile => tier2 ? () => TraitLibrary.reptileHorn2 : () => TraitLibrary.reptileHorn,
+  };
+  if (slot == 'back') return switch (cls) {
+    CreatureClass.beast   => tier2 ? () => TraitLibrary.beastBack2   : () => TraitLibrary.beastBack,
+    CreatureClass.plant   => tier2 ? () => TraitLibrary.plantBack2   : () => TraitLibrary.plantBack,
+    CreatureClass.aquatic => tier2 ? () => TraitLibrary.aquaticBack2 : () => TraitLibrary.aquaticBack,
+    CreatureClass.bird    => tier2 ? () => TraitLibrary.birdBack2    : () => TraitLibrary.birdBack,
+    CreatureClass.bug     => tier2 ? () => TraitLibrary.bugBack2     : () => TraitLibrary.bugBack,
+    CreatureClass.reptile => tier2 ? () => TraitLibrary.reptileBack2 : () => TraitLibrary.reptileBack,
+  };
+  if (slot == 'tail') return switch (cls) {
+    CreatureClass.beast   => () => TraitLibrary.beastTail,
+    CreatureClass.plant   => () => TraitLibrary.plantTail,
+    CreatureClass.aquatic => () => TraitLibrary.aquaticTail,
+    CreatureClass.bird    => () => TraitLibrary.birdTail,
+    CreatureClass.bug     => () => TraitLibrary.bugTail,
+    CreatureClass.reptile => () => TraitLibrary.reptileTail,
+  };
+  return switch (cls) {
+    CreatureClass.beast   => () => TraitLibrary.beastMouth,
+    CreatureClass.plant   => () => TraitLibrary.plantMouth,
+    CreatureClass.aquatic => () => TraitLibrary.aquaticMouth,
+    CreatureClass.bird    => () => TraitLibrary.birdMouth,
+    CreatureClass.bug     => () => TraitLibrary.bugMouth,
+    CreatureClass.reptile => () => TraitLibrary.reptileMouth,
+  };
+}
+
+final Map<String, PartDefinition> kPartCatalogue = Map.fromEntries([
+  for (final cls in CreatureClass.values)
+    for (final slot in ['horn', 'back', 'tail', 'mouth']) ...[
+      for (final v in (slot == 'mouth' ? _kMouthVariants : _kHornBackTailVariants))
+        MapEntry(
+          '${cls.name}_${slot}_$v',
+          PartDefinition(
+            id:       '${cls.name}_${slot}_$v',
+            partType: slot,
+            partClass: cls,
+            cardArtPath: _card(cls.name, slot, v),
+            traitFactory: _traitFor(cls, slot, v),
+          ),
+        ),
+    ],
+]);
+
+// (legacy hand-written entries removed — replaced by kPartCatalogue generator above)
+// ignore: unused_element
+final Map<String, PartDefinition> _kPartCatalogueUnused = {
   'beast_horn': PartDefinition(
     id: 'beast_horn', partType: 'horn',
     partClass: CreatureClass.beast,
@@ -468,7 +528,7 @@ final Map<String, PartDefinition> kPartCatalogue = {
     traitFactory: () => TraitLibrary.reptileMouth,        // Tiny Catapult
   ),
 
-  // ── Reptile variant parts ──────────────────────────────────────────────────
+  // ── Reptile variant parts (legacy — superseded by kPartCatalogue generator) ─
   'reptile_horn_2': PartDefinition(
     id: 'reptile_horn_2', partType: 'horn',
     partClass: CreatureClass.reptile,
@@ -484,19 +544,15 @@ final Map<String, PartDefinition> kPartCatalogue = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CREATURE REGISTRY — default pure-breed roster
+// CREATURE REGISTRY — NPC / enemy definitions only
 //
-// Each entry is a specific creature: one body + four parts that may be from
-// ANY class. The current roster uses pure-breed builds (all parts match body),
-// but you can swap any part to any catalogued part to create hybrids.
+// Player pets are NEVER sourced from here — they come from OwnedPet.toCreatureDefinition()
+// using the DNA stored in playerProvider.
 //
-// Example of a hybrid: a Plant body with a Beast horn (Nut Crack) for
-// extra burst damage while keeping Plant's defensive back/tail/mouth.
-//
-// To add a new creature or change a build:
-//   1. Pick a body from kBodyCatalogue.
-//   2. Pick 4 parts (one per slot) from kPartCatalogue.
-//   3. Add the CreatureDefinition here and reference it in the team builder.
+// This registry exists solely for:
+//   • Quick-battle enemy team (pve_battle_provider._teamBeta)
+//   • PvE stage enemy templates (stage_registry.dart)
+//   • Pet info display for non-player pets in battle
 // ═══════════════════════════════════════════════════════════════════════════════
 
 P(String id) => kPartCatalogue[id]!;   // shorthand

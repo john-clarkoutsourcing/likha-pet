@@ -31,9 +31,10 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
     final saved = await _repo.load();
     if (saved != null && saved.hasStarters) {
       state = saved;
-    } else {
-      await _generateStarterPack();
     }
+    // If no saved data: leave roster empty.
+    // HomeScreen detects roster.isEmpty and redirects to StarterPackScreen,
+    // which calls addPet() interactively for each hatched egg.
     _initialized = true;
   }
 
@@ -41,7 +42,8 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   /// Useful for testing or a "reset account" flow.
   Future<void> resetAndRehatch() async {
     await _repo.clear();
-    await _generateStarterPack();
+    state = PlayerData.empty();
+    // No auto-generation — StarterPackScreen handles the hatching flow
   }
 
   Future<void> _generateStarterPack() async {

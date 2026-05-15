@@ -67,11 +67,22 @@ class OwnedPet {
   /// Body type ID (e.g., 'beast_1', 'plant_1')
   String get bodyId => '${_decoded.bodyClass.name}_1';
 
-  /// Part IDs derived from decoded DNA
-  String get hornId => '${_decoded.hornClass.name}_horn';
-  String get backId => '${_decoded.backClass.name}_back';
-  String get tailId => '${_decoded.tailClass.name}_tail';
-  String get mouthId => '${_decoded.mouthClass.name}_mouth';
+  /// Part IDs derived from decoded DNA.
+  /// Maps variant nibble (0-15) → catalogue key '{class}_{slot}_{variantCode}'.
+  String get hornId  => _partId(_decoded.hornClass.name,  'horn',  _decoded.hornVariant);
+  String get backId  => _partId(_decoded.backClass.name,  'back',  _decoded.backVariant);
+  String get tailId  => _partId(_decoded.tailClass.name,  'tail',  _decoded.tailVariant);
+  String get mouthId => _partId(_decoded.mouthClass.name, 'mouth', _decoded.mouthVariant);
+
+  // Horn/back/tail: 6 variants; mouth: 4 variants (matching local card-art availability)
+  static const _kHBTVariants   = ['02', '04', '06', '08', '10', '12'];
+  static const _kMouthVariants = ['02', '04', '08', '10'];
+
+  static String _partId(String cls, String slot, int idx) {
+    final variants = slot == 'mouth' ? _kMouthVariants : _kHBTVariants;
+    final v = variants[idx % variants.length];
+    return '${cls}_${slot}_$v';
+  }
 
   /// Visual attributes from DNA
   String get color => _decoded.color;

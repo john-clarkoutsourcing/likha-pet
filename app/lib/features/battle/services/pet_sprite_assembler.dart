@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:likha_pet_battle_engine/trait.dart';
 import '../data/creature_registry.dart';
 import '../widgets/pet_character_widget.dart';
-import '../../pets/models/owned_pet.dart';
+import '../../pets/models/owned_pet.dart' show OwnedPet;
 
 // ── PetPartVisual ─────────────────────────────────────────────────────────────
 //
@@ -14,15 +14,11 @@ class PetPartVisual {
   /// Ordered Spine animation candidates for this slot's attack.
   /// The widget picks the first one that exists in the loaded skeleton.
   final List<String> attackClips;
-  final String? r1;   // recessive-1 part id  (displayed as faint gene dot)
-  final String? r2;   // recessive-2 part id  (deeply hidden gene dot)
 
   const PetPartVisual({
     required this.cardArtPath,
     required this.classColor,
     required this.attackClips,
-    this.r1,
-    this.r2,
   });
 }
 
@@ -77,30 +73,25 @@ class PetSpriteAssembler {
   const PetSpriteAssembler._();
 
   static PetVisualData fromOwned(OwnedPet pet) =>
-      fromDef(pet.toCreatureDefinition(), owned: pet);
+      fromDef(pet.toCreatureDefinition());
 
-  static PetVisualData fromDef(
-    CreatureDefinition def, {
-    OwnedPet? owned,
-  }) {
+  static PetVisualData fromDef(CreatureDefinition def) {
     final body  = def.body;
     final stats = def.computedStats;
 
-    PetPartVisual buildPart(String slot, PartDefinition part, PetGenes? genes) {
+    PetPartVisual buildPart(String slot, PartDefinition part) {
       return PetPartVisual(
-        cardArtPath:  part.cardArtPath,
-        classColor:   classColor(part.partClass),
-        attackClips:  attackClipsForSlot(slot),
-        r1: genes?.r1,
-        r2: genes?.r2,
+        cardArtPath: part.cardArtPath,
+        classColor:  classColor(part.partClass),
+        attackClips: attackClipsForSlot(slot),
       );
     }
 
     final parts = <String, PetPartVisual>{
-      'horn':  buildPart('horn',  def.horn,  owned?.hornGenes),
-      'back':  buildPart('back',  def.back,  owned?.backGenes),
-      'tail':  buildPart('tail',  def.tail,  owned?.tailGenes),
-      'mouth': buildPart('mouth', def.mouth, owned?.mouthGenes),
+      'horn':  buildPart('horn',  def.horn),
+      'back':  buildPart('back',  def.back),
+      'tail':  buildPart('tail',  def.tail),
+      'mouth': buildPart('mouth', def.mouth),
     };
 
     return PetVisualData(
@@ -109,7 +100,7 @@ class PetSpriteAssembler {
       bodyColor:   classColor(body.bodyClass),
       parts:       parts,
       stats:       stats,
-      purity:      owned?.purity ?? _purityFromDef(def),
+      purity:      _purityFromDef(def),
       name:        def.name,
     );
   }

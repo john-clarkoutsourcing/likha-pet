@@ -2,20 +2,26 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { MemoryStore } from '../store/MemoryStore';
+import { FirestoreService } from '../services/FirestoreService';
+import { StarterPackService } from '../services/StarterPackService';
 import { HatcheryError } from '../systems/HatcheryManager';
 import { User, RegisterRequest, LoginRequest, AuthResponse } from '../models/User';
 
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const TOKEN_EXPIRY = '24h';
+
 /**
  * Create auth routes
- * @param store MemoryStore instance for user persistence
+ * @param firestore FirestoreService instance for user persistence
  */
-export function createAuthRoutes(store: MemoryStore): Router {
+export function createAuthRoutes(firestore: FirestoreService): Router {
   const router = Router();
+  const starterPack = new StarterPackService(firestore);
 
   /**
    * POST /api/auth/register
    * Register a new user with email + password
+   * Automatically creates starter pack (3 eggs) for new player
    */
   router.post('/register', async (req: Request, res: Response) => {
     try {
@@ -35,7 +41,8 @@ export function createAuthRoutes(store: MemoryStore): Router {
       }
 
       // Check if email already registered
-      if (store.emailExists(email)) {
+      const exists = await firestore.emailExists(email);
+      if (exists) {
         throw new HatcheryError(409, 'Email already registered');
       }
 
@@ -51,8 +58,11 @@ export function createAuthRoutes(store: MemoryStore): Router {
         createdAt: Date.now(),
       };
 
-      // Save user
-      store.saveUser(user);
+      // Save user to Firestore
+      await firestore.saveUser(user);
+
+      // Create starter pack (3 eggs with random DNA)
+      await starterPack.createStarterPack(userId);
 
       // Create JWT token
       const token = jwt.sign(
@@ -90,7 +100,7 @@ export function createAuthRoutes(store: MemoryStore): Router {
       }
 
       // Find user by email
-      const user = store.findUserByEmail(email);
+      const user = await firestore.findUserByEmail(email);
       if (!user) {
         throw new HatcheryError(401, 'Invalid email or password');
       }

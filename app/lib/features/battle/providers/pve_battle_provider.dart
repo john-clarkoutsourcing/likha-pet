@@ -31,7 +31,10 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     List<Pet>? enemyPets,
     List<OwnedPet>? activeRoster,
   }) : super(PveBattleViewModel.initial()) {
-    _playerPets = playerPets ?? _defaultAlpha();
+    // playerPets must be provided via activeRoster from playerProvider.
+    // If somehow called without pets, fall back to an empty list and let
+    // the battle engine handle it gracefully.
+    _playerPets = playerPets ?? [];
     _enemyPets  = enemyPets  ?? _teamBeta();
     if (activeRoster != null) _registerPlayerDefs(activeRoster);
 
@@ -573,9 +576,9 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
   // ── Team builders ──────────────────────────────────────────────────────────
 
   /// Player team: built from the 3 active pets in the player's roster.
-  /// Falls back to default pure-breed starters if roster is empty.
+  /// Returns empty list if no roster — the HomeScreen blocks battle entry
+  /// when the team isn't full, so this path should not normally be reached.
   static List<Pet> _buildPlayerTeam(List<OwnedPet> activeRoster) {
-    if (activeRoster.isEmpty) return _defaultAlpha();
     return activeRoster
         .where((p) => kBodyCatalogue.containsKey(p.bodyId))
         .map((p) => p.toCreatureDefinition().toPet())
@@ -596,11 +599,6 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     return stage?.buildEnemyTeam() ?? _teamBeta();
   }
 
-  static List<Pet> _defaultAlpha() => [
-    kCreatureRegistry['plant_1']!.toPet(),
-    kCreatureRegistry['aquatic_1']!.toPet(),
-    kCreatureRegistry['beast_1']!.toPet(),
-  ];
 }
 
 // args provider — set before creating pveBattleProvider

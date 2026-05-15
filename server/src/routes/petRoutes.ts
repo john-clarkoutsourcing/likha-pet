@@ -1,41 +1,34 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { HatcheryManager, HatcheryError } from '../systems/HatcheryManager';
+import { verifyAuth } from '../middleware/auth';
 
 export function createPetRouter(hatchery: HatcheryManager): Router {
   const router = Router();
 
-  router.post('/spawn-egg', (req: Request, res: Response, next: NextFunction) => {
-    const { owner } = req.body as { owner?: string };
-    if (!owner?.trim()) {
-      res.status(400).json({ error: 'owner is required.' });
-      return;
-    }
+  // All pet routes require authentication
+  router.use(verifyAuth);
+
+  router.post('/spawn-egg', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const pet = hatchery.spawnEgg(owner.trim());
+      // Owner is now from JWT (req.userId), not from request body
+      const pet = await hatchery.spawnEgg(req.userId!);
       res.status(201).json(pet);
     } catch (e) { next(e); }
   });
 
-  router.get('/inventory', (req: Request, res: Response, next: NextFunction) => {
-    const { owner } = req.query as { owner?: string };
-    if (!owner?.trim()) {
-      res.status(400).json({ error: 'owner query parameter is required.' });
-      return;
-    }
+  router.get('/inventory', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      res.json(hatchery.getInventory(owner.trim()));
+      // Owner is from JWT (req.userId), not from query parameter
+      const pets = await hatchery.getInventory(req.userId!);
+      res.json(pets);
     } catch (e) { next(e); }
   });
 
-  router.post('/hatch/:id', (req: Request, res: Response, next: NextFunction) => {
+  router.post('/hatch/:id', async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
-    const { owner } = req.body as { owner?: string };
-    if (!owner?.trim()) {
-      res.status(400).json({ error: 'owner is required.' });
-      return;
-    }
     try {
-      const pet = hatchery.hatchEgg(id, owner.trim());
+      // Owner is from JWT (req.userId), not from request body
+      const pet = await hatchery.hatchEgg(id, req.userId!);
       res.json(pet);
     } catch (e) { next(e); }
   });
