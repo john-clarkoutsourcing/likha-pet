@@ -140,11 +140,8 @@ class Pet {
   void processStatusEffects(BattleLogger log) {
     for (final d in List.of(debuffs)) {
       if (d.type == DebuffType.poisoned) {
-        // Stacking poison: permanent — roundsRemaining stays at 999.
-        final stacks = d.value;
-        final dmg    = stacks * 4;
-        takeDamage(dmg, ignoreShield: true);
-        log.poisonTick(name, dmg, hp);
+        // Poison now ticks per ACTION (in ActionResolver), not per round.
+        // Only keep the stacks alive — no damage here.
       } else if (d.type == DebuffType.burned) {
         final dmg = d.value;
         takeDamage(dmg, ignoreShield: true);

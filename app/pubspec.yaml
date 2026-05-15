@@ -20,6 +20,10 @@ dependencies:
   # Navigation
   go_router: ^15.1.2
 
+  # Persistence
+  shared_preferences: ^2.3.4
+  uuid: ^4.5.1
+
   cupertino_icons: ^1.0.8
   google_fonts: ^8.1.0
   flame: ^1.37.0
@@ -54,6 +58,8 @@ flutter:
     - assets/spines/bird/
     - assets/spines/dusk/
     - assets/spines/soul/
+    # Shared mixer atlas — one 4096×4096 PNG contains ALL body parts for ALL classes
+    - assets/spines/mixer/
     # Creature data (genes, animations, samples, variants)
     - assets/data/
     # Audio

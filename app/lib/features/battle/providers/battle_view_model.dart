@@ -400,6 +400,9 @@ class PveBattleViewModel {
 
   final Map<String, PetCharacterAnimState> petAnimStates;
   final Map<String, String>                petEffectVfx;
+  /// Maps petId → slot name ('horn'|'back'|'tail'|'mouth') while that pet
+  /// is animating an attack, so the widget plays the slot-specific Spine clip.
+  final Map<String, String>                petAttackSlots;
   final Set<String>                        newCardIds;
 
   const PveBattleViewModel({
@@ -424,6 +427,7 @@ class PveBattleViewModel {
     this.excessDiscards      = 0,
     this.petAnimStates       = const {},
     this.petEffectVfx        = const {},
+    this.petAttackSlots      = const {},
     this.newCardIds          = const {},
   });
 
@@ -472,6 +476,7 @@ class PveBattleViewModel {
     int? excessDiscards,
     Map<String, PetCharacterAnimState>? petAnimStates,
     Map<String, String>? petEffectVfx,
+    Map<String, String>? petAttackSlots,
     Set<String>? newCardIds,
     bool clearSelectedPet = false,
   }) =>
@@ -497,6 +502,7 @@ class PveBattleViewModel {
         excessDiscards:   excessDiscards  ?? this.excessDiscards,
         petAnimStates:    petAnimStates   ?? this.petAnimStates,
         petEffectVfx:     petEffectVfx    ?? this.petEffectVfx,
+        petAttackSlots:   petAttackSlots  ?? this.petAttackSlots,
         newCardIds:       newCardIds      ?? this.newCardIds,
       );
 }

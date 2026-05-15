@@ -130,25 +130,29 @@ class BattleEngine {
 
       // ── Phase 4: Resolve actions in turn order ────────────────────────────
       _logger.phase('Action Phase');
-      final resolver = ActionResolver(_logger);
-      final ordered = _turns.buildResolutionOrder(slotsA, slotsB);
+      final resolver   = ActionResolver(_logger);
+      final ordered    = _turns.buildResolutionOrder(slotsA, slotsB);
+      final comboCount = <String, int>{}; // petId → cards played this round
 
       for (final action in ordered) {
         if (action.actor.isFainted) continue;
 
         if (action.actor.isStunned) {
           _logger.stunSkip(action.actor.name);
-          // Consume the stun — it lasted exactly 1 full round
           action.actor.debuffs.removeWhere(
             (d) => d.type == DebuffType.stunned,
           );
           continue;
         }
 
+        final petId      = action.actor.id;
+        final comboIndex = comboCount[petId] ?? 0;
+        comboCount[petId] = comboIndex + 1;
         resolver.resolve(
           action,
           _teamOf(action.actor),
           _enemyTeamOf(action.actor),
+          comboIndex: comboIndex,
         );
       }
 

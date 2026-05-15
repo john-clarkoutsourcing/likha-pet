@@ -27,6 +27,7 @@ import cors from 'cors';
 import { MemoryStore } from './store/MemoryStore';
 import { HatcheryManager } from './systems/HatcheryManager';
 import { createPetRouter } from './routes/petRoutes';
+import { createAuthRoutes } from './routes/authRoutes';
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -39,6 +40,9 @@ app.use(express.json());
 // Every request will use these same instances (no persistence on restart)
 const store = new MemoryStore();
 const hatchery = new HatcheryManager(store);
+
+// Mount authentication routes under /api/auth namespace
+app.use('/api/auth', createAuthRoutes(store));
 
 // Mount pet lifecycle routes under /api namespace
 // All endpoints are defined in petRoutes.ts

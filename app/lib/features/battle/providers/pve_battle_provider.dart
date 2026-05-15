@@ -5,7 +5,12 @@ import 'package:likha_pet_battle_engine/skill_card.dart';
 import 'package:likha_pet_battle_engine/trait.dart';
 import '../data/creature_registry.dart';
 import '../engine/interactive_battle_engine.dart';
-import '../widgets/pet_character_widget.dart' show PetCharacterAnimState;
+import '../screens/battle_screen.dart' show BattleScreenArgs;
+import '../services/mixed_skeleton_service.dart';
+import '../widgets/pet_character_widget.dart' show PetCharacterAnimState, PetCharacterConfig;
+import '../../pets/models/owned_pet.dart';
+import '../../pets/providers/player_provider.dart';
+import '../../pve/data/stage_registry.dart';
 import 'battle_view_model.dart';
 
 class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
@@ -16,12 +21,19 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
   // instanceId → (petId, shieldAmount) for shields pre-applied during planning.
   final Map<String, ({String petId, int amount})> _preAppliedShields = {};
 
+  // petId → PetCharacterConfig with mixed skeleton
+  final Map<String, PetCharacterConfig> _mixedSkeletonConfigs = {};
+
   PveBattleNotifier({
     required String playerTeamName,
     required String enemyTeamName,
+    List<Pet>? playerPets,
+    List<Pet>? enemyPets,
+    List<OwnedPet>? activeRoster,
   }) : super(PveBattleViewModel.initial()) {
-    _playerPets = _teamAlpha();
-    _enemyPets  = _teamBeta();
+    _playerPets = playerPets ?? _defaultAlpha();
+    _enemyPets  = enemyPets  ?? _teamBeta();
+    if (activeRoster != null) _registerPlayerDefs(activeRoster);
 
     _engine = InteractiveBattleEngine(
       playerTeam:     _playerPets,
@@ -30,23 +42,46 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       enemyTeamName:  enemyTeamName,
     );
 
-    state = PveBattleViewModel(
-      currentRound:     1,
-      playerTeam:       _toViewModels(_playerPets, isPlayer: true),
-      enemyTeam:        _toViewModels(_enemyPets,  isPlayer: false),
-      roundLog:         '',
-      isBattleOver:     false,
-      playerTeamName:   playerTeamName,
-      enemyTeamName:    enemyTeamName,
-      turnOrder:        _buildTurnOrder(),
-      selectedPetId:    _playerPets.first.id,
-      pendingSkills:    const {},
-      hand:             _buildHandVMs(_engine.currentPlayerHand, const {}),
-      deckDrawSize:     _engine.playerDeckDrawSize,
-      deckDiscardSize:  _engine.playerDeckDiscardSize,
-      playerTeamEnergy: _engine.playerEnergy.energy,
-      enemyTeamEnergy:  _engine.enemyEnergy.energy,
-    );
+    // Initialize mixed skeletons asynchronously
+    _initializeMixedSkeletons().then((_) {
+      state = PveBattleViewModel(
+        currentRound:     1,
+        playerTeam:       _toViewModels(_playerPets, isPlayer: true),
+        enemyTeam:        _toViewModels(_enemyPets,  isPlayer: false),
+        roundLog:         '',
+        isBattleOver:     false,
+        playerTeamName:   playerTeamName,
+        enemyTeamName:    enemyTeamName,
+        turnOrder:        _buildTurnOrder(),
+        selectedPetId:    _playerPets.first.id,
+        pendingSkills:    const {},
+        hand:             _buildHandVMs(_engine.currentPlayerHand, const {}),
+        deckDrawSize:     _engine.playerDeckDrawSize,
+        deckDiscardSize:  _engine.playerDeckDiscardSize,
+        playerTeamEnergy: _engine.playerEnergy.energy,
+        enemyTeamEnergy:  _engine.enemyEnergy.energy,
+      );
+    }).catchError((e) {
+      // Fallback to pre-baked skeletons if mixer fails
+      print('❌ Failed to initialize mixed skeletons: $e');
+      state = PveBattleViewModel(
+        currentRound:     1,
+        playerTeam:       _toViewModels(_playerPets, isPlayer: true),
+        enemyTeam:        _toViewModels(_enemyPets,  isPlayer: false),
+        roundLog:         '',
+        isBattleOver:     false,
+        playerTeamName:   playerTeamName,
+        enemyTeamName:    enemyTeamName,
+        turnOrder:        _buildTurnOrder(),
+        selectedPetId:    _playerPets.first.id,
+        pendingSkills:    const {},
+        hand:             _buildHandVMs(_engine.currentPlayerHand, const {}),
+        deckDrawSize:     _engine.playerDeckDrawSize,
+        deckDiscardSize:  _engine.playerDeckDiscardSize,
+        playerTeamEnergy: _engine.playerEnergy.energy,
+        enemyTeamEnergy:  _engine.enemyEnergy.energy,
+      );
+    });
   }
 
   // ── Player actions ─────────────────────────────────────────────────────────
@@ -170,12 +205,14 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     for (final action in started.actionQueue) {
       if (!mounted) return;
 
-      final actorId = action.actor.id;
+      final actorId    = action.actor.id;
       final effectType = action.trait.effect.type.name;
+      final partSlot   = action.trait.part.name; // 'horn'|'back'|'tail'|'mouth'|'body'
       if (!action.actor.isFainted) {
         state = state.copyWith(
-          petAnimStates: {actorId: _animStateForEffect(effectType)},
-          petEffectVfx:  {actorId: effectType},
+          petAnimStates:  {actorId: _animStateForEffect(effectType)},
+          petEffectVfx:   {actorId: effectType},
+          petAttackSlots: {actorId: partSlot},
         );
         await Future.delayed(const Duration(milliseconds: 300));
         if (!mounted) return;
@@ -204,8 +241,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         if (!mounted) return;
       }
 
-      state = state.copyWith(petAnimStates: const {});
-      state = state.copyWith(petEffectVfx: const {});
+      state = state.copyWith(petAnimStates: const {}, petEffectVfx: const {}, petAttackSlots: const {});
       await Future.delayed(const Duration(milliseconds: 120));
       if (!mounted) return;
     }
@@ -448,48 +484,143 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     ];
   }
 
+  // Look up creature definition for view-model building.
+  // Registry pets (enemy AI) are found by ID directly.
+  // Player pets built from OwnedPet use the UUID as ID — no registry entry,
+  // but we store a uid→definition map populated at construction.
+  final Map<String, CreatureDefinition> _petDefs = {};
+
+  void _registerPlayerDefs(List<OwnedPet> activeRoster) {
+    for (final p in activeRoster) {
+      _petDefs[p.uid] = p.toCreatureDefinition();
+    }
+  }
+
+  /// Pre-mix all creature skeletons for both player and enemy teams.
+  /// This runs async during battle initialization to avoid blocking the UI.
+  Future<void> _initializeMixedSkeletons() async {
+    try {
+      final service = await MixedSkeletonService.instance();
+      
+      // Mix all player pets
+      for (final pet in _playerPets) {
+        final def = _defFor(pet.id);
+        if (def != null) {
+          try {
+            final skeleton = await service.buildMixedSkeleton(def);
+            _mixedSkeletonConfigs[pet.id] = PetCharacterConfig(
+              texturePath: 'assets/spines/mixer/likha-2d-v3-all.png',
+              spineAtlasPath: 'assets/spines/mixer/likha-2d-v3-all.atlas',
+              skeletonJson: skeleton,
+            );
+            print('✅ Mixed skeleton for ${pet.name} (${pet.id})');
+          } catch (e) {
+            print('⚠️  Failed to mix ${pet.name}: $e');
+          }
+        }
+      }
+      
+      // Mix all enemy pets
+      for (final pet in _enemyPets) {
+        final def = _defFor(pet.id);
+        if (def != null) {
+          try {
+            final skeleton = await service.buildMixedSkeleton(def);
+            _mixedSkeletonConfigs[pet.id] = PetCharacterConfig(
+              texturePath: 'assets/spines/mixer/likha-2d-v3-all.png',
+              spineAtlasPath: 'assets/spines/mixer/likha-2d-v3-all.atlas',
+              skeletonJson: skeleton,
+            );
+            print('✅ Mixed skeleton for ${pet.name} (${pet.id})');
+          } catch (e) {
+            print('⚠️  Failed to mix ${pet.name}: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ MixedSkeletonService failed to initialize: $e');
+    }
+  }
+
+  CreatureDefinition? _defFor(String petId) =>
+      _petDefs[petId] ?? kCreatureRegistry[petId];
+
   PetViewModel _petVM(Pet pet, int position) {
-    final def = kCreatureRegistry[pet.id];
+    final def = _defFor(pet.id);
+    // Try to use mixed skeleton if available, otherwise fall back to pre-baked
+    final characterConfig = _mixedSkeletonConfigs[pet.id] ?? def?.spineConfig;
     return PetViewModel.initial(
       pet.id, pet.name, pet.speed, position,
       pet.traits, pet,
       spriteConfig:    def?.spriteConfig,
-      characterConfig: def?.spineConfig,
+      characterConfig: characterConfig,
       partCardArt:     def?.partCardArt ?? const {},
     );
   }
 
   PetViewModel _snapVM(PetSnapshot snap, Pet livePet, int position) {
-    final def = kCreatureRegistry[livePet.id];
+    final def = _defFor(livePet.id);
+    // Try to use mixed skeleton if available, otherwise fall back to pre-baked
+    final characterConfig = _mixedSkeletonConfigs[livePet.id] ?? def?.spineConfig;
     return PetViewModel.fromSnapshot(
       snap, livePet.traits, livePet, position,
       spriteConfig:    def?.spriteConfig,
-      characterConfig: def?.spineConfig,
+      characterConfig: characterConfig,
       partCardArt:     def?.partCardArt ?? const {},
     );
   }
 
-  // ── Team definitions — built from the creature registry ───────────────────
-  // To change a creature's parts or stats, edit creature_registry.dart.
-  // Team composition is the only thing configured here.
+  // ── Team builders ──────────────────────────────────────────────────────────
 
-  static List<Pet> _teamAlpha() => [
-    kCreatureRegistry['plant_1']!.toPet(),   // Treant — plant tank
-    kCreatureRegistry['aquatic_1']!.toPet(), // Puffy  — aquatic mid
-    kCreatureRegistry['beast_1']!.toPet(),   // Buba   — beast DPS
+  /// Player team: built from the 3 active pets in the player's roster.
+  /// Falls back to default pure-breed starters if roster is empty.
+  static List<Pet> _buildPlayerTeam(List<OwnedPet> activeRoster) {
+    if (activeRoster.isEmpty) return _defaultAlpha();
+    return activeRoster
+        .where((p) => kBodyCatalogue.containsKey(p.bodyId))
+        .map((p) => p.toCreatureDefinition().toPet())
+        .toList();
+  }
+
+  /// Quick-battle enemy team (used when no stageId is given).
+  static List<Pet> _teamBeta() => [
+    kCreatureRegistry['reptile_1']!.toPet(),
+    kCreatureRegistry['bird_1']!.toPet(),
+    kCreatureRegistry['bug_1']!.toPet(),
   ];
 
-  static List<Pet> _teamBeta() => [
-    kCreatureRegistry['reptile_1']!.toPet(), // Kida  — reptile tank
-    kCreatureRegistry['bird_1']!.toPet(),    // Momo  — bird glass cannon
-    kCreatureRegistry['bug_1']!.toPet(),     // Plum  — bug bruiser
+  /// Build enemy team from a stage config, or fall back to quick-battle default.
+  static List<Pet> _buildEnemyTeam(String? stageId) {
+    if (stageId == null) return _teamBeta();
+    final stage = stageById(stageId);
+    return stage?.buildEnemyTeam() ?? _teamBeta();
+  }
+
+  static List<Pet> _defaultAlpha() => [
+    kCreatureRegistry['plant_1']!.toPet(),
+    kCreatureRegistry['aquatic_1']!.toPet(),
+    kCreatureRegistry['beast_1']!.toPet(),
   ];
 }
 
+// args provider — set before creating pveBattleProvider
+final battleArgsProvider = StateProvider<BattleScreenArgs?>((_) => null);
+
 final pveBattleProvider =
     StateNotifierProvider.autoDispose<PveBattleNotifier, PveBattleViewModel>(
-  (ref) => PveBattleNotifier(
-    playerTeamName: 'Team Alpha',
-    enemyTeamName:  'Team Beta',
-  ),
+  (ref) {
+    final args        = ref.read(battleArgsProvider);
+    final playerData  = ref.read(playerProvider);
+    final activeRoster = playerData.hasFullTeam
+        ? playerData.activeRoster
+        : <OwnedPet>[];
+    final stage = args?.stageId != null ? stageById(args!.stageId!) : null;
+    return PveBattleNotifier(
+      playerTeamName: args?.playerTeamName ?? 'My Team',
+      enemyTeamName:  stage?.name ?? (args?.enemyTeamName ?? 'Rivals'),
+      playerPets:     PveBattleNotifier._buildPlayerTeam(activeRoster),
+      enemyPets:      PveBattleNotifier._buildEnemyTeam(args?.stageId),
+      activeRoster:   activeRoster,
+    );
+  },
 );

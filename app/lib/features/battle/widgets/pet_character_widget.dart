@@ -14,14 +14,17 @@ class PetCharacterConfig {
   final String texturePath;
   final String? spineAtlasPath;
   final String? spineSkeletonPath;
+  final Map<String, dynamic>? skeletonJson;  // For runtime-generated mixed skeletons
 
   const PetCharacterConfig({
     required this.texturePath,
     this.spineAtlasPath,
     this.spineSkeletonPath,
+    this.skeletonJson,
   });
 
-  bool get hasSpine => spineAtlasPath != null && spineSkeletonPath != null;
+  bool get hasSpine => (spineAtlasPath != null && spineSkeletonPath != null) || skeletonJson != null;
+  bool get isMixed => skeletonJson != null;
 }
 
 enum PetCharacterAnimState {
@@ -217,6 +220,10 @@ class PetCharacterWidget extends StatefulWidget {
   final PetCharacterAnimState animState;
   final double                size;
   final bool                  flipHorizontal;
+  /// When set and [animState] is an attack variant, picks the slot-specific
+  /// Spine animation instead of the generic attack clips.
+  /// Values: 'horn' | 'back' | 'tail' | 'mouth'
+  final String?               attackSlot;
 
   const PetCharacterWidget({
     super.key,
@@ -224,6 +231,7 @@ class PetCharacterWidget extends StatefulWidget {
     required this.size,
     this.animState      = PetCharacterAnimState.idle,
     this.flipHorizontal = false,
+    this.attackSlot,
   });
 
   @override
@@ -330,6 +338,16 @@ class _PetCharacterWidgetState extends State<PetCharacterWidget> {
   }
 
   List<String> _clipsForState(PetCharacterAnimState state) {
+    // If an attack slot is specified, use its specific animation candidates.
+    final slot = widget.attackSlot;
+    if (slot != null) {
+      final isAttack = state == PetCharacterAnimState.attack ||
+          state == PetCharacterAnimState.attackMelee ||
+          state == PetCharacterAnimState.attackRanged;
+      if (isAttack) {
+        return _kSlotAttackClips[slot] ?? _kAttackClips;
+      }
+    }
     return switch (state) {
       PetCharacterAnimState.move         => _kMoveClips,
       PetCharacterAnimState.attackMelee  => _kAttackMeleeClips,
@@ -465,3 +483,28 @@ const _kFaintClips = <String>[
   'battle/ko',
   'action/idle/normal',
 ];
+
+// Slot-specific attack clips (used when attackSlot is provided)
+const _kSlotAttackClips = <String, List<String>>{
+  'horn': [
+    'attack/melee/horn-gore',
+    'attack/melee/normal-attack',
+  ],
+  'mouth': [
+    'attack/melee/mouth-bite',
+    'attack/melee/normal-attack',
+  ],
+  'tail': [
+    'attack/melee/tail-smash',
+    'attack/melee/tail-roll',
+    'attack/melee/tail-thrash',
+    'attack/melee/tail-multi-slap',
+    'attack/melee/normal-attack',
+  ],
+  'back': [
+    'attack/ranged/cast-high',
+    'attack/ranged/cast-fly',
+    'attack/ranged/cast-low',
+    'attack/ranged/cast-multi',
+  ],
+};

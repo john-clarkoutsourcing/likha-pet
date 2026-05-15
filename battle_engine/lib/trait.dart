@@ -832,8 +832,159 @@ class TraitLibrary {
       );
 
   // ── Reptile ───────────────────────────────────────────────────────────────
-  // Reptile class: tank + sustain. Bone Sail (back) gives a huge 2-energy
-  // shield. Tiny Catapult pierces the front row to hit the back.
+  // ── Beast variant skills ──────────────────────────────────────────────────
+
+  static Trait get beastHorn2 => Trait(
+        id: 'beast_horn_2', name: 'Ivory Stab',
+        type: TraitType.offensive, part: TraitPart.horn,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Deal 50 damage and raise own ATK by 20% for 1 round.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(
+          type: EffectType.buff, value: 20,
+          buffType: BuffType.attackUp, duration: 1, target: 'self',
+          selfShield: 15,
+        ),
+      );
+
+  static Trait get beastBack2 => Trait(
+        id: 'beast_back_2', name: 'Ronin',
+        type: TraitType.offensive, part: TraitPart.back,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Deal 55 damage. Bonus damage when comboed.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(type: EffectType.damage, value: 55, target: 'enemy', selfShield: 20),
+      );
+
+  // ── Plant variant skills ──────────────────────────────────────────────────
+
+  static Trait get plantHorn2 => Trait(
+        id: 'plant_horn_2', name: 'Wall of Plant',
+        type: TraitType.defensive, part: TraitPart.horn,
+        energyCost: 2, cooldownMax: 2,
+        description: 'Raise DEF by 30% for 2 rounds and gain 50 shield.',
+        rarity: SkillRarity.rare,
+        effect: const TraitEffect(
+          type: EffectType.buff, value: 30,
+          buffType: BuffType.defenseUp, duration: 2, target: 'self',
+          selfShield: 50,
+        ),
+      );
+
+  static Trait get plantBack2 => Trait(
+        id: 'plant_back_2', name: 'Prickly Trap',
+        type: TraitType.utility, part: TraitPart.back,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Apply 1 poison stack to front enemy + gain 30 shield. Punishes aggression.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(
+          type: EffectType.debuff, value: 1,
+          debuffType: DebuffType.poisoned, duration: 999, target: 'enemy',
+          selfShield: 30,
+        ),
+      );
+
+  // ── Aquatic variant skills ────────────────────────────────────────────────
+
+  static Trait get aquaticHorn2 => Trait(
+        id: 'aquatic_horn_2', name: 'Lam Glue',
+        type: TraitType.utility, part: TraitPart.horn,
+        energyCost: 2, cooldownMax: 2,
+        description: 'Slow ALL enemies (Speed Down 20%/1r) and gain 15 shield.',
+        rarity: SkillRarity.rare,
+        effect: const TraitEffect(
+          type: EffectType.debuff, value: 20,
+          debuffType: DebuffType.speedDown, duration: 1, target: 'all_enemies',
+          selfShield: 15,
+        ),
+      );
+
+  static Trait get aquaticBack2 => Trait(
+        id: 'aquatic_back_2', name: 'Goldfish',
+        type: TraitType.defensive, part: TraitPart.back,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Speed Up 20% for 2 rounds and gain 35 shield.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(
+          type: EffectType.buff, value: 20,
+          buffType: BuffType.speedUp, duration: 2, target: 'self',
+          selfShield: 35,
+        ),
+      );
+
+  // ── Bird variant skills ───────────────────────────────────────────────────
+
+  static Trait get birdHorn2 => Trait(
+        id: 'bird_horn_2', name: 'Kestrel',
+        type: TraitType.offensive, part: TraitPart.horn,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Pierce the front row — deal 55 damage to the back-row enemy.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(type: EffectType.damage, value: 55, target: 'back_enemy', selfShield: 15),
+      );
+
+  static Trait get birdBack2 => Trait(
+        id: 'bird_back_2', name: 'Swallow Dive',
+        type: TraitType.offensive, part: TraitPart.back,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Deal 45 damage + Speed Up 20%/1r. Hit and retreat.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(
+          type: EffectType.buff, value: 20,
+          buffType: BuffType.speedUp, duration: 1, target: 'self',
+          selfShield: 15,
+        ),
+      );
+
+  // ── Bug variant skills ────────────────────────────────────────────────────
+
+  static Trait get bugHorn2 => Trait(
+        id: 'bug_horn_2', name: 'Twin Needle',
+        type: TraitType.offensive, part: TraitPart.horn,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Deal 55 damage. Combos powerfully with other Bug cards.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(type: EffectType.damage, value: 55, target: 'enemy', selfShield: 15),
+      );
+
+  static Trait get bugBack2 => Trait(
+        id: 'bug_back_2', name: 'Lagging',
+        type: TraitType.utility, part: TraitPart.back,
+        energyCost: 2, cooldownMax: 2,
+        description: 'Reduce ATK by 20% on ALL enemies for 2 rounds and gain 25 shield.',
+        rarity: SkillRarity.rare,
+        effect: const TraitEffect(
+          type: EffectType.debuff, value: 20,
+          debuffType: DebuffType.attackDown, duration: 2, target: 'all_enemies',
+          selfShield: 25,
+        ),
+      );
+
+  // ── Reptile variant skills ────────────────────────────────────────────────
+
+  static Trait get reptileHorn2 => Trait(
+        id: 'reptile_horn_2', name: 'Risky Beast',
+        type: TraitType.offensive, part: TraitPart.horn,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Deal 60 damage + gain 10 shield. High risk, high reward.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(type: EffectType.damage, value: 60, target: 'enemy', selfShield: 10),
+      );
+
+  static Trait get reptileBack2 => Trait(
+        id: 'reptile_back_2', name: 'Bulwark',
+        type: TraitType.defensive, part: TraitPart.back,
+        energyCost: 1, cooldownMax: 0,
+        description: 'Raise DEF by 30% for 1 round and gain 45 shield.',
+        rarity: SkillRarity.common,
+        effect: const TraitEffect(
+          type: EffectType.buff, value: 30,
+          buffType: BuffType.defenseUp, duration: 1, target: 'self',
+          selfShield: 45,
+        ),
+      );
+
+  // ── Reptile class: tank + sustain ─────────────────────────────────────────
 
   static Trait get reptileHorn => Trait(
         id: 'reptile_horn',

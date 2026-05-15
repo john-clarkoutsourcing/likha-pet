@@ -103,6 +103,9 @@ class InteractiveBattleEngine {
   final EnergyPool enemyEnergy  = EnergyPool();
   _RoundExecution? _roundExecution;
 
+  // Tracks how many cards each pet has played in the current round for combo bonus.
+  final Map<String, int> _roundComboCount = {};
+
   InteractiveBattleEngine({
     required this.playerTeam,
     required this.enemyTeam,
@@ -152,6 +155,8 @@ class InteractiveBattleEngine {
     _round++;
     final logger = BattleLogger();
     logger.roundBanner(_round);
+
+    _roundComboCount.clear(); // reset combo counter each round
 
     // ── Status phase ──────────────────────────────────────────────────────
     logger.phase('Status Phase');
@@ -208,10 +213,14 @@ class InteractiveBattleEngine {
         logger.stunSkip(action.actor.name);
         action.actor.debuffs.removeWhere((d) => d.type == DebuffType.stunned);
       } else {
+        final petId      = action.actor.id;
+        final comboIndex = _roundComboCount[petId] ?? 0;
+        _roundComboCount[petId] = comboIndex + 1;
         resolver.resolve(
           action,
           _teamOf(action.actor),
           _enemyTeamOf(action.actor),
+          comboIndex: comboIndex,
         );
       }
     }

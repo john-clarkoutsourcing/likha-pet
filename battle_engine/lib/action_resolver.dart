@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'pet.dart';
 import 'trait.dart';
 import 'action.dart';
@@ -42,7 +43,8 @@ class ActionResolver {
 
   ActionResolver(this.log);
 
-  void resolve(Action action, List<Pet> actorTeam, List<Pet> enemyTeam) {
+  void resolve(Action action, List<Pet> actorTeam, List<Pet> enemyTeam,
+      {int comboIndex = 0}) {
     final actor = action.actor;
     final trait = action.trait;
     final effect = trait.effect;
@@ -66,9 +68,11 @@ class ActionResolver {
           log.noTarget();
           return;
         }
-        final net = _computeDamage(actor, target, effect.value, trait);
-        final actual = target.takeDamage(_clamp(net, kMaxSingleHitDamage));
-        log.damage(target.name, actual, target.hp);
+        final net    = _computeDamage(actor, target, effect.value, trait, comboIndex: comboIndex);
+        final isCrit = _rollCrit(actor, target);
+        final dmg    = _clamp(isCrit ? net * 2 : net, kMaxSingleHitDamage);
+        final actual = target.takeDamage(dmg);
+        log.damage(target.name, actual, target.hp, isCrit: isCrit);
         if (target.isFainted) log.fainted(target.name);
 
       // ── AoE damage ────────────────────────────────────────────────────────
@@ -76,9 +80,11 @@ class ActionResolver {
         final targets = _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
         for (final t in targets) {
           if (t.isFainted) continue;
-          final net = _computeDamage(actor, t, effect.value, trait);
-          final actual = t.takeDamage(_clamp(net, kMaxAoeDamagePerHit));
-          log.damage(t.name, actual, t.hp, isAoe: true);
+          final net    = _computeDamage(actor, t, effect.value, trait, comboIndex: comboIndex);
+          final isCrit = _rollCrit(actor, t);
+          final dmg    = _clamp(isCrit ? net * 2 : net, kMaxAoeDamagePerHit);
+          final actual = t.takeDamage(dmg);
+          log.damage(t.name, actual, t.hp, isAoe: true, isCrit: isCrit);
           if (t.isFainted) log.fainted(t.name);
         }
 
@@ -143,6 +149,11 @@ class ActionResolver {
         }
     }
 
+    // Per-action poison tick — all poisoned pets take 1 HP × stacks after every card.
+    // Mirrors the Axie mechanic: "loses 2 HP for every action (Stackable)".
+    // Our scale: 1 HP/stack/action keeps it proportional to our lower HP pools.
+    _tickPoison([...actorTeam, ...enemyTeam], log);
+
     // Self-shield on attack — +10% bonus when card class matches attacker class.
     if (effect.selfShield > 0) {
       int amount = effect.selfShield;
@@ -157,13 +168,37 @@ class ActionResolver {
 
   // ── Damage formula ─────────────────────────────────────────────────────────
   //
+  // Final damage = (base × classMult) + comboBonus
+  //
+  // Combo bonus (Axie Skill mechanic):
+  //   Each card after the first in a round adds: (cardAttack × skill) / 500
+  //   comboIndex 0 = first card (no bonus), 1 = second card, etc.
+  //
   // Class advantage (+15%) and same-class card bonus (+10%) stack:
   //   Bird using a Bird card against Beast = ×1.25 damage
 
-  int _computeDamage(Pet attacker, Pet defender, int traitBaseValue, Trait trait) {
-    final raw  = attacker.effectiveAttack + traitBaseValue;
+  int _computeDamage(Pet attacker, Pet defender, int traitBaseValue, Trait trait,
+      {int comboIndex = 0}) {
+    final comboBonus = comboIndex > 0
+        ? (traitBaseValue * attacker.skill ~/ 500)
+        : 0;
+    final raw  = attacker.effectiveAttack + traitBaseValue + comboBonus;
     final base = (raw - defender.effectiveDefense).clamp(1, 999);
     return (base * _classMult(attacker, defender, trait)).round().clamp(1, 999);
+  }
+
+  // ── Critical hit ──────────────────────────────────────────────────────────
+  //
+  // Crit chance = attacker.morale × 0.1% − defender.speed × 0.05%
+  // Clamped 0–30%.  Crits deal ×2 damage.
+  // High-speed defenders are harder to crit — mimics Axie's speed/morale interplay.
+
+  static final _rng = math.Random();
+
+  bool _rollCrit(Pet attacker, Pet defender) {
+    final chance = (attacker.morale * 0.001 - defender.speed * 0.0005)
+        .clamp(0.0, 0.30);
+    return chance > 0 && _rng.nextDouble() < chance;
   }
 
   double _classMult(Pet attacker, Pet defender, Trait trait) {
@@ -177,6 +212,22 @@ class ActionResolver {
       m += 0.10;
     }
     return m;
+  }
+
+  // ── Per-action poison ──────────────────────────────────────────────────────
+
+  void _tickPoison(List<Pet> allPets, BattleLogger log) {
+    for (final pet in allPets) {
+      if (pet.isFainted) continue;
+      final poison = pet.debuffs
+          .where((d) => d.type == DebuffType.poisoned)
+          .firstOrNull;
+      if (poison == null) continue;
+      final dmg = poison.value; // 1 HP per stack per action
+      pet.takeDamage(dmg, ignoreShield: true);
+      log.poisonTick(pet.name, dmg, pet.hp);
+      if (pet.isFainted) log.fainted(pet.name);
+    }
   }
 
   int _clamp(int value, int cap) => value.clamp(1, cap);

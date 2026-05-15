@@ -20,11 +20,13 @@ import 'battle_result_screen.dart';
 // ── Route args ────────────────────────────────────────────────────────────────
 
 class BattleScreenArgs {
-  final String playerTeamName;
-  final String enemyTeamName;
+  final String  playerTeamName;
+  final String  enemyTeamName;
+  final String? stageId; // non-null for PvE stage battles
   const BattleScreenArgs({
-    this.playerTeamName = 'Team Bayani',
-    this.enemyTeamName  = 'Team Diwata',
+    this.playerTeamName = 'My Team',
+    this.enemyTeamName  = 'Rivals',
+    this.stageId,
   });
 }
 
@@ -77,6 +79,10 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
   @override
   void initState() {
     super.initState();
+    // Publish args so pveBattleProvider can read stageId before building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(battleArgsProvider.notifier).state = widget.args;
+    });
 
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -131,6 +137,7 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
               totalRounds: next.currentRound,
               playerTeamName: next.playerTeamName,
               enemyTeamName: next.enemyTeamName,
+              stageId: widget.args.stageId,
             ));
           }
         });
@@ -563,11 +570,16 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
 
           if (delta < 0) {
             final wasPoisoned = oldTeam[i].activeDebuffs.contains('poisoned');
+            // Crit heuristic: damage > 70 (above normal single-hit max ~65 + class bonus)
+            final isCrit = delta.abs() > 70 && !wasPoisoned;
             final Color dmgColor = wasPoisoned && (delta.abs() % 4 == 0)
-                ? const Color(0xFFB44FD4)  // purple — poison tick
-                : const Color(0xFFFF3333); // red — burn or regular attack
+                ? const Color(0xFFB44FD4)   // purple — poison tick
+                : isCrit
+                    ? const Color(0xFFFFAA00) // orange — critical hit
+                    : const Color(0xFFFF3333); // red — normal damage
+            final text = isCrit ? '★${delta}' : '$delta';
             nums.add(_FloatNum(
-              id: '${_nextId++}', text: '$delta', color: dmgColor,
+              id: '${_nextId++}', text: text, color: dmgColor,
               x: x, y: y, jitter: (rng.nextDouble() - 0.5) * 24,
             ));
           }
@@ -706,7 +718,8 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
                 isSelected: false,
                 hasSkill: false,
                 positionIndex: i,
-                animState: vm.petAnimStates[vm.enemyTeam[i].id],
+                animState:   vm.petAnimStates[vm.enemyTeam[i].id],
+                attackSlot:  vm.petAttackSlots[vm.enemyTeam[i].id],
                 onTap: () => _PetInfoSheet.show(context, vm.enemyTeam[i]),
               )),
 
@@ -718,7 +731,8 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
                 isSelected: false,
                 hasSkill: vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ?? false,
                 positionIndex: i,
-                animState: vm.petAnimStates[vm.playerTeam[i].id],
+                animState:   vm.petAnimStates[vm.playerTeam[i].id],
+                attackSlot:  vm.petAttackSlots[vm.playerTeam[i].id],
                 onTap: () => _PetInfoSheet.show(context, vm.playerTeam[i]),
               )),
 
@@ -831,6 +845,7 @@ class _BattlePet extends StatelessWidget {
   final int positionIndex;
   final VoidCallback? onTap;
   final PetCharacterAnimState? animState;
+  final String? attackSlot;
 
   const _BattlePet({
     required this.pet,
@@ -840,6 +855,7 @@ class _BattlePet extends StatelessWidget {
     required this.positionIndex,
     this.onTap,
     this.animState,
+    this.attackSlot,
   });
 
   @override
@@ -873,7 +889,8 @@ class _BattlePet extends StatelessWidget {
                   isSelected: isSelected,
                   hasSkill: hasSkill,
                   isPlayer: isPlayer,
-                  animState: animState,
+                  animState:  animState,
+                  attackSlot: attackSlot,
                 ),
                 const SizedBox(height: 2),
                 _PetName(pet: pet),
@@ -995,6 +1012,7 @@ class _Sprite extends StatelessWidget {
   final bool hasSkill;
   final bool isPlayer;
   final PetCharacterAnimState? animState;
+  final String? attackSlot;
 
   const _Sprite({
     required this.pet,
@@ -1003,6 +1021,7 @@ class _Sprite extends StatelessWidget {
     required this.hasSkill,
     required this.isPlayer,
     this.animState,
+    this.attackSlot,
   });
 
   @override
@@ -1015,13 +1034,13 @@ class _Sprite extends StatelessWidget {
       children: [
         // Ground shadow
         Positioned(
-          bottom: -6,
+          bottom: -8,
           child: Container(
-            width: size * 0.75,
-            height: 10,
+            width: size * 1.2,
+            height: 14,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.25),
+              color: Colors.black.withValues(alpha: 0.3),
             ),
           ),
         ),
@@ -1043,6 +1062,7 @@ class _Sprite extends StatelessWidget {
             size:           size,
             flipHorizontal: isPlayer,
             animState:      animState ?? PetCharacterAnimState.idle,
+            attackSlot:     attackSlot,
           )
         else
           PetSpriteWidget(
@@ -1685,7 +1705,12 @@ class _SkillCard extends StatelessWidget {
                 // ── Art area (top ~65%) ──────────────────────────────────────
                 Positioned.fill(
                   child: cardArtPath != null
-                      ? Image.asset(cardArtPath!, fit: BoxFit.cover, alignment: Alignment.topCenter)
+                      ? Image.asset(
+                          cardArtPath!,
+                          fit: BoxFit.cover,
+                          alignment: Alignment.topCenter,
+                          errorBuilder: (_, __, ___) => Container(color: _cardBgColor(trait.typeName)),
+                        )
                       : Container(color: _cardBgColor(trait.typeName)),
                 ),
 

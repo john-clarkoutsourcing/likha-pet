@@ -114,6 +114,7 @@ export class HatcheryManager {
  * 
  * This separation keeps domain logic independent of HTTP concerns.
  */
+export class HatcheryError extends Error {
   constructor(public readonly status: number, message: string) {
     super(message);
     this.name = 'HatcheryError';

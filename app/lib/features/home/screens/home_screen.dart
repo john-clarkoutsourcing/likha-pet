@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
 import '../../battle/screens/battle_screen.dart';
+import '../../pets/providers/player_provider.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final player = ref.watch(playerProvider);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -41,17 +44,32 @@ class HomeScreen extends StatelessWidget {
 
               // ── Menu ───────────────────────────────────────────────────────
               _MenuButton(
+                icon: '🐾',
+                label: 'My Pets',
+                subtitle: 'Roster · Team builder · Breed',
+                color: const Color(0xFF9C27B0),
+                onTap: () => context.push(Routes.roster),
+              ),
+              const SizedBox(height: 12),
+
+              _MenuButton(
                 icon: '⚔',
                 label: 'Quick Battle (PvE)',
-                subtitle: 'Team Bayani vs Team Diwata',
-                color: AppColors.primary,
-                onTap: () => context.go(
-                  Routes.battle,
-                  extra: const BattleScreenArgs(
-                    playerTeamName: 'Team Bayani',
-                    enemyTeamName: 'Team Diwata',
-                  ),
-                ),
+                subtitle: player.hasFullTeam
+                    ? 'My Team  vs  Rivals'
+                    : 'Set up a team first',
+                color: player.hasFullTeam
+                    ? AppColors.primary
+                    : Colors.white24,
+                onTap: player.hasFullTeam
+                    ? () => context.push(
+                        Routes.battle,
+                        extra: const BattleScreenArgs(
+                          playerTeamName: 'My Team',
+                          enemyTeamName: 'Rivals',
+                        ),
+                      )
+                    : () => context.go(Routes.roster),
               ),
               const SizedBox(height: 12),
 
@@ -60,7 +78,7 @@ class HomeScreen extends StatelessWidget {
                 label: 'Adventure Mode',
                 subtitle: 'PvE stages — Coming soon',
                 color: AppColors.accent,
-                onTap: () => context.go(Routes.worldMap),
+                onTap: () => context.push(Routes.worldMap),
               ),
               const SizedBox(height: 12),
 
@@ -87,6 +105,15 @@ class HomeScreen extends StatelessWidget {
                 color: Color(0xFF7C3AED),
                 onTap: () => context.go(Routes.testBattle),
               ),
+              const SizedBox(height: 12),
+
+              _MenuButton(
+                icon: '📚',
+                label: 'Catalogue',
+                subtitle: 'Browse all bodies and parts',
+                color: const Color(0xFF0288D1),
+                onTap: () => context.push(Routes.library),
+              ),
               const SizedBox(height: 32),
 
               // ── Phase label ────────────────────────────────────────────────
@@ -99,8 +126,8 @@ class HomeScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppColors.divider),
                   ),
-                  child: const Text(
-                    'Phase 1  —  Offline Battle Engine',
+                  child: Text(
+                    'Phase 1  ·  ${player.roster.length} pets  ·  💎 ${player.soulCrystals}',
                     style: TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 11,

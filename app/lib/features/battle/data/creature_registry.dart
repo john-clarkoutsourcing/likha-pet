@@ -181,8 +181,8 @@ final Map<String, BodyDefinition> kBodyCatalogue = {
     bodyClass: CreatureClass.beast,
     spineConfig: const PetCharacterConfig(
       texturePath:       'assets/sprites/beast_full.png',
-      spineAtlasPath:    'assets/spines/beast/05-dps-beast.atlas',
-      spineSkeletonPath: 'assets/spines/beast/05-dps-beast.json',
+      spineAtlasPath:    'assets/spines/beast/buba.atlas',
+      spineSkeletonPath: 'assets/spines/beast/buba.json',
     ),
     spriteConfig: PetSpriteConfig(
       idle: PetAnimConfig(sheetFile: 'beast.png',
@@ -372,6 +372,76 @@ final Map<String, PartDefinition> kPartCatalogue = {
     traitFactory: () => TraitLibrary.bugMouth,            // Numbing Lecretion
   ),
 
+  // ── Beast variant parts ────────────────────────────────────────────────────
+  'beast_horn_2': PartDefinition(
+    id: 'beast_horn_2', partType: 'horn',
+    partClass: CreatureClass.beast,
+    cardArtPath: _card('beast', 'horn', '06'),
+    traitFactory: () => TraitLibrary.beastHorn2,            // Ivory Stab
+  ),
+  'beast_back_2': PartDefinition(
+    id: 'beast_back_2', partType: 'back',
+    partClass: CreatureClass.beast,
+    cardArtPath: _card('beast', 'back', '06'),
+    traitFactory: () => TraitLibrary.beastBack2,            // Ronin
+  ),
+
+  // ── Plant variant parts ────────────────────────────────────────────────────
+  'plant_horn_2': PartDefinition(
+    id: 'plant_horn_2', partType: 'horn',
+    partClass: CreatureClass.plant,
+    cardArtPath: _card('plant', 'horn', '06'),
+    traitFactory: () => TraitLibrary.plantHorn2,            // Wall of Plant
+  ),
+  'plant_back_2': PartDefinition(
+    id: 'plant_back_2', partType: 'back',
+    partClass: CreatureClass.plant,
+    cardArtPath: _card('plant', 'back', '06'),
+    traitFactory: () => TraitLibrary.plantBack2,            // Prickly Trap
+  ),
+
+  // ── Aquatic variant parts ──────────────────────────────────────────────────
+  'aquatic_horn_2': PartDefinition(
+    id: 'aquatic_horn_2', partType: 'horn',
+    partClass: CreatureClass.aquatic,
+    cardArtPath: _card('aquatic', 'horn', '06'),
+    traitFactory: () => TraitLibrary.aquaticHorn2,          // Lam Glue
+  ),
+  'aquatic_back_2': PartDefinition(
+    id: 'aquatic_back_2', partType: 'back',
+    partClass: CreatureClass.aquatic,
+    cardArtPath: _card('aquatic', 'back', '06'),
+    traitFactory: () => TraitLibrary.aquaticBack2,          // Goldfish
+  ),
+
+  // ── Bird variant parts ─────────────────────────────────────────────────────
+  'bird_horn_2': PartDefinition(
+    id: 'bird_horn_2', partType: 'horn',
+    partClass: CreatureClass.bird,
+    cardArtPath: _card('bird', 'horn', '10'),
+    traitFactory: () => TraitLibrary.birdHorn2,             // Kestrel
+  ),
+  'bird_back_2': PartDefinition(
+    id: 'bird_back_2', partType: 'back',
+    partClass: CreatureClass.bird,
+    cardArtPath: _card('bird', 'back', '10'),
+    traitFactory: () => TraitLibrary.birdBack2,             // Swallow Dive
+  ),
+
+  // ── Bug variant parts ──────────────────────────────────────────────────────
+  'bug_horn_2': PartDefinition(
+    id: 'bug_horn_2', partType: 'horn',
+    partClass: CreatureClass.bug,
+    cardArtPath: _card('bug', 'horn', '08'),
+    traitFactory: () => TraitLibrary.bugHorn2,              // Twin Needle
+  ),
+  'bug_back_2': PartDefinition(
+    id: 'bug_back_2', partType: 'back',
+    partClass: CreatureClass.bug,
+    cardArtPath: _card('bug', 'back', '08'),
+    traitFactory: () => TraitLibrary.bugBack2,              // Lagging
+  ),
+
   // ── Reptile parts ──────────────────────────────────────────────────────────
   'reptile_horn': PartDefinition(
     id: 'reptile_horn', partType: 'horn',
@@ -396,6 +466,20 @@ final Map<String, PartDefinition> kPartCatalogue = {
     partClass: CreatureClass.reptile,
     cardArtPath: _card('reptile', 'mouth', '08'),
     traitFactory: () => TraitLibrary.reptileMouth,        // Tiny Catapult
+  ),
+
+  // ── Reptile variant parts ──────────────────────────────────────────────────
+  'reptile_horn_2': PartDefinition(
+    id: 'reptile_horn_2', partType: 'horn',
+    partClass: CreatureClass.reptile,
+    cardArtPath: _card('reptile', 'horn', '10'),
+    traitFactory: () => TraitLibrary.reptileHorn2,        // Risky Beast
+  ),
+  'reptile_back_2': PartDefinition(
+    id: 'reptile_back_2', partType: 'back',
+    partClass: CreatureClass.reptile,
+    cardArtPath: _card('reptile', 'back', '10'),
+    traitFactory: () => TraitLibrary.reptileBack2,        // Bulwark
   ),
 };
 

@@ -4,32 +4,32 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spine_flutter/spine_flutter.dart';
 import 'app.dart';
+import 'features/pets/providers/player_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize spine_flutter FFI bindings on native platforms.
-  // Must be called before any SpineWidget or SpineWidgetController is created.
-  if (!kIsWeb) {
-    await initSpineFlutter();
-  }
+  if (!kIsWeb) await initSpineFlutter();
 
-  // Default to portrait; the battle screen switches to landscape on its own.
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarBrightness: Brightness.dark,
+    statusBarIconBrightness: Brightness.light,
+  ));
 
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarBrightness: Brightness.dark,
-      statusBarIconBrightness: Brightness.light,
-    ),
-  );
+  // Pre-initialize player data so it's ready before any screen renders.
+  final container = ProviderContainer();
+  // On launch: initialize player data (loads saved or hatches fresh starters).
+  // Call resetAndRehatch() here once to wipe old hardcoded pure-breed pets.
+  await container.read(playerProvider.notifier).initialize();
 
   runApp(
-    const ProviderScope(
-      child: LikhaPetApp(),
+    UncontrolledProviderScope(
+      container: container,
+      child: const LikhaPetApp(),
     ),
   );
 }

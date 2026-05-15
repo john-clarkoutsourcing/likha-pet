@@ -5,15 +5,20 @@ import '../../features/pve/screens/stage_preview_screen.dart';
 import '../../features/battle/screens/battle_screen.dart';
 import '../../features/battle/screens/battle_result_screen.dart';
 import '../../features/test/screens/test_battle_screen.dart';
+import '../../features/pets/screens/pet_roster_screen.dart';
+import '../../features/pets/screens/breeding_lab_screen.dart';
+import '../../features/library/screens/library_screen.dart';
 
-// Route name constants — use these instead of raw strings everywhere
 class Routes {
   static const home          = '/';
+  static const roster        = '/roster';
+  static const breed         = '/breed';
   static const worldMap      = '/pve';
   static const stagePreview  = '/pve/stage/:stageId';
   static const battle        = '/battle';
   static const battleResult  = '/battle/result';
   static const testBattle    = '/test-battle';
+  static const library       = '/library';
 }
 
 final appRouter = GoRouter(
@@ -22,6 +27,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.home,
       builder: (_, __) => const HomeScreen(),
+    ),
+    GoRoute(
+      path: Routes.roster,
+      builder: (_, __) => const PetRosterScreen(),
+    ),
+    GoRoute(
+      path: Routes.breed,
+      builder: (_, __) => const BreedingLabScreen(),
     ),
     GoRoute(
       path: Routes.worldMap,
@@ -51,6 +64,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.testBattle,
       builder: (_, __) => const TestBattleScreen(),
+    ),
+    GoRoute(
+      path: Routes.library,
+      builder: (_, __) => const LibraryScreen(),
     ),
   ],
 );

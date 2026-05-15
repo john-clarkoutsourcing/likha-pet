@@ -40,14 +40,17 @@ class BattleLogger {
 
   void noTarget() => _line('     → No valid target.');
 
-  void damage(String target, int amount, int newHp, {bool isAoe = false}) {
+  void damage(String target, int amount, int newHp,
+      {bool isAoe = false, bool isCrit = false}) {
     final tag = isAoe ? 'AoE ' : '';
-    _line('     → $target takes $amount ${tag}damage. HP: $newHp');
+    final crit = isCrit ? ' ★CRIT★' : '';
+    _line('     → $target takes $amount ${tag}damage. HP: $newHp$crit');
     events.add(DamageEvent(
       targetName: target,
       amount: amount,
       newHp: newHp,
       isAoe: isAoe,
+      isCrit: isCrit,
     ));
   }
 
@@ -200,18 +203,20 @@ class ActionEvent extends BattleEvent {
 
 class DamageEvent extends BattleEvent {
   final String targetName;
-  final int amount;
-  final int newHp;
-  final bool isAoe;
-  final bool isPoisonTick;
-  final bool isBurnTick;
+  final int    amount;
+  final int    newHp;
+  final bool   isAoe;
+  final bool   isPoisonTick;
+  final bool   isBurnTick;
+  final bool   isCrit;
   const DamageEvent({
     required this.targetName,
     required this.amount,
     required this.newHp,
     required this.isAoe,
     this.isPoisonTick = false,
-    this.isBurnTick = false,
+    this.isBurnTick   = false,
+    this.isCrit       = false,
   });
 }
 
