@@ -62,8 +62,8 @@ class _Slot {
   final Action action;
   final int teamIndex; // 0 = Team A, 1 = Team B
 
-  /// The pet's speed stat — used for descending sort (higher = acts first).
-  int get speed => action.actor.speed;
+  /// Effective speed (base + Speed Up/Down buffs) — higher acts first.
+  int get speed => action.actor.effectiveSpeed;
 
   _Slot({required this.action, required this.teamIndex});
 }

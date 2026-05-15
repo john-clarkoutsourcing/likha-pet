@@ -49,7 +49,8 @@ class TraitSystem {
     final e = trait.effect;
     final cost = '${trait.energyCost}E';
     final cd = trait.cooldownMax > 0 ? ' · CD:${trait.cooldownMax}' : '';
-    final prefix = '[$cost$cd] ';
+    final part = trait.part.name.toUpperCase();
+    final prefix = '[$part · $cost$cd] ';
 
     return switch (e.type) {
       EffectType.damage      => '${prefix}Deal ${e.value} damage to ${_targetLabel(e.target)}.',
@@ -94,6 +95,31 @@ class TraitSystem {
     'agimat_ward':       () => TraitLibrary.agimatWard,
     'lambana_dance':     () => TraitLibrary.lambanaDance,
     'kulam_curse':       () => TraitLibrary.kulamCurse,
+    // Class-based skills (6 classes × 4 parts)
+    'beast_horn':        () => TraitLibrary.beastHorn,
+    'beast_back':        () => TraitLibrary.beastBack,
+    'beast_tail':        () => TraitLibrary.beastTail,
+    'beast_mouth':       () => TraitLibrary.beastMouth,
+    'plant_horn':        () => TraitLibrary.plantHorn,
+    'plant_back':        () => TraitLibrary.plantBack,
+    'plant_tail':        () => TraitLibrary.plantTail,
+    'plant_mouth':       () => TraitLibrary.plantMouth,
+    'aquatic_horn':      () => TraitLibrary.aquaticHorn,
+    'aquatic_back':      () => TraitLibrary.aquaticBack,
+    'aquatic_tail':      () => TraitLibrary.aquaticTail,
+    'aquatic_mouth':     () => TraitLibrary.aquaticMouth,
+    'bird_horn':         () => TraitLibrary.birdHorn,
+    'bird_back':         () => TraitLibrary.birdBack,
+    'bird_tail':         () => TraitLibrary.birdTail,
+    'bird_mouth':        () => TraitLibrary.birdMouth,
+    'bug_horn':          () => TraitLibrary.bugHorn,
+    'bug_back':          () => TraitLibrary.bugBack,
+    'bug_tail':          () => TraitLibrary.bugTail,
+    'bug_mouth':         () => TraitLibrary.bugMouth,
+    'reptile_horn':      () => TraitLibrary.reptileHorn,
+    'reptile_back':      () => TraitLibrary.reptileBack,
+    'reptile_tail':      () => TraitLibrary.reptileTail,
+    'reptile_mouth':     () => TraitLibrary.reptileMouth,
   };
 
   /// Returns a fresh [Trait] instance for the given [id].

@@ -13,7 +13,8 @@ const int kEnergyCap = kTeamEnergyCap;
 
 class StatusEffect {
   final DebuffType type;
-  final int value;  // damage per round (poison) or stat modifier amount
+  // Mutable so poison stacks can accumulate (1 stack = 4 HP damage/round).
+  int value;
   int roundsRemaining;
 
   StatusEffect({
@@ -40,23 +41,20 @@ class Pet {
   final String name;
   final List<Trait> traits;
 
-  // Speed determines turn order — higher speed acts first in a round.
-  // Default is kBaseSpeed (30). Give each pet a unique value for interesting
-  // turn orders without any stat progression.
-  final int speed;
+  final CreatureClass creatureClass;
+  final int speed;   // turn order — higher acts first
+  final int maxHp;
+  final int morale;  // increases crit chance and combo resilience
+  final int skill;   // adds bonus damage for multi-card combos
 
   int hp;
-  int shield; // flat damage absorption remaining
+  int shield;
   bool isFainted;
 
-  // ── Energy — shared pool (set via linkPool) or per-pet fallback ───────────
   EnergyPool? _pool;
   int _ownEnergy;
 
-  /// Links this pet to a shared team energy pool.
-  /// After linking, all canAfford / spendEnergy calls operate on the pool.
   void linkPool(EnergyPool pool) => _pool = pool;
-
   int get energy => _pool?.energy ?? _ownEnergy;
 
   final List<StatusEffect> debuffs = [];
@@ -66,37 +64,52 @@ class Pet {
     required this.id,
     required this.name,
     required this.traits,
-    this.speed    = kBaseSpeed,
-    this.hp       = kBaseHp,
-    int energy    = kBaseEnergy,
-    this.shield   = 0,
-    this.isFainted = false,
-  }) : _ownEnergy = energy;
+    this.creatureClass = CreatureClass.beast,
+    this.speed         = kBaseSpeed,
+    this.maxHp         = kBaseHp,
+    this.morale        = 20,
+    this.skill         = 20,
+    int? hp,
+    int energy         = kBaseEnergy,
+    this.shield        = 0,
+    this.isFainted     = false,
+  }) : hp = hp ?? maxHp,
+       _ownEnergy = energy;
 
-  // ── Computed stat helpers (buffs stack additively) ─────────────────────────
+  // ── Computed stat helpers ──────────────────────────────────────────────────
+  //
+  // Buffs/debuffs store their value as a PERCENTAGE (e.g. 20 = 20%).
+  // They stack additively: two Attack Up stacks = +40% total.
+  // This matches the official Axie Arena documentation:
+  //   "Attack Up — Increases the next Attack by 20% (Stackable)"
+  //   "Speed Up  — Increases Speed by 20% for the next round (Stackable)"
 
   int get effectiveAttack {
-    int bonus = 0;
-    for (final b in buffs) {
-      if (b.type == BuffType.attackUp) bonus += b.value;
-    }
-    int penalty = 0;
-    for (final d in debuffs) {
-      if (d.type == DebuffType.attackDown) penalty += d.value;
-    }
-    return kBaseAttack + bonus - penalty;
+    int upPct = 0, dnPct = 0;
+    for (final b in buffs)   { if (b.type == BuffType.attackUp)      upPct += b.value; }
+    for (final d in debuffs) { if (d.type == DebuffType.attackDown)  dnPct += d.value; }
+    final net = upPct - dnPct;
+    if (net == 0) return kBaseAttack;
+    return (kBaseAttack * (1.0 + net / 100.0)).round().clamp(1, 999);
   }
 
   int get effectiveDefense {
-    int bonus = 0;
-    for (final b in buffs) {
-      if (b.type == BuffType.defenseUp) bonus += b.value;
-    }
-    int penalty = 0;
-    for (final d in debuffs) {
-      if (d.type == DebuffType.defenseDown) penalty += d.value;
-    }
-    return kBaseDefense + bonus - penalty;
+    int upPct = 0, dnPct = 0;
+    for (final b in buffs)   { if (b.type == BuffType.defenseUp)     upPct += b.value; }
+    for (final d in debuffs) { if (d.type == DebuffType.defenseDown) dnPct += d.value; }
+    final net = upPct - dnPct;
+    if (net == 0) return kBaseDefense;
+    return (kBaseDefense * (1.0 + net / 100.0)).round().clamp(0, 999);
+  }
+
+  /// Speed used for turn ordering — +20%/stack with Speed Up, -20%/stack with Speed Down.
+  int get effectiveSpeed {
+    int upPct = 0, dnPct = 0;
+    for (final b in buffs)   { if (b.type == BuffType.speedUp)      upPct += b.value; }
+    for (final d in debuffs) { if (d.type == DebuffType.speedDown)  dnPct += d.value; }
+    final net = upPct - dnPct;
+    if (net == 0) return speed;
+    return (speed * (1.0 + net / 100.0)).round().clamp(1, 999);
   }
 
   bool get isStunned  => debuffs.any((d) => d.type == DebuffType.stunned);
@@ -127,15 +140,18 @@ class Pet {
   void processStatusEffects(BattleLogger log) {
     for (final d in List.of(debuffs)) {
       if (d.type == DebuffType.poisoned) {
-        final dmg = d.value;
-        takeDamage(dmg, ignoreShield: false);
+        // Stacking poison: permanent — roundsRemaining stays at 999.
+        final stacks = d.value;
+        final dmg    = stacks * 4;
+        takeDamage(dmg, ignoreShield: true);
         log.poisonTick(name, dmg, hp);
-        d.roundsRemaining--;
       } else if (d.type == DebuffType.burned) {
-        // Burn ignores shield and deals flat damage
         final dmg = d.value;
         takeDamage(dmg, ignoreShield: true);
         log.burnTick(name, dmg, hp);
+        d.roundsRemaining--;
+      } else if (d.type != DebuffType.stunned) {
+        // All other timed debuffs (attackDown, defenseDown, speedDown) tick down.
         d.roundsRemaining--;
       }
     }
@@ -144,6 +160,9 @@ class Pet {
       if (b.type == BuffType.regen) {
         receiveHealing(b.value);
         log.regenTick(name, b.value, hp);
+        b.roundsRemaining--;
+      } else {
+        // All other timed buffs (attackUp, defenseUp, speedUp, energized) tick down.
         b.roundsRemaining--;
       }
     }
@@ -183,7 +202,7 @@ class Pet {
 
   void receiveHealing(int amount) {
     if (isFainted) return;
-    hp = (hp + amount).clamp(0, kBaseHp);
+    hp = (hp + amount).clamp(0, maxHp);
   }
 
   void applyShield(int amount) {
@@ -195,6 +214,16 @@ class Pet {
   }
 
   void applyDebuff(DebuffType type, int value, int duration) {
+    if (type == DebuffType.poisoned) {
+      // Stacking poison: add 1 stack (value = stacks, capped at 13).
+      final existing = debuffs.where((d) => d.type == DebuffType.poisoned).firstOrNull;
+      if (existing != null) {
+        existing.value = (existing.value + 1).clamp(1, 13);
+        return;
+      }
+      debuffs.add(StatusEffect(type: type, value: 1, roundsRemaining: 999));
+      return;
+    }
     debuffs.add(StatusEffect(type: type, value: value, roundsRemaining: duration));
   }
 

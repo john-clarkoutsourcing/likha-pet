@@ -57,12 +57,13 @@ class PetSnapshot {
   final int maxHp;
   final int energy;
   final int shield;
+  final int morale;
+  final int skill;
+  final String creatureClassName; // 'beast' | 'plant' | 'aquatic' | etc.
   final bool isFainted;
   final bool isStunned;
   final List<DebuffSnapshot> debuffs;
   final List<BuffSnapshot> buffs;
-
-  /// traitId → cooldownRemaining. Used by CF to validate trait legality.
   final Map<String, int> traitCooldowns;
 
   const PetSnapshot({
@@ -72,6 +73,9 @@ class PetSnapshot {
     required this.maxHp,
     required this.energy,
     required this.shield,
+    required this.morale,
+    required this.skill,
+    required this.creatureClassName,
     required this.isFainted,
     required this.isStunned,
     required this.debuffs,
@@ -80,16 +84,19 @@ class PetSnapshot {
   });
 
   factory PetSnapshot.fromLive(Pet pet) => PetSnapshot(
-    id: pet.id,
-    name: pet.name,
-    hp: pet.hp,
-    maxHp: kBaseHp,
+    id:    pet.id,
+    name:  pet.name,
+    hp:    pet.hp,
+    maxHp: pet.maxHp,
     energy: pet.energy,
     shield: pet.shield,
+    morale: pet.morale,
+    skill:  pet.skill,
+    creatureClassName: pet.creatureClass.name,
     isFainted: pet.isFainted,
     isStunned: pet.isStunned,
     debuffs: pet.debuffs.map(DebuffSnapshot.fromLive).toList(),
-    buffs: pet.buffs.map(BuffSnapshot.fromLive).toList(),
+    buffs:   pet.buffs.map(BuffSnapshot.fromLive).toList(),
     traitCooldowns: {
       for (final t in pet.traits) t.id: t.cooldownRemaining,
     },

@@ -4,6 +4,7 @@ import '../../features/pve/screens/world_map_screen.dart';
 import '../../features/pve/screens/stage_preview_screen.dart';
 import '../../features/battle/screens/battle_screen.dart';
 import '../../features/battle/screens/battle_result_screen.dart';
+import '../../features/test/screens/test_battle_screen.dart';
 
 // Route name constants — use these instead of raw strings everywhere
 class Routes {
@@ -12,6 +13,7 @@ class Routes {
   static const stagePreview  = '/pve/stage/:stageId';
   static const battle        = '/battle';
   static const battleResult  = '/battle/result';
+  static const testBattle    = '/test-battle';
 }
 
 final appRouter = GoRouter(
@@ -45,6 +47,10 @@ final appRouter = GoRouter(
         final extra = state.extra! as BattleResultArgs;
         return BattleResultScreen(args: extra);
       },
+    ),
+    GoRoute(
+      path: Routes.testBattle,
+      builder: (_, __) => const TestBattleScreen(),
     ),
   ],
 );

@@ -34,15 +34,27 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    # UI & backgrounds
     - assets/images/
     - assets/images/bg2/
     - assets/images/cards/
     - assets/images/ui/
+    - assets/images/icons/
+    - assets/images/part-icons/
+    - assets/images/status/
+    - assets/images/reference/
+    # Creature sprite fallbacks
     - assets/sprites/
+    # Spine skeletal animations — all 15 starter creatures + dusk
     - assets/spines/aquatic/
     - assets/spines/plant/
     - assets/spines/beast/
     - assets/spines/bug/
     - assets/spines/reptile/
     - assets/spines/bird/
+    - assets/spines/dusk/
+    - assets/spines/soul/
+    # Creature data (genes, animations, samples, variants)
+    - assets/data/
+    # Audio
     - assets/audio/

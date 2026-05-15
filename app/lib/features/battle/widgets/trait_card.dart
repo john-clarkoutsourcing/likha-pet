@@ -48,6 +48,8 @@ class TraitCard extends StatelessWidget {
               Row(
                 children: [
                   _TypeBadge(typeName: trait.typeName, color: typeColor),
+                  const SizedBox(width: 4),
+                  _PartBadge(partName: trait.partName),
                   const SizedBox(width: 5),
                   Expanded(
                     child: Text(
@@ -132,6 +134,39 @@ class _TypeBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(icon, style: const TextStyle(fontSize: 9)),
+    );
+  }
+}
+
+class _PartBadge extends StatelessWidget {
+  final String partName;
+  const _PartBadge({required this.partName});
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label) = switch (partName) {
+      'horn' => ('🦏', 'HORN'),
+      'back' => ('🎒', 'BACK'),
+      'tail' => ('🦚', 'TAIL'),
+      'mouth' => ('👄', 'MOUTH'),
+      _ => ('🧬', 'BODY'),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        '$icon $label',
+        style: const TextStyle(
+          color: AppColors.textMuted,
+          fontSize: 8,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+        ),
+      ),
     );
   }
 }

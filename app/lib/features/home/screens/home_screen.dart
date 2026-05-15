@@ -12,7 +12,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,7 +78,16 @@ class HomeScreen extends StatelessWidget {
                   );
                 },
               ),
-              const Spacer(),
+              const SizedBox(height: 12),
+
+              _MenuButton(
+                icon: '🧪',
+                label: 'Test Battle Lab',
+                subtitle: 'Debug traits, body parts & animations',
+                color: Color(0xFF7C3AED),
+                onTap: () => context.go(Routes.testBattle),
+              ),
+              const SizedBox(height: 32),
 
               // ── Phase label ────────────────────────────────────────────────
               Center(

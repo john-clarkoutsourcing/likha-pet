@@ -39,12 +39,12 @@ class BattleResultScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Spacer(),
+              const SizedBox(height: 16),
               Text(emoji, style: const TextStyle(fontSize: 72)),
               const SizedBox(height: 16),
               Text(
@@ -71,7 +71,7 @@ class BattleResultScreen extends StatelessWidget {
               _StatRow(label: 'Your team', value: args.playerTeamName),
               const SizedBox(height: 8),
               _StatRow(label: 'Enemy team', value: args.enemyTeamName),
-              const Spacer(),
+              const SizedBox(height: 32),
 
               // Buttons
               SizedBox(
@@ -105,6 +105,7 @@ class BattleResultScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
             ],
           ),
         ),

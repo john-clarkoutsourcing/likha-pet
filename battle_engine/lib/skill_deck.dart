@@ -2,7 +2,8 @@ import 'dart:math';
 import 'pet.dart';
 import 'skill_card.dart';
 
-/// Team skill deck — 18 cards (3 pets × 3 traits × 2 copies).
+/// Team skill deck — dynamic card count
+/// (team size × traits per pet × 2 copies).
 ///
 /// Draw mechanics:
 ///   - Draw 3 cards per turn into a shared hand (max 6 cards).

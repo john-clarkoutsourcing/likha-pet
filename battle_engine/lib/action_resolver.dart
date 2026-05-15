@@ -66,7 +66,7 @@ class ActionResolver {
           log.noTarget();
           return;
         }
-        final net = _computeDamage(actor, target, effect.value);
+        final net = _computeDamage(actor, target, effect.value, trait);
         final actual = target.takeDamage(_clamp(net, kMaxSingleHitDamage));
         log.damage(target.name, actual, target.hp);
         if (target.isFainted) log.fainted(target.name);
@@ -76,7 +76,7 @@ class ActionResolver {
         final targets = _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
         for (final t in targets) {
           if (t.isFainted) continue;
-          final net = _computeDamage(actor, t, effect.value);
+          final net = _computeDamage(actor, t, effect.value, trait);
           final actual = t.takeDamage(_clamp(net, kMaxAoeDamagePerHit));
           log.damage(t.name, actual, t.hp, isAoe: true);
           if (t.isFainted) log.fainted(t.name);
@@ -142,13 +142,41 @@ class ActionResolver {
           log.shield(actor.name, amount, actor.shield);
         }
     }
+
+    // Self-shield on attack — +10% bonus when card class matches attacker class.
+    if (effect.selfShield > 0) {
+      int amount = effect.selfShield;
+      if (trait.partClass != null && trait.partClass == actor.creatureClass) {
+        amount = (amount * 1.10).round();
+      }
+      final shieldAmt = amount.clamp(0, kMaxShield);
+      actor.applyShield(shieldAmt);
+      log.shield(actor.name, shieldAmt, actor.shield);
+    }
   }
 
   // ── Damage formula ─────────────────────────────────────────────────────────
+  //
+  // Class advantage (+15%) and same-class card bonus (+10%) stack:
+  //   Bird using a Bird card against Beast = ×1.25 damage
 
-  int _computeDamage(Pet attacker, Pet defender, int traitBaseValue) {
-    final raw = attacker.effectiveAttack + traitBaseValue;
-    return (raw - defender.effectiveDefense).clamp(1, 999);
+  int _computeDamage(Pet attacker, Pet defender, int traitBaseValue, Trait trait) {
+    final raw  = attacker.effectiveAttack + traitBaseValue;
+    final base = (raw - defender.effectiveDefense).clamp(1, 999);
+    return (base * _classMult(attacker, defender, trait)).round().clamp(1, 999);
+  }
+
+  double _classMult(Pet attacker, Pet defender, Trait trait) {
+    double m = 1.0;
+    if (attacker.creatureClass.isStrongAgainst(defender.creatureClass)) {
+      m += 0.15;
+    } else if (attacker.creatureClass.isWeakAgainst(defender.creatureClass)) {
+      m -= 0.15;
+    }
+    if (trait.partClass != null && trait.partClass == attacker.creatureClass) {
+      m += 0.10;
+    }
+    return m;
   }
 
   int _clamp(int value, int cap) => value.clamp(1, cap);

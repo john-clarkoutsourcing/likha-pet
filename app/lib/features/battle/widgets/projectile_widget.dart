@@ -32,6 +32,25 @@ const kPetProjectiles = <String, ProjectileConfig>{
   'diwata_3': ProjectileConfig(sheetFile: 'fire_arrow.png',  frameCount: 8),
 };
 
+const kEffectProjectiles = <String, ProjectileConfig>{
+  'damage': ProjectileConfig(sheetFile: 'fire_arrow.png', frameCount: 8, scale: 0.9),
+  'aoe': ProjectileConfig(sheetFile: 'fire_ball.png', frameCount: 8, scale: 1.1),
+  'heal': ProjectileConfig(sheetFile: 'water_spell.png', frameCount: 8, scale: 1.0),
+  'shield': ProjectileConfig(sheetFile: 'water_ball.png', frameCount: 12, scale: 1.0),
+  'buff': ProjectileConfig(sheetFile: 'water_spell.png', frameCount: 8, scale: 1.0),
+  'debuff': ProjectileConfig(sheetFile: 'fire_spell.png', frameCount: 8, scale: 1.0),
+  'shieldBreak': ProjectileConfig(sheetFile: 'fire_ball.png', frameCount: 8, scale: 1.1),
+};
+
+ProjectileConfig resolveProjectileConfig(String petId, {String? effectType}) {
+  if (effectType != null) {
+    final byEffect = kEffectProjectiles[effectType];
+    if (byEffect != null) return byEffect;
+  }
+  return kPetProjectiles[petId] ??
+      const ProjectileConfig(sheetFile: 'water_ball.png', frameCount: 12);
+}
+
 final _sheetImages = Images(prefix: 'assets/sprites/');
 
 // ── Projectile data passed to overlay ────────────────────────────────────────

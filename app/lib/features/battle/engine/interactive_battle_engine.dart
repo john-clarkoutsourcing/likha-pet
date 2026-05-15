@@ -30,6 +30,47 @@ class RoundResult {
   bool get isBattleOver => outcome != null;
 }
 
+/// Result of preparing a round for step-by-step action resolution.
+class RoundStartResult {
+  final RoundResult? immediateResult;
+  final List<Action> actionQueue;
+
+  const RoundStartResult({
+    required this.immediateResult,
+    required this.actionQueue,
+  });
+
+  bool get hasImmediateResult => immediateResult != null;
+}
+
+/// Result of resolving one action from the prepared queue.
+class ActionStepResult {
+  final Action action;
+  final BattleState state;
+  final String log;
+  final bool isRoundComplete;
+
+  const ActionStepResult({
+    required this.action,
+    required this.state,
+    required this.log,
+    required this.isRoundComplete,
+  });
+}
+
+class _RoundExecution {
+  final BattleLogger logger;
+  final List<Action> orderedActions;
+  final Map<String, List<String>> cardChoices;
+  int actionIndex;
+
+  _RoundExecution({
+    required this.logger,
+    required this.orderedActions,
+    required this.cardChoices,
+  }) : actionIndex = 0;
+}
+
 /// Interactive wrapper around the battle engine that processes one round at a time.
 ///
 /// Skill draw integration:
@@ -60,6 +101,7 @@ class InteractiveBattleEngine {
 
   final EnergyPool playerEnergy = EnergyPool();
   final EnergyPool enemyEnergy  = EnergyPool();
+  _RoundExecution? _roundExecution;
 
   InteractiveBattleEngine({
     required this.playerTeam,
@@ -91,13 +133,22 @@ class InteractiveBattleEngine {
   List<SkillCard> get currentPlayerHand => _playerDeck.hand;
   int get playerDeckDrawSize             => _playerDeck.drawPileSize;
   int get playerDeckDiscardSize          => _playerDeck.discardPileSize;
+  bool get hasPendingActions =>
+      _roundExecution != null &&
+      _roundExecution!.actionIndex < _roundExecution!.orderedActions.length;
 
   // ── Execute one round ─────────────────────────────────────────────────────
 
-  /// [cardChoices] maps each living player pet's id → one or more cardInstanceIds
-  /// to play this round.  A pet may play multiple cards if the team has enough
-  /// energy.  Missing entries mean the pet waits (no energy spent).
-  RoundResult executeRound(Map<String, List<String>> cardChoices) {
+  /// Prepare one round for step-by-step execution.
+  ///
+  /// Returns either:
+  ///   - [RoundStartResult.immediateResult] when status effects already ended battle
+  ///   - [RoundStartResult.actionQueue] to be resolved via [executeNextAction]
+  RoundStartResult prepareRound(Map<String, List<String>> cardChoices) {
+    if (_roundExecution != null) {
+      throw StateError('Round is already in progress. Call finishRound first.');
+    }
+
     _round++;
     final logger = BattleLogger();
     logger.roundBanner(_round);
@@ -108,37 +159,92 @@ class InteractiveBattleEngine {
       if (!pet.isFainted) pet.processStatusEffects(logger);
     }
     final midWin = _checkWin();
-    if (midWin != null) return _buildResult(logger, midWin);
+    if (midWin != null) {
+      for (final pet in [...playerTeam, ...enemyTeam]) { pet.shield = 0; }
+      return RoundStartResult(
+        immediateResult: _buildResult(logger, midWin),
+        actionQueue: const [],
+      );
+    }
 
     // ── Build actions ─────────────────────────────────────────────────────
     final playerActions = _buildPlayerActions(cardChoices);
     final aiActions     = _buildAiActions();
 
-    // ── Resolve in turn order ─────────────────────────────────────────────
     logger.phase('Action Phase');
-    final resolver = ActionResolver(logger);
-    final ordered  = _turns.buildResolutionOrder(playerActions, aiActions);
+    final ordered = _turns.buildResolutionOrder(playerActions, aiActions);
+    final frozenChoices = {
+      for (final e in cardChoices.entries) e.key: List<String>.from(e.value),
+    };
 
-    for (final action in ordered) {
-      if (action.actor.isFainted) continue;
+    _roundExecution = _RoundExecution(
+      logger: logger,
+      orderedActions: ordered,
+      cardChoices: frozenChoices,
+    );
+
+    return RoundStartResult(
+      immediateResult: null,
+      actionQueue: List<Action>.unmodifiable(ordered),
+    );
+  }
+
+  /// Resolve the next action from the prepared queue.
+  ActionStepResult executeNextAction() {
+    final execution = _roundExecution;
+    if (execution == null) {
+      throw StateError('No prepared round. Call prepareRound first.');
+    }
+    if (execution.actionIndex >= execution.orderedActions.length) {
+      throw StateError('No pending actions. Call finishRound.');
+    }
+
+    final action = execution.orderedActions[execution.actionIndex++];
+    final logger = execution.logger;
+    final resolver = ActionResolver(logger);
+
+    if (!action.actor.isFainted) {
       if (action.actor.isStunned) {
         logger.stunSkip(action.actor.name);
         action.actor.debuffs.removeWhere((d) => d.type == DebuffType.stunned);
-        continue;
+      } else {
+        resolver.resolve(
+          action,
+          _teamOf(action.actor),
+          _enemyTeamOf(action.actor),
+        );
       }
-      resolver.resolve(
-        action,
-        _teamOf(action.actor),
-        _enemyTeamOf(action.actor),
-      );
     }
+
+    final isRoundComplete = execution.actionIndex >= execution.orderedActions.length;
+    return ActionStepResult(
+      action: action,
+      state: BattleState.fromLive(
+        round: _round,
+        teamA: playerTeam,
+        teamB: enemyTeam,
+        roundLog: logger.transcript,
+      ),
+      log: logger.transcript,
+      isRoundComplete: isRoundComplete,
+    );
+  }
+
+  /// Finalize bookkeeping after all queued actions were resolved.
+  RoundResult finishRound() {
+    final execution = _roundExecution;
+    if (execution == null) {
+      throw StateError('No prepared round. Call prepareRound first.');
+    }
+
+    final logger = execution.logger;
 
     // ── Energy regen AFTER spending — accumulates into the next round ─────
     playerEnergy.regen();
     enemyEnergy.regen();
 
     // ── Discard used player cards ─────────────────────────────────────────
-    for (final ids in cardChoices.values) {
+    for (final ids in execution.cardChoices.values) {
       for (final instanceId in ids) {
         _playerDeck.play(instanceId);
       }
@@ -149,8 +255,31 @@ class InteractiveBattleEngine {
     _playerDeck.drawTurn();
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
 
+    // ── Shields are round-scoped: reset to 0 at the end of every round ────
+    // New shields must be earned each round by selecting shield cards.
+    // This also ensures the opponent's shield is hidden during card selection.
+    for (final pet in [...playerTeam, ...enemyTeam]) {
+      pet.shield = 0;
+    }
+
     logger.roundEnd();
-    return _buildResult(logger, _checkWin());
+    final result = _buildResult(logger, _checkWin());
+    _roundExecution = null;
+    return result;
+  }
+
+  /// [cardChoices] maps each living player pet's id → one or more cardInstanceIds
+  /// to play this round.  A pet may play multiple cards if the team has enough
+  /// energy.  Missing entries mean the pet waits (no energy spent).
+  RoundResult executeRound(Map<String, List<String>> cardChoices) {
+    final started = prepareRound(cardChoices);
+    if (started.hasImmediateResult) {
+      return started.immediateResult!;
+    }
+    while (hasPendingActions) {
+      executeNextAction();
+    }
+    return finishRound();
   }
 
   /// All traits for a player pet (including on-cooldown ones — UI shows why).

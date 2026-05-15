@@ -13,6 +13,7 @@ class TraitViewModel {
   final String name;
   final String description;
   final String typeName;
+  final String partName;
   final String effectSummary;
   final String targetSummary;
   final String targetingMode; // 'front' | 'pierce' | 'aoe' | 'ally'
@@ -21,12 +22,15 @@ class TraitViewModel {
   final int    cooldownRemaining;
   final bool   isReady;
   final bool   canAfford;
+  final String effectIconKey;   // 'damage'|'aoe'|'heal'|'shield'|'poison'|'burn'|'stun'|etc.
+  final int    effectIconValue; // primary numeric value shown alongside icon
 
   const TraitViewModel({
     required this.id,
     required this.name,
     required this.description,
     required this.typeName,
+    required this.partName,
     required this.effectSummary,
     required this.targetSummary,
     required this.targetingMode,
@@ -35,6 +39,8 @@ class TraitViewModel {
     required this.cooldownRemaining,
     required this.isReady,
     required this.canAfford,
+    this.effectIconKey   = 'damage',
+    this.effectIconValue = 0,
   });
 
   bool get isUsable => isReady && canAfford;
@@ -45,6 +51,7 @@ class TraitViewModel {
         name:             t.name,
         description:      t.description,
         typeName:         t.type.name,
+        partName:         t.part.name,
         effectSummary:    _effectSummary(t),
         targetSummary:    _targetSummary(t.effect.target),
         targetingMode:    _targetingMode(t.effect.target),
@@ -55,13 +62,44 @@ class TraitViewModel {
         canAfford: availableEnergy != null
             ? availableEnergy >= t.energyCost
             : owner.canAfford(t.energyCost),
+        effectIconKey:   _iconKey(t),
+        effectIconValue: t.effect.value,
       );
+
+  static String _iconKey(Trait t) {
+    final e = t.effect;
+    return switch (e.type) {
+      EffectType.damage      => 'damage',
+      EffectType.aoe         => 'aoe',
+      EffectType.heal        => 'heal',
+      EffectType.shield      => 'shield',
+      EffectType.shieldBreak => 'shield_break',
+      EffectType.buff => switch (e.buffType) {
+        BuffType.attackUp  => 'atk_up',
+        BuffType.defenseUp => 'def_up',
+        BuffType.speedUp   => 'spd_up',
+        BuffType.energized => 'energized',
+        BuffType.regen     => 'regen',
+        null               => 'buff',
+      },
+      EffectType.debuff => switch (e.debuffType) {
+        DebuffType.stunned     => 'stun',
+        DebuffType.poisoned    => 'poison',
+        DebuffType.attackDown  => 'atk_down',
+        DebuffType.defenseDown => 'def_down',
+        DebuffType.burned      => 'burn',
+        DebuffType.speedDown   => 'spd_down',
+        null                   => 'debuff',
+      },
+    };
+  }
 
   static String _effectSummary(Trait t) {
     final e = t.effect;
+    final shd = e.selfShield > 0 ? ' +${e.selfShield}SHD' : '';
     return switch (e.type) {
-      EffectType.damage      => '${e.value} DMG',
-      EffectType.aoe         => '${e.value} AoE',
+      EffectType.damage      => '${e.value} DMG$shd',
+      EffectType.aoe         => '${e.value} AoE$shd',
       EffectType.heal        => 'HEAL ${e.value}',
       EffectType.shield      => 'SHIELD ${e.value}',
       EffectType.shieldBreak => e.value > 0 ? 'BREAK + SHIELD ${e.value}' : 'SHIELD BREAK',
@@ -73,7 +111,7 @@ class TraitViewModel {
         BuffType.regen     => 'REGEN ${e.value}/r',
         null               => 'BUFF +${e.value}',
       },
-      EffectType.debuff => switch (e.debuffType) {
+      EffectType.debuff => (switch (e.debuffType) {
         DebuffType.stunned     => 'STUN',
         DebuffType.poisoned    => 'PSN ${e.value}',
         DebuffType.attackDown  => 'ATK -${e.value}',
@@ -81,7 +119,7 @@ class TraitViewModel {
         DebuffType.burned      => 'BURN ${e.value}',
         DebuffType.speedDown   => 'SLOW',
         null                   => 'DEBUFF',
-      },
+      }) + shd,
     };
   }
 
@@ -107,8 +145,12 @@ class TraitViewModel {
 // ── CardViewModel ─────────────────────────────────────────────────────────────
 
 const _kPetClass = {
-  'bayani_1': 'aquatic', 'bayani_2': 'beast',  'bayani_3': 'reptile',
-  'diwata_1': 'plant',   'diwata_2': 'bird',   'diwata_3': 'bug',
+  'plant_1':   'plant',
+  'aquatic_1': 'aquatic',
+  'beast_1':   'beast',
+  'reptile_1': 'reptile',
+  'bird_1':    'bird',
+  'bug_1':     'bug',
 };
 
 const _kTypePart = {
@@ -116,8 +158,24 @@ const _kTypePart = {
   'support':   'tail', 'utility':   'mouth',
 };
 
-const _kRarityVariant = {
-  'common': '04', 'rare': '08', 'epic': '12',
+const _kPartAsset = {
+  'horn':  'horn',
+  'back':  'back',
+  'tail':  'tail',
+  'mouth': 'mouth',
+  'body':  'back',
+};
+
+// Card-art variant number derived from the Spine skeleton name for each creature:
+//   04-ena-plant, 03-puffy-aquatic (→04 nearest), 05-dps-beast (→04 nearest),
+//   08-machito-reptile, 12-momo-bird, 06-pomodoro-bug
+const _kPetVariant = {
+  'plant_1':   '04',
+  'aquatic_1': '04',
+  'beast_1':   '04',
+  'reptile_1': '08',
+  'bird_1':    '12',
+  'bug_1':     '06',
 };
 
 class CardViewModel {
@@ -137,10 +195,16 @@ class CardViewModel {
     this.cardArtPath,
   });
 
-  static String? _resolveArt(String ownerPetId, String traitType, String rarity) {
+  static String? _resolveArt(
+    String ownerPetId,
+    String traitType,
+    String traitPart,
+    String rarity,
+  ) {
     final cls     = _kPetClass[ownerPetId];
-    final part    = _kTypePart[traitType];
-    final variant = _kRarityVariant[rarity] ?? '04';
+    final part    = _kPartAsset[traitPart] ?? _kTypePart[traitType];
+    // Use the creature-specific card variant so art matches the Spine character.
+    final variant = _kPetVariant[ownerPetId] ?? '04';
     if (cls == null || part == null) return null;
     return 'assets/images/cards/$cls-$part-$variant.png';
   }
@@ -153,7 +217,12 @@ class CardViewModel {
       ownerPetName: owner.name,
       isPity:       card.isPity,
       trait:        trait,
-      cardArtPath:  _resolveArt(card.ownerPetId, trait.typeName, card.trait.rarity.name),
+      cardArtPath:  _resolveArt(
+        card.ownerPetId,
+        trait.typeName,
+        trait.partName,
+        card.trait.rarity.name,
+      ),
     );
   }
 }
@@ -193,9 +262,19 @@ class PetViewModel {
   final bool   isFainted;
   final bool   isStunned;
   final bool   isPoisoned;
+  final int    morale;
+  final int    skill;
+  /// Active buff type names  — e.g. ['attackUp', 'speedUp', 'regen']
+  final List<String> activeBuffs;
+  /// Active debuff type names — e.g. ['poisoned', 'burned', 'speedDown']
+  final List<String> activeDebuffs;
+  /// Current poison stack count (0 = not poisoned, 1–13 = stacks).
+  final int poisonStacks;
   final List<TraitViewModel> traits;
   final PetSpriteConfig?     spriteConfig;
   final PetCharacterConfig?  characterConfig;
+  /// Card art path for each part slot. Key = 'horn'|'back'|'tail'|'mouth'.
+  final Map<String, String>  partCardArt;
 
   const PetViewModel({
     required this.id,
@@ -210,9 +289,15 @@ class PetViewModel {
     required this.isFainted,
     required this.isStunned,
     required this.isPoisoned,
+    this.morale        = 20,
+    this.skill         = 20,
+    this.activeBuffs   = const [],
+    this.activeDebuffs = const [],
+    this.poisonStacks  = 0,
     required this.traits,
     this.spriteConfig,
     this.characterConfig,
+    this.partCardArt   = const {},
   });
 
   double get hpPercent => maxHp > 0 ? (hp / maxHp).clamp(0.0, 1.0) : 0.0;
@@ -230,6 +315,7 @@ class PetViewModel {
     int position, {
     PetSpriteConfig?    spriteConfig,
     PetCharacterConfig? characterConfig,
+    Map<String, String> partCardArt = const {},
   }) =>
       PetViewModel(
         id:        snap.id,
@@ -241,12 +327,18 @@ class PetViewModel {
         shield:    snap.shield,
         speed:     livePet.speed,
         position:  position,
-        isFainted: snap.isFainted,
-        isStunned: snap.isStunned,
-        isPoisoned: snap.debuffs.any((d) => d.type == 'poisoned'),
+        isFainted:     snap.isFainted,
+        isStunned:     snap.isStunned,
+        isPoisoned:    snap.debuffs.any((d) => d.type == 'poisoned'),
+        morale:        snap.morale,
+        skill:         snap.skill,
+        activeBuffs:   snap.buffs.map((b) => b.type).toList(),
+        activeDebuffs: snap.debuffs.map((d) => d.type).toList(),
+        poisonStacks:  snap.debuffs.where((d) => d.type == 'poisoned').fold(0, (s, d) => d.value),
         traits:         liveTraits.map((t) => TraitViewModel.fromTrait(t, livePet)).toList(),
         spriteConfig:    spriteConfig,
         characterConfig: characterConfig,
+        partCardArt:     partCardArt,
       );
 
   factory PetViewModel.initial(
@@ -254,23 +346,27 @@ class PetViewModel {
     List<Trait> traits, Pet livePet, {
     PetSpriteConfig?    spriteConfig,
     PetCharacterConfig? characterConfig,
+    Map<String, String> partCardArt = const {},
   }) =>
       PetViewModel(
         id:        id,
         name:      name,
-        hp:        kBaseHp,
-        maxHp:     kBaseHp,
+        hp:        livePet.maxHp,
+        maxHp:     livePet.maxHp,
         energy:    kBaseEnergy,
         maxEnergy: kEnergyCap,
         shield:    0,
         speed:     speed,
         position:  position,
-        isFainted: false,
-        isStunned: false,
+        isFainted:  false,
+        isStunned:  false,
         isPoisoned: false,
-        traits:         traits.map((t) => TraitViewModel.fromTrait(t, livePet)).toList(),
+        morale:     livePet.morale,
+        skill:      livePet.skill,
+        traits:     traits.map((t) => TraitViewModel.fromTrait(t, livePet)).toList(),
         spriteConfig:    spriteConfig,
         characterConfig: characterConfig,
+        partCardArt:     partCardArt,
       );
 }
 
@@ -303,6 +399,7 @@ class PveBattleViewModel {
   final int  excessDiscards;
 
   final Map<String, PetCharacterAnimState> petAnimStates;
+  final Map<String, String>                petEffectVfx;
   final Set<String>                        newCardIds;
 
   const PveBattleViewModel({
@@ -326,6 +423,7 @@ class PveBattleViewModel {
     this.needsDiscard        = false,
     this.excessDiscards      = 0,
     this.petAnimStates       = const {},
+    this.petEffectVfx        = const {},
     this.newCardIds          = const {},
   });
 
@@ -373,6 +471,7 @@ class PveBattleViewModel {
     bool? needsDiscard,
     int? excessDiscards,
     Map<String, PetCharacterAnimState>? petAnimStates,
+    Map<String, String>? petEffectVfx,
     Set<String>? newCardIds,
     bool clearSelectedPet = false,
   }) =>
@@ -397,6 +496,7 @@ class PveBattleViewModel {
         needsDiscard:     needsDiscard    ?? this.needsDiscard,
         excessDiscards:   excessDiscards  ?? this.excessDiscards,
         petAnimStates:    petAnimStates   ?? this.petAnimStates,
+        petEffectVfx:     petEffectVfx    ?? this.petEffectVfx,
         newCardIds:       newCardIds      ?? this.newCardIds,
       );
 }
