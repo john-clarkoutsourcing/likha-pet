@@ -3,7 +3,6 @@ import 'package:uuid/uuid.dart';
 import '../models/owned_pet.dart';
 import '../models/player_data.dart';
 import '../repositories/player_repository.dart';
-import '../services/starter_pack_service.dart';
 
 // ── PlayerNotifier ────────────────────────────────────────────────────────────
 //
@@ -46,17 +45,6 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
     // No auto-generation — StarterPackScreen handles the hatching flow
   }
 
-  Future<void> _generateStarterPack() async {
-    final starters = StarterPackService.generate();
-    final activeTeam = starters.take(3).map((p) => p.uid).toList();
-    state = PlayerData(
-      roster:       starters,
-      activeTeam:   activeTeam,
-      soulCrystals: 300, // enough to breed once
-    );
-    _persist();
-  }
-
   // ── Team management ────────────────────────────────────────────────────────
 
   void setActiveTeam(List<String> petUids) {
@@ -69,6 +57,26 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
 
   void addPet(OwnedPet pet) {
     state = state.copyWith(roster: [...state.roster, pet]);
+    _persist();
+  }
+
+  /// Replace roster with server-authoritative pets (inventory sync).
+  /// Keeps valid active team members when possible, then fills remaining slots.
+  void replaceRosterFromServer(List<OwnedPet> pets) {
+    final roster = List<OwnedPet>.from(pets);
+    final rosterIds = roster.map((p) => p.uid).toSet();
+
+    final keptActive = state.activeTeam.where(rosterIds.contains).toList();
+    final fill = roster
+        .map((p) => p.uid)
+        .where((id) => !keptActive.contains(id))
+        .toList();
+    final nextActive = [...keptActive, ...fill].take(3).toList();
+
+    state = state.copyWith(
+      roster: roster,
+      activeTeam: nextActive,
+    );
     _persist();
   }
 
@@ -98,8 +106,8 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
 
   void completeStage(String stageId) {
     if (state.completedStages.contains(stageId)) return;
-    state = state.copyWith(
-        completedStages: {...state.completedStages, stageId});
+    state =
+        state.copyWith(completedStages: {...state.completedStages, stageId});
     _persist();
   }
 
@@ -159,7 +167,7 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
 
   /// Breed two DNA strings to create offspring DNA.
   /// Implements simplified Axie genetics: offspring DNA is blended from parents.
-  /// 
+  ///
   /// Strategy:
   ///   - Body class (byte 0): 50/50 from each parent
   ///   - Part classes (bytes 1-4): probabilistically inherit from each parent
@@ -184,9 +192,7 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
       offspring.add(mutated.clamp(0, 255));
     }
 
-    return offspring
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join('');
+    return offspring.map((b) => b.toRadixString(16).padLeft(2, '0')).join('');
   }
 
   /// Extract 12 bytes from a 24-char hex DNA string.
@@ -223,7 +229,6 @@ class _RNG {
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
-final playerProvider =
-    StateNotifierProvider<PlayerNotifier, PlayerData>(
+final playerProvider = StateNotifierProvider<PlayerNotifier, PlayerData>(
   (ref) => PlayerNotifier(),
 );

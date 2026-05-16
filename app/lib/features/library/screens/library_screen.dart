@@ -5,6 +5,7 @@ import 'package:likha_pet_battle_engine/trait.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../battle/data/creature_registry.dart';
 import '../../battle/data/trait_card_catalog.dart';
+import '../../battle/widgets/classic_trait_card_widget.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,13 +22,9 @@ Color _clsColor(String cls) => switch (cls) {
       _ => const Color(0xFF9C27B0),
     };
 
-String _titleCase(String s) => s
-    .split(' ')
-    .map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1))
-    .join(' ');
-
 /// A catalog entry built from local Classic card metadata.
 class _CardEntry {
+  final String imageName;
   final String templatePath;
   final String cls;
   final String name;
@@ -43,6 +40,7 @@ class _CardEntry {
   final Trait trait;
 
   const _CardEntry({
+    required this.imageName,
     required this.templatePath,
     required this.cls,
     required this.name,
@@ -85,9 +83,10 @@ class _LibraryScreenState extends State<LibraryScreen>
     final entries = TraitCardCatalog.build()
         .map(
           (e) => _CardEntry(
+            imageName: e.imageName,
             templatePath: e.templatePath,
             cls: e.cardClass,
-            name: _titleCase(e.imageName),
+            name: e.trait.name,
             energy: e.energy,
             attack: e.attack,
             defense: e.defense,
@@ -323,29 +322,17 @@ class _SkillCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _clsColor(entry.cls);
-
     return GestureDetector(
       onTap: () => _showDetail(context),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Image.asset(
-          entry.templatePath,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            color: color.withValues(alpha: 0.1),
-            child: Center(
-              child: Text(entry.name,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white54, fontSize: 8)),
-            ),
-          ),
-        ),
+      child: ClassicTraitCardWidget(
+        imagePath: entry.templatePath,
+        imageName: entry.imageName,
+        name: entry.name,
+        energy: entry.energy,
+        attack: entry.attack,
+        defense: entry.defense,
+        description: entry.description,
+        showDescription: true,
       ),
     );
   }
@@ -359,162 +346,42 @@ class _SkillDetailDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _clsColor(entry.cls);
+    final maxDialogHeight = MediaQuery.sizeOf(context).height * 0.9;
 
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.all(24),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Large card image ────────────────────────────────────────────
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: SizedBox(
-              width: 200,
-              child: Image.asset(
-                entry.templatePath,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 200,
-                  height: 272,
-                  color: color.withValues(alpha: 0.15),
-                  child: Center(
-                    child: Text(entry.name,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14)),
-                  ),
-                ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 360, maxHeight: maxDialogHeight),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: ClassicTraitCardWidget(
+                imagePath: entry.templatePath,
+                imageName: entry.imageName,
+                name: entry.name,
+                energy: entry.energy,
+                attack: entry.attack,
+                defense: entry.defense,
+                description: entry.description,
               ),
             ),
-          ),
-
-          const SizedBox(width: 16),
-
-          // ── Info panel ──────────────────────────────────────────────────
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111827),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: color.withValues(alpha: 0.4)),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.35),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Class badge
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: color.withValues(alpha: 0.5)),
-                    ),
-                    child: Text(
-                      entry.cls[0].toUpperCase() + entry.cls.substring(1),
-                      style: TextStyle(
-                          color: color,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Card name
-                  Text(entry.name,
-                      style: GoogleFonts.rajdhani(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900)),
-
-                  const SizedBox(height: 6),
-                  // Energy cost
-                  Row(children: [
-                    const Text('Energy  ',
-                        style: TextStyle(color: Colors.white38, fontSize: 11)),
-                    if (entry.energy == 0)
-                      const Text('Free',
-                          style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 11,
-                              fontStyle: FontStyle.italic))
-                    else
-                      ...List.generate(
-                        entry.energy,
-                        (_) => Container(
-                          width: 10,
-                          height: 10,
-                          margin: const EdgeInsets.only(right: 3),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0xFF4FC3F7),
-                          ),
-                        ),
-                      ),
-                  ]),
-                  const SizedBox(height: 6),
-                  // Ability type + part
-                  Text(
-                    '${entry.abilityType.toUpperCase()}  ·  ${entry.partType.toUpperCase()}',
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-
-                  // Stats row (attack / defense / healing)
-                  if (entry.attack > 0 || entry.defense > 0 || entry.healing > 0) ...[
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 10, children: [
-                      if (entry.attack > 0)
-                        _StatChip(label: 'ATK', value: entry.attack, color: Colors.redAccent),
-                      if (entry.defense > 0)
-                        _StatChip(label: 'DEF', value: entry.defense, color: Colors.blueAccent),
-                      if (entry.healing > 0)
-                        _StatChip(label: 'HEAL', value: entry.healing, color: Colors.greenAccent),
-                    ]),
-                  ],
-
-                  const SizedBox(height: 8),
-                  // Description
-                  Text(
-                    entry.description.isEmpty
-                        ? 'No description available.'
-                        : entry.description,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      height: 1.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-                  // Close
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.06),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: const Text('Close',
-                          style:
-                              TextStyle(color: Colors.white54, fontSize: 12)),
-                    ),
-                  ),
-                ],
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -632,25 +499,5 @@ class _Row extends StatelessWidget {
               style: TextStyle(
                   color: color, fontSize: 9, fontWeight: FontWeight.w700)),
         ],
-      );
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final int value;
-  final Color color;
-  const _StatChip({required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
-        child: Text('$label $value',
-            style: TextStyle(
-                color: color, fontSize: 10, fontWeight: FontWeight.w700)),
       );
 }

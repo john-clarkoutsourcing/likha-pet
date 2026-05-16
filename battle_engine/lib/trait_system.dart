@@ -112,11 +112,36 @@ class TraitSystem {
   /// Throws [ArgumentError] if the ID is not registered.
   Trait getById(String id) {
     final factory = _registry[id];
-    if (factory == null) throw ArgumentError('Unknown trait id: "$id"');
-    return factory();
+    if (factory != null) return factory();
+
+    final m = RegExp(
+      r'^(beast|bug|bird|plant|aquatic|reptile)_(horn|back|tail|mouth)_(\d{2})$',
+    ).firstMatch(id);
+    if (m != null) {
+      final cls = m.group(1)!;
+      final slot = m.group(2)!;
+      final variant = m.group(3)!;
+      final baseId = '${cls}_$slot';
+      final baseFactory = _registry[baseId];
+      if (baseFactory != null) {
+        final classEnum = CreatureClass.values.firstWhere((c) => c.name == cls);
+        final baseTrait = baseFactory().withPartClass(classEnum);
+        return TraitLibrary.withClassicCardStats(
+          baseTrait: baseTrait,
+          traitId: id,
+          cardId: '$cls-$slot-$variant',
+        );
+      }
+    }
+
+    throw ArgumentError('Unknown trait id: "$id"');
   }
 
-  bool isRegistered(String id) => _registry.containsKey(id);
+  bool isRegistered(String id) =>
+      _registry.containsKey(id) ||
+      RegExp(
+        r'^(beast|bug|bird|plant|aquatic|reptile)_(horn|back|tail|mouth)_(\d{2})$',
+      ).hasMatch(id);
 
   List<String> get allTraitIds => List.unmodifiable(_registry.keys);
 
@@ -127,8 +152,7 @@ class TraitSystem {
   // ── Card template metadata ─────────────────────────────────────────────────
   // Assets live under:
   //   assets/images/classic-cards/<class>-<part>-<variant>.png
-  static const String _cardTemplateBasePath =
-      'assets/images/classic-cards';
+  static const String _cardTemplateBasePath = 'assets/images/classic-cards';
 
   static const Map<String, String> _traitCardTemplate = {
     'beast_horn': 'beast-horn-04',
@@ -174,7 +198,8 @@ class TraitSystem {
     final cardId = _traitCardTemplate[id];
     if (cardId != null) return '$_cardTemplateBasePath/$cardId.png';
 
-    final m = RegExp(r'^(beast|bug|bird|plant|aquatic|reptile)_(horn|back|tail|mouth)_(\d{2})$')
+    final m = RegExp(
+            r'^(beast|bug|bird|plant|aquatic|reptile)_(horn|back|tail|mouth)_(\d{2})$')
         .firstMatch(id);
     if (m == null) return null;
     final cls = m.group(1)!;

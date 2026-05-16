@@ -60,6 +60,7 @@ flutter:
     - assets/images/icons/
     - assets/images/part-icons/
     - assets/images/status/
+    - assets/images/status/classic/
     # Spine skeletal animations — all 15 starter creatures + dusk
     - assets/spines/aquatic/
     - assets/spines/plant/

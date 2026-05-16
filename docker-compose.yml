@@ -57,6 +57,20 @@ services:
       emulator:
         condition: service_healthy
 
+  # ── Flutter Web App ─────────────────────────────────────────────────────────
+  # Optional: run this if you don't have Flutter installed locally.
+  # First build takes ~5 minutes. Access at http://localhost:8080
+  flutter-web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.flutter
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+    profiles:
+      - full   # only starts with: docker compose --profile full up -d
+
 volumes:
   # Persists downloaded Firebase emulator JARs across restarts
   emulator-cache:
