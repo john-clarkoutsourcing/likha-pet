@@ -34,7 +34,18 @@ class ClassicTraitCardWidget extends StatelessWidget {
         builder: (context, constraints) {
           final w = constraints.maxWidth;
           final h = constraints.maxHeight;
-          final uiScale = (w / 220).clamp(0.78, 1.0).toDouble();
+          final uiScale = (w / 220).clamp(0.6, 1.0).toDouble();
+          final isCompact = w < 120;
+          final nameFontSize = (isCompact ? w * 0.088 : w * 0.075)
+              .clamp(isCompact ? 8.5 : 11.0, isCompact ? 10.5 : 15.0)
+              .toDouble();
+          final nameTopPadding = isCompact ? h * 0.018 : h * 0.046;
+          final nameRowHeight = isCompact ? h * 0.112 : h * 0.125;
+          final descTopPadding = isCompact ? h * 0.008 : h * 0.02;
+          final descIconYOffset = isCompact ? h * 0.008 : h * 0.02;
+          final descIconSize = isCompact ? (22 * uiScale) : (30 * uiScale);
+          final descTextSize = isCompact ? (w * 0.075).clamp(7.0, 8.5) : 10 * uiScale;
+          final descMaxLines = isCompact ? 1 : 2;
 
           return Stack(
             clipBehavior: Clip.none,
@@ -94,27 +105,28 @@ class ClassicTraitCardWidget extends StatelessWidget {
                       ),
                     ),
                     SizedBox(
-                      height: h * 0.107,
+                      height: nameRowHeight,
                       child: Padding(
                         padding: EdgeInsets.only(
                           left: w * 0.177,
                           right: w * 0.073,
-                          top: h * 0.046,
+                          top: nameTopPadding,
                         ),
-                        child: Center(
-                            child: Text(
-                              name,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: const Color(0xFF442215),
-                                fontSize: 16 * uiScale,
-                                fontWeight: FontWeight.w900,
-                                shadows: const [
-                                  Shadow(color: Colors.black26, blurRadius: 2)
-                                ],
-                              ),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Text(
+                            name,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: const Color(0xFF442215),
+                              fontSize: nameFontSize,
+                              fontWeight: FontWeight.w900,
+                              shadows: const [
+                                Shadow(color: Colors.black26, blurRadius: 2)
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -125,17 +137,17 @@ class ClassicTraitCardWidget extends StatelessWidget {
                           padding: EdgeInsets.only(
                             left: w * 0.177,
                             right: w * 0.073,
-                            top: h * 0.02,
+                            top: descTopPadding,
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               if (statusIcon != null)
                                 Transform.translate(
-                                  offset: Offset(-4 * uiScale, h * 0.02),
+                                  offset: Offset(-4 * uiScale, descIconYOffset),
                                   child: SizedBox(
-                                    width: 30 * uiScale,
-                                    height: 30 * uiScale,
+                                    width: descIconSize,
+                                    height: descIconSize,
                                     child: Image.asset(
                                       'assets/images/status/classic/$statusIcon.png',
                                       fit: BoxFit.contain,
@@ -147,11 +159,11 @@ class ClassicTraitCardWidget extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   description,
-                                  maxLines: 2,
+                                  maxLines: descMaxLines,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 10 * uiScale,
+                                    fontSize: descTextSize.toDouble(),
                                     fontWeight: FontWeight.w700,
                                     height: 1.15,
                                     shadows: const [

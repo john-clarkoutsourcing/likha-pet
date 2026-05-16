@@ -10,11 +10,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
 import '../../../shared/widgets/hp_bar.dart';
 import '../data/creature_registry.dart';
+import '../data/trait_card_catalog.dart';
 import '../providers/pve_battle_provider.dart';
 import '../providers/battle_view_model.dart';
 import '../services/battle_asset_warmup.dart';
 import '../widgets/pet_character_widget.dart';
 import '../widgets/battle_background_widget.dart';
+import '../widgets/classic_trait_card_widget.dart';
 import '../widgets/pet_renderer_widget.dart';
 import '../widgets/pet_sprite_widget.dart';
 import '../widgets/projectile_widget.dart';
@@ -61,6 +63,33 @@ const _kEnemyPos = [
   Offset(0.65, 0.03), // MID
   Offset(0.75, 0.35), // BACK
 ];
+
+final Map<String, TraitCardCatalogEntry> _cardCatalogByTraitId = {
+  for (final entry in TraitCardCatalog.build()) entry.traitId: entry,
+};
+
+String? _classicImageNameFromPath(String? path) {
+  if (path == null || path.isEmpty) return null;
+  final filename = path.split('/').last;
+  if (!filename.endsWith('.png')) return null;
+  return filename.substring(0, filename.length - 4);
+}
+
+int _classicCardAttack(TraitViewModel trait, TraitCardCatalogEntry? entry) {
+  if (entry != null) return entry.attack;
+  return switch (trait.effectIconKey) {
+    'damage' || 'aoe' => trait.effectIconValue,
+    _ => 0,
+  };
+}
+
+int _classicCardDefense(TraitViewModel trait, TraitCardCatalogEntry? entry) {
+  if (entry != null) return entry.defense;
+  return switch (trait.effectIconKey) {
+    'shield' || 'def_up' => trait.effectIconValue,
+    _ => 0,
+  };
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -1059,16 +1088,14 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
                   _BattlePet(
                     pet: vm.playerTeam[i],
                     isPlayer: true,
-                    isSelected: vm.selectedPetId == vm.playerTeam[i].id,
+                    isSelected: false,
                     hasSkill:
                         vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ??
                             false,
                     positionIndex: i,
                     animState: vm.petAnimStates[vm.playerTeam[i].id],
                     attackSlot: vm.petAttackSlots[vm.playerTeam[i].id],
-                    onTap: () => ref
-                        .read(pveBattleProvider.notifier)
-                        .selectPet(vm.playerTeam[i].id),
+                    onTap: () => _PetInfoSheet.show(context, vm.playerTeam[i]),
                     onLongPress: () =>
                         _PetInfoSheet.show(context, vm.playerTeam[i]),
                   ),
@@ -1283,10 +1310,11 @@ class _BattlePet extends StatelessWidget {
     final scale = _kScaleByPos[positionIndex.clamp(0, 2)];
     final opacity = _kOpacityByPos[positionIndex.clamp(0, 2)];
     final spriteSize = _kSpriteBase * scale;
-    final barWidth = spriteSize + 14;
+    final barWidth = (spriteSize * 0.50).clamp(80.0, 108.0).toDouble();
     final effectiveOpacity = pet.isFainted ? 0.88 : opacity;
 
     return GestureDetector(
+      behavior: HitTestBehavior.translucent,
       onTap: onTap,
       onLongPress: onLongPress,
       child: Opacity(
@@ -1302,18 +1330,20 @@ class _BattlePet extends StatelessWidget {
                 alignment: Alignment.topCenter,
                 clipBehavior: Clip.none,
                 children: [
-                  _Sprite(
-                    pet: pet,
-                    size: spriteSize,
-                    isSelected: isSelected,
-                    hasSkill: hasSkill,
-                    isPlayer: isPlayer,
-                    animState: animState,
-                    attackSlot: attackSlot,
+                  IgnorePointer(
+                    child: _Sprite(
+                      pet: pet,
+                      size: spriteSize,
+                      isSelected: isSelected,
+                      hasSkill: hasSkill,
+                      isPlayer: isPlayer,
+                      animState: animState,
+                      attackSlot: attackSlot,
+                    ),
                   ),
                   if (!pet.isFainted)
                     Positioned(
-                      top: -2,
+                      top: 22,
                       left: 0,
                       right: 0,
                       child: _FloatingHpBar(pet: pet, width: barWidth),
@@ -1340,13 +1370,17 @@ class _FloatingHpBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusIcons = _buildStatusIcons();
+    final compactWidth = width.clamp(80.0, 108.0).toDouble();
+    final visibleStatusIcons = statusIcons.take(5).toList(growable: false);
+    final hiddenStatusCount = statusIcons.length - visibleStatusIcons.length;
 
     return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      width: compactWidth,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.72),
+        color: Colors.black.withValues(alpha: 0.76),
         borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white12),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1354,35 +1388,55 @@ class _FloatingHpBar extends StatelessWidget {
           // ── HP + Shield row ─────────────────────────────────────
           Row(
             children: [
-              const Icon(Icons.favorite, size: 9, color: Color(0xFF66FF88)),
-              const SizedBox(width: 2),
+              const Icon(Icons.favorite, size: 8, color: Color(0xFF66FF88)),
+              const SizedBox(width: 1),
               Text('${pet.hp}',
                   style: const TextStyle(
                       color: Color(0xFF66FF88),
-                      fontSize: 9,
+                      fontSize: 8,
                       fontWeight: FontWeight.w800)),
               const Spacer(),
               if (pet.shield > 0) ...[
-                const Icon(Icons.shield, size: 9, color: AppColors.shieldGold),
+                const Icon(Icons.shield, size: 8, color: AppColors.shieldGold),
                 const SizedBox(width: 1),
                 Text('${pet.shield}',
                     style: const TextStyle(
                         color: AppColors.shieldGold,
-                        fontSize: 9,
+                        fontSize: 8,
                         fontWeight: FontWeight.w800)),
               ],
             ],
           ),
-          const SizedBox(height: 2),
-          HpBar(current: pet.hp, max: pet.maxHp, height: 4),
+          const SizedBox(height: 1),
+          HpBar(current: pet.hp, max: pet.maxHp, height: 3),
 
-          // ── Status effects (wrap to prevent overflow) ───────────
-          if (statusIcons.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Wrap(
-              spacing: 2,
-              runSpacing: 2,
-              children: statusIcons,
+          // ── Status effects (compact row, capped count) ──────────
+          if (visibleStatusIcons.isNotEmpty) ...[
+            const SizedBox(height: 1),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...visibleStatusIcons,
+                if (hiddenStatusCount > 0)
+                  Container(
+                    margin: const EdgeInsets.only(left: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '+$hiddenStatusCount',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 7,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ],
@@ -1395,32 +1449,55 @@ class _FloatingHpBar extends StatelessWidget {
     final icons = <Widget>[];
 
     // Buffs
-    if (pet.activeBuffs.contains('attackUp'))
-      icons.add(_s('${s}attack-up.png'));
-    if (pet.activeBuffs.contains('defenseUp'))
-      icons.add(_s('${s}raise-shield.png'));
-    if (pet.activeBuffs.contains('speedUp')) icons.add(_s('${s}speed-up.png'));
-    if (pet.activeBuffs.contains('energized'))
-      icons.add(_s('${s}gain-energy.png'));
-    if (pet.activeBuffs.contains('regen')) icons.add(_s('${s}self-heal.png'));
+    if (_hasAny(pet.activeBuffs, ['attackUp', 'attack_up'])) {
+      icons.add(_s('${s}attack-up-stroke.png'));
+    }
+    if (_hasAny(pet.activeBuffs, ['defenseUp', 'defense_up'])) {
+      icons.add(_s('${s}raise-shield-stroke.png'));
+    }
+    if (_hasAny(pet.activeBuffs, ['speedUp', 'speed_up'])) {
+      icons.add(_s('${s}speed-up-stroke.png'));
+    }
+    if (_hasAny(pet.activeBuffs, ['energized'])) {
+      icons.add(_s('${s}gain-energy-stroke.png'));
+    }
+    if (_hasAny(pet.activeBuffs, ['regen'])) {
+      icons.add(_s('${s}self-heal-stroke.png'));
+    }
 
     // Debuffs
-    if (pet.activeDebuffs.contains('stunned')) icons.add(_s('${s}stun.png'));
-    if (pet.activeDebuffs.contains('poisoned')) icons.add(_s('${s}poison.png'));
-    if (pet.activeDebuffs.contains('burned')) icons.add(_s('${s}critical.png'));
-    if (pet.activeDebuffs.contains('attackDown'))
-      icons.add(_s('${s}attack-down.png'));
-    if (pet.activeDebuffs.contains('defenseDown'))
-      icons.add(_s('${s}fragile.png'));
-    if (pet.activeDebuffs.contains('speedDown'))
-      icons.add(_s('${s}speed-down.png'));
+    if (_hasAny(pet.activeDebuffs, ['stunned'])) {
+      icons.add(_s('${s}stun-stroke.png'));
+    }
+    if (_hasAny(pet.activeDebuffs, ['poisoned'])) {
+      icons.add(_s('${s}poison-stroke.png'));
+    }
+    if (_hasAny(pet.activeDebuffs, ['burned'])) {
+      icons.add(_s('${s}critical-stroke.png'));
+    }
+    if (_hasAny(pet.activeDebuffs, ['attackDown', 'attack_down'])) {
+      icons.add(_s('${s}attack-down-stroke.png'));
+    }
+    if (_hasAny(pet.activeDebuffs, ['defenseDown', 'defense_down'])) {
+      icons.add(_s('${s}fragile-stroke.png'));
+    }
+    if (_hasAny(pet.activeDebuffs, ['speedDown', 'speed_down'])) {
+      icons.add(_s('${s}speed-down-stroke.png'));
+    }
 
     return icons;
   }
 
+  static bool _hasAny(List<String> values, List<String> keys) {
+    for (final key in keys) {
+      if (values.contains(key)) return true;
+    }
+    return false;
+  }
+
   static Widget _s(String path) => SizedBox(
-        width: 13,
-        height: 13,
+        width: 11,
+        height: 11,
         child: Image.asset(path, fit: BoxFit.contain),
       );
 }
@@ -1737,12 +1814,10 @@ class _BottomPanelContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final living = vm.playerTeam.where((p) => !p.isFainted).toList();
-    final filterPet = vm.selectedPetId == null
-        ? null
-        : living.where((p) => p.id == vm.selectedPetId).firstOrNull;
+    final previewEnergy = vm.plannedRemainingEnergy;
 
     final entries = <(PetViewModel, CardViewModel)>[];
-    for (final pet in filterPet == null ? living : [filterPet]) {
+    for (final pet in living) {
       for (final card in vm.hand.where((c) => c.ownerPetId == pet.id)) {
         entries.add((pet, card));
       }
@@ -1756,7 +1831,9 @@ class _BottomPanelContent extends StatelessWidget {
           width: 76,
           child: Center(
             child: _EnergyDisplay(
-                energy: vm.playerTeamEnergy, max: kTeamEnergyCap),
+              energy: previewEnergy,
+              max: kTeamEnergyCap,
+            ),
           ),
         ),
 
@@ -1766,19 +1843,11 @@ class _BottomPanelContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (filterPet != null)
-                  _SelectedPetSkillHeader(
-                    pet: filterPet,
-                    onShowAll: () =>
-                        ref.read(pveBattleProvider.notifier).clearSelectedPet(),
-                  ),
                 Expanded(
                   child: entries.isEmpty
                       ? Center(
                           child: Text(
-                            filterPet == null
-                                ? 'No cards'
-                                : 'No cards for ${filterPet.name}',
+                            'No cards',
                             style: const TextStyle(
                                 color: Colors.white38, fontSize: 12),
                           ),
@@ -1889,66 +1958,6 @@ class _BottomPanelContent extends StatelessWidget {
           child: Center(child: _EndTurnButton(vm: vm, ref: ref)),
         ),
       ],
-    );
-  }
-}
-
-class _SelectedPetSkillHeader extends StatelessWidget {
-  final PetViewModel pet;
-  final VoidCallback onShowAll;
-  const _SelectedPetSkillHeader({
-    required this.pet,
-    required this.onShowAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color =
-        _PetCardSection._clsColor(pet.creatureDef?.bodyClass.name ?? '');
-    return Container(
-      margin: const EdgeInsets.fromLTRB(6, 2, 6, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '${pet.name} skills: ${pet.traits.map((t) => '${t.name} (${t.effectSummary})').join(' • ')}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: onShowAll,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: const Text(
-                'Show all',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -2134,7 +2143,10 @@ class _PetCardSection extends StatelessWidget {
 class _EnergyDisplay extends StatelessWidget {
   final int energy;
   final int max;
-  const _EnergyDisplay({required this.energy, required this.max});
+  const _EnergyDisplay({
+    required this.energy,
+    required this.max,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2654,13 +2666,21 @@ class _SkillCard extends StatelessWidget {
     final usable = discardMode || trait.isUsable;
     final tc =
         discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
+    final cardEntry = _cardCatalogByTraitId[trait.id];
+    final resolvedTemplatePath = cardTemplatePath ??
+        cardEntry?.templatePath ??
+        cardArtPath ??
+        'assets/images/part-cards/default-card-art.png';
+    final resolvedImageName = cardEntry?.imageName ??
+        _classicImageNameFromPath(cardTemplatePath) ??
+        _classicImageNameFromPath(cardArtPath) ??
+        _classicImageNameFromPath(resolvedTemplatePath) ??
+        '';
 
     // Cards fill ~80% of panel height (182px panel, 20px pet label → ~142px usable)
     final cardW = discardMode ? 108.0 : 96.0;
     final cardH = discardMode ? 148.0 : 134.0;
     const lift = -14.0;
-
-    final hasTemplate = cardTemplatePath != null;
 
     return GestureDetector(
       onTap: usable && !isFizzled ? onTap : null,
@@ -2700,25 +2720,18 @@ class _SkillCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 // ── Base layer ───────────────────────────────────────────────
-                if (hasTemplate)
-                  // Full Axie-style card template (includes baked-in cost, name, type)
-                  Positioned.fill(
-                    child: Image.asset(
-                      cardTemplatePath!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _FallbackCardBody(
-                          trait: trait,
-                          cardArtPath: cardArtPath,
-                          petName: petName,
-                          tc: tc),
-                    ),
-                  )
-                else
-                  _FallbackCardBody(
-                      trait: trait,
-                      cardArtPath: cardArtPath,
-                      petName: petName,
-                      tc: tc),
+                Positioned.fill(
+                  child: ClassicTraitCardWidget(
+                    imagePath: resolvedTemplatePath,
+                    imageName: resolvedImageName,
+                    name: trait.name,
+                    energy: trait.energyCost,
+                    attack: _classicCardAttack(trait, cardEntry),
+                    defense: _classicCardDefense(trait, cardEntry),
+                    description: trait.description,
+                    showDescription: true,
+                  ),
+                ),
 
                 // ── Dynamic overlays (same for both template and fallback) ───
 
@@ -2768,7 +2781,7 @@ class _SkillCard extends StatelessWidget {
                 // Combo-order badge (top-right, below template HP)
                 if (comboIndex != null)
                   Positioned(
-                    top: hasTemplate ? 22 : 5,
+                    top: 22,
                     right: 4,
                     child: Container(
                       width: 18,
@@ -2793,7 +2806,7 @@ class _SkillCard extends StatelessWidget {
                   ),
 
                 // Pity star
-                if (isPity && !discardMode && !hasTemplate)
+                if (isPity && !discardMode)
                   Positioned(
                     bottom: 5,
                     left: 5,
@@ -2878,177 +2891,6 @@ class _SkillCard extends StatelessWidget {
       };
 }
 
-// ── Fallback card body (no template PNG available) ────────────────────────────
-
-class _FallbackCardBody extends StatelessWidget {
-  final TraitViewModel trait;
-  final String? cardArtPath;
-  final String petName;
-  final Color tc;
-  const _FallbackCardBody({
-    required this.trait,
-    required this.cardArtPath,
-    required this.petName,
-    required this.tc,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Art area
-        Positioned.fill(
-          child: cardArtPath != null
-              ? Image.asset(cardArtPath!,
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
-                  errorBuilder: (_, __, ___) =>
-                      Container(color: _cardBgColor(trait.typeName)))
-              : Container(color: _cardBgColor(trait.typeName)),
-        ),
-        // Gradient fade into info strip
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: Container(
-            height: 72,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.72),
-                  Colors.black.withValues(alpha: 0.92),
-                ],
-                stops: const [0.0, 0.45, 1.0],
-              ),
-            ),
-          ),
-        ),
-        // Info strip
-        Positioned(
-          left: 6,
-          right: 6,
-          bottom: 5,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(trait.name,
-                  style: GoogleFonts.rajdhani(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
-                    shadows: const [Shadow(blurRadius: 4, color: Colors.black)],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  _EffectBadge(trait: trait),
-                  const SizedBox(width: 2),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(
-                      trait.energyCost,
-                      (_) => Container(
-                        width: 7,
-                        height: 7,
-                        margin: const EdgeInsets.only(left: 2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: trait.canAfford
-                              ? AppColors.energyBlue
-                              : Colors.white.withValues(alpha: 0.15),
-                          boxShadow: trait.canAfford
-                              ? [
-                                  BoxShadow(
-                                      color: AppColors.energyBlue
-                                          .withValues(alpha: 0.6),
-                                      blurRadius: 4)
-                                ]
-                              : null,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        // Type badge
-        Positioned(
-          top: 5,
-          left: 5,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: tc.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              '${_typeIcon(trait.typeName)} ${_partIcon(trait.partName)}',
-              style: const TextStyle(fontSize: 9),
-            ),
-          ),
-        ),
-        // Pet dot
-        Positioned(
-          top: 5,
-          right: 5,
-          child: Container(
-            width: 18,
-            height: 18,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black38,
-              border: Border.all(color: Colors.white30, width: 1),
-            ),
-            child: Center(
-              child: Text(petName[0],
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900)),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  static Color _cardBgColor(String t) => switch (t) {
-        'offensive' => const Color(0xFF5A0A0A),
-        'defensive' => const Color(0xFF0A1A5A),
-        'support' => const Color(0xFF0A3A15),
-        'utility' => const Color(0xFF4A2E05),
-        _ => const Color(0xFF1A0F3A),
-      };
-
-  static String _typeIcon(String t) => switch (t) {
-        'offensive' => '⚔',
-        'defensive' => '🛡',
-        'support' => '💚',
-        'utility' => '⚡',
-        _ => '✦',
-      };
-
-  static String _partIcon(String p) => switch (p) {
-        'horn' => '🦏',
-        'back' => '🎒',
-        'tail' => '🦚',
-        'mouth' => '👄',
-        'body' => '🧬',
-        _ => '🧩',
-      };
-}
-
 // ── Character label (bottom of card panel) ────────────────────────────────────
 
 class _CharacterLabel extends StatelessWidget {
@@ -3060,9 +2902,7 @@ class _CharacterLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final assigned = vm.pendingSkills[pet.id] ?? [];
     final isDone = assigned.isNotEmpty;
-    final isActive = vm.selectedPetId == pet.id;
     final cardCount = vm.hand.where((c) => c.ownerPetId == pet.id).length;
-    final color = _petColor(pet.name);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
@@ -3071,16 +2911,12 @@ class _CharacterLabel extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDone
             ? AppColors.accent.withValues(alpha: 0.22)
-            : isActive
-                ? color.withValues(alpha: 0.18)
-                : Colors.white.withValues(alpha: 0.04),
+            : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDone
               ? AppColors.accent.withValues(alpha: 0.65)
-              : isActive
-                  ? color.withValues(alpha: 0.55)
-                  : Colors.transparent,
+              : Colors.transparent,
           width: 1.0,
         ),
       ),
@@ -3091,11 +2927,7 @@ class _CharacterLabel extends StatelessWidget {
             child: Text(
               pet.name,
               style: TextStyle(
-                color: isDone
-                    ? AppColors.accent
-                    : isActive
-                        ? Colors.white
-                        : Colors.white38,
+                color: isDone ? AppColors.accent : Colors.white38,
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
               ),
@@ -3106,11 +2938,7 @@ class _CharacterLabel extends StatelessWidget {
           Text(
             isDone ? '✓${assigned.length}' : '$cardCount',
             style: TextStyle(
-              color: isDone
-                  ? AppColors.accent
-                  : isActive
-                      ? Colors.white54
-                      : Colors.white24,
+              color: isDone ? AppColors.accent : Colors.white24,
               fontSize: 9,
               fontWeight: FontWeight.w800,
             ),
@@ -3353,8 +3181,9 @@ class _PetInfoDialog extends StatelessWidget {
                                 final availH = constraints.maxHeight;
                                 // 4 cards in a row, gap 8px between
                                 final cardW = (availW - 24) / 4;
-                                final cardH = math.min(cardW / 0.66, availH);
-                                final cW = cardH * 0.66;
+                                final cardH =
+                                    math.min(cardW / (220 / 300), availH);
+                                final cW = cardH * (220 / 300);
 
                                 return Row(
                                   mainAxisAlignment:
@@ -3376,31 +3205,6 @@ class _PetInfoDialog extends StatelessWidget {
                               },
                             ),
                     ),
-
-                    // Part names row under cards
-                    if (displayParts.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          for (final part in displayParts)
-                            Expanded(
-                              child: Center(
-                                child: Text(
-                                  traitMap[part.partType]?.name ??
-                                      part.partType,
-                                  style: GoogleFonts.rajdhani(
-                                    color: Colors.white60,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -3492,155 +3296,26 @@ class _InfoCard extends StatelessWidget {
     this.trait,
   });
 
-  static Color _borderColor(String? typeName) => switch (typeName) {
-        'offensive' => const Color(0xFFCC4433),
-        'defensive' => const Color(0xFF3388CC),
-        'support' => const Color(0xFF33AA66),
-        'utility' => const Color(0xFF8833CC),
-        _ => const Color(0xFF555555),
-      };
-
   @override
   Widget build(BuildContext context) {
-    final border = _borderColor(trait?.typeName);
-    final cost = trait?.energyCost ?? 0;
+    final cardEntry = trait == null ? null : _cardCatalogByTraitId[trait!.id];
+    final imageName = cardEntry?.imageName ??
+        _classicImageNameFromPath(cardArtPath) ??
+        '$partType-card';
+    final imagePath = cardEntry?.templatePath ??
+        (imageName.isNotEmpty
+            ? 'assets/images/classic-cards/$imageName.png'
+            : cardArtPath);
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: border, width: 1.5),
-        color: Colors.black,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(fit: StackFit.expand, children: [
-        // ── Card art background ─────────────────────────────────────
-        Image.asset(cardArtPath,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(color: Colors.black38)),
-
-        // ── Top gradient (name visibility) ────────────────────────
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 36,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.black87, Colors.transparent],
-              ),
-            ),
-          ),
-        ),
-
-        // ── Bottom gradient (description visibility) ───────────────
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 64,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [Colors.black, Colors.black54, Colors.transparent],
-                stops: [0.0, 0.6, 1.0],
-              ),
-            ),
-          ),
-        ),
-
-        // ── Energy cost badge ─────────────────────────────────────
-        Positioned(
-          top: 5,
-          left: 5,
-          child: Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFFFF9800),
-              border: Border.all(color: Colors.white70, width: 1),
-              boxShadow: const [
-                BoxShadow(color: Colors.black54, blurRadius: 3)
-              ],
-            ),
-            child: Center(
-              child: Text('$cost',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900)),
-            ),
-          ),
-        ),
-
-        // ── Skill name (top, after energy badge) ─────────────────
-        Positioned(
-          top: 6,
-          left: 30,
-          right: 5,
-          child: Text(trait?.name ?? '',
-              style: GoogleFonts.rajdhani(
-                  color: Colors.white,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  shadows: const [Shadow(blurRadius: 3, color: Colors.black)]),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ),
-
-        Positioned(
-          top: 24,
-          left: 6,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              partType.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 7,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ),
-
-        // ── Effect badge (damage / shield / heal value) ───────────
-        if (trait != null && trait!.effectIconValue > 0)
-          Positioned(
-            bottom: 24,
-            left: 5,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.75),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: _EffectBadge(trait: trait!),
-            ),
-          ),
-
-        // ── Description ───────────────────────────────────────────
-        if (trait != null)
-          Positioned(
-            bottom: 4,
-            left: 5,
-            right: 5,
-            child: Text(trait!.description,
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 6.5, height: 1.25),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis),
-          ),
-      ]),
+    return ClassicTraitCardWidget(
+      imagePath: imagePath,
+      imageName: imageName,
+      name: trait?.name ?? partType.toUpperCase(),
+      energy: trait?.energyCost ?? 0,
+      attack: trait == null ? 0 : _classicCardAttack(trait!, cardEntry),
+      defense: trait == null ? 0 : _classicCardDefense(trait!, cardEntry),
+      description: trait?.description ?? '',
+      showDescription: trait != null,
     );
   }
 }
@@ -3748,86 +3423,6 @@ class _EndTurnButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-// ── Effect icon badge shown on skill cards ────────────────────────────────────
-
-class _EffectBadge extends StatelessWidget {
-  final TraitViewModel trait;
-  const _EffectBadge({required this.trait});
-
-  static const _kS = 'assets/images/status/classic/';
-
-  @override
-  Widget build(BuildContext context) {
-    final key = trait.effectIconKey;
-    final val = trait.effectIconValue;
-    final icon = _icon(key);
-    final color = _color(key);
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        icon,
-        if (val > 0) ...[
-          const SizedBox(width: 2),
-          Text('$val',
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                shadows: const [Shadow(blurRadius: 3, color: Colors.black)],
-              )),
-        ],
-      ],
-    );
-  }
-
-  static Color _color(String key) => switch (key) {
-        'damage' || 'aoe' => const Color(0xFFFF5533),
-        'heal' || 'regen' => const Color(0xFF44FF88),
-        'shield' || 'def_up' => const Color(0xFFFFD700),
-        'shield_break' => const Color(0xFFFFAA00),
-        'poison' => const Color(0xFF66DD44),
-        'burn' => const Color(0xFFFF6600),
-        'stun' => const Color(0xFFBBDDFF),
-        'atk_up' => const Color(0xFFFF8844),
-        'atk_down' || 'def_down' => const Color(0xFFFF4444),
-        'spd_up' || 'spd_down' => const Color(0xFF88DDFF),
-        'energized' => const Color(0xFF88CCFF),
-        _ => Colors.white70,
-      };
-
-  static Widget _icon(String key) {
-    const s = 12.0;
-    // burn.png = knight armor sprite  →  shield / def_up / shield_break
-    // shield.png = dark teal potion   →  poison
-    // regen.png = red round potion    →  heal / regen
-    // stun.png = blue jellyfish       →  stun
-    // slow.png = snowman              →  spd_down / freeze
-    // def_down.png = cracked creature →  def_down / atk_down
-    // energy.png = blue flask         →  energized
-    return switch (key) {
-      'damage' => const Icon(Icons.flash_on, size: s, color: Color(0xFFFF5533)),
-      'aoe' => const Icon(Icons.all_out, size: s, color: Color(0xFFFF5533)),
-      'heal' => Image.asset('${_kS}self-heal.png', width: s, height: s),
-      'shield' => Image.asset('${_kS}raise-shield.png', width: s, height: s),
-      'shield_break' =>
-        Image.asset('${_kS}disable-ability.png', width: s, height: s),
-      'poison' => Image.asset('${_kS}poison.png', width: s, height: s),
-      'burn' => Image.asset('${_kS}critical.png', width: s, height: s),
-      'stun' => Image.asset('${_kS}stun.png', width: s, height: s),
-      'regen' => Image.asset('${_kS}self-heal.png', width: s, height: s),
-      'atk_up' => Image.asset('${_kS}attack-up.png', width: s, height: s),
-      'atk_down' => Image.asset('${_kS}attack-down.png', width: s, height: s),
-      'def_up' => Image.asset('${_kS}raise-shield.png', width: s, height: s),
-      'def_down' => Image.asset('${_kS}fragile.png', width: s, height: s),
-      'spd_up' => Image.asset('${_kS}speed-up.png', width: s, height: s),
-      'spd_down' => Image.asset('${_kS}speed-down.png', width: s, height: s),
-      'energized' => Image.asset('${_kS}gain-energy.png', width: s, height: s),
-      _ => const SizedBox(width: s),
-    };
   }
 }
 

@@ -13,6 +13,8 @@ void registerIFrameFactory(String viewId, String url) {
     iframe.style.border = 'none';
     iframe.style.width = '100%';
     iframe.style.height = '100%';
+    // Let Flutter widgets behind/around this platform view receive taps.
+    iframe.style.pointerEvents = 'none';
     _iframesByViewId[viewId] = iframe;
     return iframe;
   });

@@ -542,6 +542,20 @@ class PveBattleViewModel {
         pendingSkills.containsKey(p.id) && pendingSkills[p.id]!.isNotEmpty);
   }
 
+  /// Total energy that would be consumed by currently selected cards.
+  int get plannedEnergySpent {
+    if (pendingSkills.isEmpty || hand.isEmpty) return 0;
+    final selectedIds = pendingSkills.values.expand((ids) => ids).toSet();
+    if (selectedIds.isEmpty) return 0;
+    return hand
+        .where((c) => selectedIds.contains(c.instanceId))
+        .fold(0, (sum, c) => sum + c.trait.energyCost);
+  }
+
+  /// Remaining team energy after applying selected-card planning.
+  int get plannedRemainingEnergy =>
+      (playerTeamEnergy - plannedEnergySpent).clamp(0, kTeamEnergyCap);
+
   List<CardViewModel> get selectedPetCards => hand;
 
   int cardsInHandFor(String petId) =>

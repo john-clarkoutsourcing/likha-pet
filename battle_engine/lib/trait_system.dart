@@ -112,7 +112,16 @@ class TraitSystem {
   /// Throws [ArgumentError] if the ID is not registered.
   Trait getById(String id) {
     final factory = _registry[id];
-    if (factory != null) return factory();
+    if (factory != null) {
+      final baseTrait = factory();
+      final cardId = _traitCardTemplate[id];
+      if (cardId == null) return baseTrait;
+      return TraitLibrary.withClassicCardStats(
+        baseTrait: _withPartClassFromCardId(baseTrait, cardId),
+        traitId: id,
+        cardId: cardId,
+      );
+    }
 
     final m = RegExp(
       r'^(beast|bug|bird|plant|aquatic|reptile)_(horn|back|tail|mouth)_(\d{2})$',
@@ -220,6 +229,17 @@ class TraitSystem {
   }
 
   List<Trait> get allTraits => allTraitIds.map(getById).toList(growable: false);
+
+  Trait _withPartClassFromCardId(Trait trait, String cardId) {
+    final parts = cardId.split('-');
+    if (parts.isEmpty) return trait;
+    final cls = parts.first;
+    final classEnum = CreatureClass.values.firstWhere(
+      (c) => c.name == cls,
+      orElse: () => CreatureClass.beast,
+    );
+    return trait.withPartClass(classEnum);
+  }
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
