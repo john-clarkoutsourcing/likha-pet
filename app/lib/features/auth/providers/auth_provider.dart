@@ -44,7 +44,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier({
     required FlutterSecureStorage storage,
-    String apiBase = 'http://localhost:3000/api',
+    String apiBase = '${ApiClient.baseUrl}/api',
   })  : _storage = storage,
         _apiBase = apiBase,
         super(AuthState.unauthenticated) {
