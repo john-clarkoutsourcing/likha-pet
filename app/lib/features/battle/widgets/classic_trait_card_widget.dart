@@ -96,9 +96,12 @@ class ClassicTraitCardWidget extends StatelessWidget {
                     SizedBox(
                       height: h * 0.107,
                       child: Padding(
-                        padding:
-                            EdgeInsets.only(left: w * 0.177, right: w * 0.073),
-                          child: Center(
+                        padding: EdgeInsets.only(
+                          left: w * 0.177,
+                          right: w * 0.073,
+                          top: h * 0.046,
+                        ),
+                        child: Center(
                             child: Text(
                               name,
                               textAlign: TextAlign.center,
@@ -106,7 +109,7 @@ class ClassicTraitCardWidget extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: const Color(0xFF442215),
-                                fontSize: 12 * uiScale,
+                                fontSize: 16 * uiScale,
                                 fontWeight: FontWeight.w900,
                                 shadows: const [
                                   Shadow(color: Colors.black26, blurRadius: 2)
@@ -128,16 +131,19 @@ class ClassicTraitCardWidget extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               if (statusIcon != null)
-                                SizedBox(
-                                  width: 30 * uiScale,
-                                  height: 30 * uiScale,
-                                  child: Image.asset(
-                                    'assets/images/status/classic/$statusIcon.png',
-                                    fit: BoxFit.contain,
+                                Transform.translate(
+                                  offset: Offset(-4 * uiScale, h * 0.02),
+                                  child: SizedBox(
+                                    width: 30 * uiScale,
+                                    height: 30 * uiScale,
+                                    child: Image.asset(
+                                      'assets/images/status/classic/$statusIcon.png',
+                                      fit: BoxFit.contain,
+                                    ),
                                   ),
                                 ),
                               if (statusIcon != null)
-                                SizedBox(width: 10 * uiScale),
+                                SizedBox(width: 4 * uiScale),
                               Expanded(
                                 child: Text(
                                   description,
