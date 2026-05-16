@@ -1,7 +1,4 @@
 import 'dart:math' as math;
-import 'package:flame/cache.dart';
-import 'package:flame/components.dart' hide Matrix4;
-import 'package:flame/widgets.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,11 +12,13 @@ import '../../../shared/widgets/hp_bar.dart';
 import '../data/creature_registry.dart';
 import '../providers/pve_battle_provider.dart';
 import '../providers/battle_view_model.dart';
+import '../services/battle_asset_warmup.dart';
 import '../widgets/pet_character_widget.dart';
 import '../widgets/battle_background_widget.dart';
 import '../widgets/pet_renderer_widget.dart';
 import '../widgets/pet_sprite_widget.dart';
 import '../widgets/projectile_widget.dart';
+import '../widgets/dead_pet_effect.dart';
 import 'battle_result_screen.dart';
 
 // ── Route args ────────────────────────────────────────────────────────────────
@@ -40,8 +39,6 @@ class BattleScreenArgs {
 const _kRoundSeconds = 30;
 const _kPanelH = 182.0; // card panel height
 const _kPanelPeekH = 32.0; // visible height when panel is collapsed
-final _deadPetImages = Images(prefix: 'assets/images/pet-sub-effect/');
-
 /// Base sprite size — scales multiply this for depth effect.
 const _kSpriteBase = 130.0;
 
@@ -82,6 +79,8 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
   late List<Offset> _enemyPos;
   bool _showPositionTuner = false;
   bool _isDeckCollapsed = false;
+  bool _battleReady = false;
+  Future<void>? _warmupFuture;
 
   @override
   void initState() {
@@ -109,7 +108,6 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed) _autoEndTurn();
       });
-    _timer.forward();
   }
 
   @override
@@ -167,9 +165,28 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
     );
   }
 
+  void _ensureWarmup(PveBattleViewModel vm) {
+    if (_battleReady || _warmupFuture != null) return;
+    if (vm.playerTeam.isEmpty || vm.enemyTeam.isEmpty) return;
+    _warmupFuture = BattleAssetWarmup.preload(
+      context,
+      pets: [...vm.playerTeam, ...vm.enemyTeam],
+      hand: vm.hand,
+    ).catchError((_) {}).whenComplete(() {
+      if (!mounted) return;
+      setState(() => _battleReady = true);
+      _restartTimer();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = ref.watch(pveBattleProvider);
+    _ensureWarmup(vm);
+
+    if (!_battleReady) {
+      return const _BattleLoadingScreen(message: 'Preparing battle assets...');
+    }
 
     // Listen for state changes to control the timer
     ref.listen<PveBattleViewModel>(pveBattleProvider, (prev, next) {
@@ -1358,7 +1375,10 @@ class _Sprite extends StatelessWidget {
           SizedBox(
             width: size,
             height: size,
-            child: _DeadPetEffect(flipHorizontal: isPlayer),
+            child: _DeadPetEffect(
+              size: size,
+              flipHorizontal: isPlayer,
+            ),
           )
         else if (pet.creatureDef != null)
           SizedBox(
@@ -1413,31 +1433,18 @@ class _Sprite extends StatelessWidget {
 
 class _DeadPetEffect extends StatelessWidget {
   final bool flipHorizontal;
-  const _DeadPetEffect({required this.flipHorizontal});
+  final double size;
+  const _DeadPetEffect({
+    required this.size,
+    required this.flipHorizontal,
+  });
 
   @override
   Widget build(BuildContext context) {
-    Widget child = SpriteAnimationWidget.asset(
-      path: 'dead_pet.png',
-      images: _deadPetImages,
-      data: SpriteAnimationData.sequenced(
-        amount: 10,
-        amountPerRow: 10,
-        stepTime: 0.08,
-        textureSize: Vector2(512, 512),
-        loop: true,
-      ),
-      errorBuilder: (_) => const SizedBox.shrink(),
+    return DeadPetEffect(
+      size: size,
+      flipHorizontal: flipHorizontal,
     );
-
-    if (flipHorizontal) {
-      child = Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.diagonal3Values(-1, 1, 1),
-        child: child,
-      );
-    }
-    return child;
   }
 }
 
@@ -3652,6 +3659,45 @@ class _EffectBadge extends StatelessWidget {
       'energized' => Image.asset('${_kS}gain-energy.png', width: s, height: s),
       _ => const SizedBox(width: s),
     };
+  }
+}
+
+class _BattleLoadingScreen extends StatelessWidget {
+  final String message;
+  const _BattleLoadingScreen({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          const Positioned.fill(child: BattleBackgroundWidget()),
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.55),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: AppColors.accent),
+                    const SizedBox(height: 14),
+                    Text(
+                      message,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

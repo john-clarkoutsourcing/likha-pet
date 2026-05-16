@@ -22,11 +22,13 @@ class SkillDeck {
   final List<SkillCard> _draw    = [];
   final List<SkillCard> _hand    = [];
   final List<SkillCard> _discard = [];
+  late final Random _rng;
 
   static const int kHandLimit   = 10; // Axie Classic hand cap
   static const int kDrawPerTurn = 3;  // per round after the initial deal
 
   SkillDeck.fromTeam(List<Pet> pets, {required int seed}) {
+    _rng = Random(seed);
     for (final pet in pets) {
       for (var copy = 0; copy < 2; copy++) {
         for (final trait in pet.traits) {
@@ -39,7 +41,7 @@ class SkillDeck {
         }
       }
     }
-    _draw.shuffle(Random(seed));
+    _draw.shuffle(_rng);
   }
 
   /// Draws [count] cards (default [kDrawPerTurn]).
@@ -78,7 +80,7 @@ class SkillDeck {
   void _recycleDeck() {
     _draw.addAll(_discard);
     _discard.clear();
-    _draw.shuffle();
+    _draw.shuffle(_rng);
   }
 
   List<SkillCard> get hand     => List.unmodifiable(_hand);

@@ -2,4 +2,5 @@
 import 'package:flutter/material.dart';
 
 void registerIFrameFactory(String viewId, String url) {}
+void postIFrameMessage(String viewId, Map<String, Object?> message) {}
 Widget buildIFrameView(String viewId, double size) => const SizedBox();

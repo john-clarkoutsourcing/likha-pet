@@ -10,6 +10,15 @@ import '../widgets/pet_character_widget.dart'
     show PetCharacterConfig, PetCharacterAnimState;
 import '../widgets/pet_sprite_widget.dart' show PetSpriteConfig;
 
+// ── PvpMatchEndData ───────────────────────────────────────────────────────────
+
+class PvpMatchEndData {
+  final String? winnerUid;
+  final bool dispute;
+  final int mmrDelta;
+  const PvpMatchEndData({required this.winnerUid, required this.dispute, required this.mmrDelta});
+}
+
 // ── TraitViewModel ────────────────────────────────────────────────────────────
 
 class TraitViewModel {
@@ -483,6 +492,14 @@ class PveBattleViewModel {
   /// Used to slide a melee attacker toward the target and back.
   final Map<String, Offset> petDashOffsets;
 
+  // ── PvP extras ──────────────────────────────────────────────────────────────
+
+  /// PvP only: true while waiting for the opponent to lock in their cards.
+  final bool awaitingOpponent;
+
+  /// PvP only: non-null when the match has ended and the result is ready.
+  final PvpMatchEndData? pvpMatchEnd;
+
   const PveBattleViewModel({
     required this.currentRound,
     required this.playerTeam,
@@ -509,6 +526,8 @@ class PveBattleViewModel {
     this.newCardIds = const {},
     this.fizzledCardIds = const {},
     this.petDashOffsets = const {},
+    this.awaitingOpponent = false,
+    this.pvpMatchEnd,
   });
 
   bool get allSkillsAssigned {
@@ -562,6 +581,8 @@ class PveBattleViewModel {
     Set<String>? newCardIds,
     Set<String>? fizzledCardIds,
     Map<String, Offset>? petDashOffsets,
+    bool? awaitingOpponent,
+    PvpMatchEndData? pvpMatchEnd,
     bool clearSelectedPet = false,
   }) =>
       PveBattleViewModel(
@@ -591,5 +612,7 @@ class PveBattleViewModel {
         newCardIds: newCardIds ?? this.newCardIds,
         fizzledCardIds: fizzledCardIds ?? this.fizzledCardIds,
         petDashOffsets: petDashOffsets ?? this.petDashOffsets,
+        awaitingOpponent: awaitingOpponent ?? this.awaitingOpponent,
+        pvpMatchEnd: pvpMatchEnd ?? this.pvpMatchEnd,
       );
 }

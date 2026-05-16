@@ -26,13 +26,12 @@ String _titleCase(String s) => s
     .map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1))
     .join(' ');
 
-/// A catalog entry built from a card-template PNG file + Origins card data.
+/// A catalog entry built from local Classic card metadata.
 class _CardEntry {
   final String templatePath;
   final String cls;
   final String name;
 
-  // Origins card stats (always available for all 205 cards)
   final int energy;
   final int attack;
   final int defense;
@@ -41,8 +40,7 @@ class _CardEntry {
   final String partType;
   final String description;
 
-  // Engine trait — only present for ~24 battle-mapped cards
-  final Trait? trait;
+  final Trait trait;
 
   const _CardEntry({
     required this.templatePath,
@@ -55,7 +53,7 @@ class _CardEntry {
     required this.abilityType,
     required this.partType,
     required this.description,
-    this.trait,
+    required this.trait,
   });
 }
 
@@ -90,13 +88,13 @@ class _LibraryScreenState extends State<LibraryScreen>
             templatePath: e.templatePath,
             cls: e.cardClass,
             name: _titleCase(e.imageName),
-            energy: e.card.energy,
-            attack: e.card.attack,
-            defense: e.card.defense,
-            healing: e.card.healing,
-            abilityType: e.card.abilityType,
-            partType: e.card.partType,
-            description: e.card.description,
+            energy: e.energy,
+            attack: e.attack,
+            defense: e.defense,
+            healing: e.healing,
+            abilityType: e.abilityType,
+            partType: e.partType,
+            description: e.description,
             trait: e.trait,
           ),
         )

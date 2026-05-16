@@ -25,3 +25,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Firebase credentials (never commit)
+firebase-credentials.json
+.firebase/
+

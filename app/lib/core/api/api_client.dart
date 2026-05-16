@@ -13,8 +13,13 @@ class ApiResponse<T> {
 
 /// API Client for making authenticated requests to the server
 class ApiClient {
-  static const String baseUrl = 'http://localhost:3000';
+  static const String baseUrl = String.fromEnvironment(
+    'SERVER_URL',
+    defaultValue: 'http://localhost:3000',
+  );
   static String? _cachedToken;
+
+  static String? get cachedToken => _cachedToken;
 
   /// Set the JWT token (called from auth provider)
   static void setToken(String token) {

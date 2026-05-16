@@ -1,53 +1,102 @@
 import 'package:likha_pet_battle_engine/trait.dart';
 import 'package:likha_pet_battle_engine/trait_system.dart';
-import 'origins_card_data.dart';
+import 'creature_registry.dart';
 
-export 'origins_card_data.dart' show OriginsCardEntry;
-
-/// A unified catalog entry that merges Origins card data with optional engine
-/// Trait metadata (only available for the ~24 battle-engine-mapped cards).
+/// Card catalog entry built from current Classic part cards.
 class TraitCardCatalogEntry {
-  final OriginsCardEntry card;
-
-  /// Non-null only for cards that also have a full engine [Trait] definition.
-  final Trait? trait;
-
-  /// Engine trait ID, e.g. `'beast_horn'`. Null for display-only cards.
-  final String? traitId;
+  final String cardClass;
+  final String imageName; // e.g. beast-horn-04
+  final String templatePath;
+  final String partType; // Horn|Back|Tail|Mouth
+  final int energy;
+  final int attack;
+  final int defense;
+  final int healing;
+  final String abilityType;
+  final String description;
+  final Trait trait;
+  final String traitId;
 
   const TraitCardCatalogEntry({
-    required this.card,
-    this.trait,
-    this.traitId,
+    required this.cardClass,
+    required this.imageName,
+    required this.templatePath,
+    required this.partType,
+    required this.energy,
+    required this.attack,
+    required this.defense,
+    required this.healing,
+    required this.abilityType,
+    required this.description,
+    required this.trait,
+    required this.traitId,
   });
-
-  String get cardClass => card.cardClass;
-  String get imageName => card.imageName;
-  String get templatePath => card.templatePath;
 }
 
 class TraitCardCatalog {
   static final TraitSystem _traitSystem = TraitSystem();
 
-  /// Builds the full catalog from all 205 Origins-matched card PNGs.
-  /// Cards that also have engine [Trait] definitions are enriched with them.
-  static List<TraitCardCatalogEntry> build() {
-    // Build a lookup: imageName → (traitId, Trait) for engine-mapped cards.
-    final engineByImage = <String, ({String id, Trait trait})>{};
-    for (final id in _traitSystem.allTraitIds) {
-      final meta = _traitSystem.cardTemplateMetaForId(id);
-      if (meta == null) continue;
-      engineByImage[meta.imageName] = (id: id, trait: _traitSystem.getById(id));
-    }
+  static const _kClassicBasePath = 'assets/images/classic-cards';
 
-    final entries = kOriginsCards.map((card) {
-      final eng = engineByImage[card.imageName];
-      return TraitCardCatalogEntry(
-        card: card,
-        trait: eng?.trait,
-        traitId: eng?.id,
+  /// Builds the catalog from current part definitions (Classic card assets).
+  static List<TraitCardCatalogEntry> build() {
+    final entries = <TraitCardCatalogEntry>[];
+    final seen = <String>{};
+
+    for (final part in kPartCatalogue.values) {
+      final file = part.cardArtPath.split('/').last.replaceAll('.png', '');
+      final tokens = file.split('-');
+      if (tokens.length != 3) continue;
+      final cardId = '${tokens[0]}-${tokens[1]}-${tokens[2]}';
+      if (!seen.add(cardId)) continue;
+
+      final trait = part.buildTrait();
+      final effect = trait.effect;
+
+      final attack =
+          (effect.type == EffectType.damage || effect.type == EffectType.aoe)
+              ? effect.value
+              : 0;
+      final defense =
+          effect.type == EffectType.shield ? effect.value : effect.selfShield;
+      final healing = effect.type == EffectType.heal ||
+              (effect.type == EffectType.buff &&
+                  effect.buffType == BuffType.regen)
+          ? effect.value
+          : 0;
+      final abilityType = () {
+        if (effect.type == EffectType.damage) {
+          return (effect.target == 'back_enemy' ||
+                  effect.target == 'lowest_hp_enemy')
+              ? 'AttackRanged'
+              : 'AttackMelee';
+        }
+        if (effect.type == EffectType.aoe) return 'AttackAoE';
+        if (effect.type == EffectType.heal ||
+            effect.type == EffectType.shield ||
+            effect.type == EffectType.buff) {
+          return 'Support';
+        }
+        return 'Utility';
+      }();
+
+      entries.add(
+        TraitCardCatalogEntry(
+          cardClass: tokens[0],
+          imageName: cardId,
+          templatePath: '$_kClassicBasePath/$cardId.png',
+          partType: '${tokens[1][0].toUpperCase()}${tokens[1].substring(1)}',
+          energy: trait.energyCost,
+          attack: attack,
+          defense: defense,
+          healing: healing,
+          abilityType: abilityType,
+          description: trait.description,
+          trait: trait,
+          traitId: trait.id,
+        ),
       );
-    }).toList(growable: false);
+    }
 
     entries.sort((a, b) {
       final classCmp = a.cardClass.compareTo(b.cardClass);

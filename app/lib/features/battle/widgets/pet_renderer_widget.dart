@@ -9,6 +9,8 @@ import '../data/creature_registry.dart';
 import '../services/likha_mixer.dart';
 import '../widgets/pet_composite_widget.dart';
 import '../../pets/models/owned_pet.dart';
+import 'pet_renderer_iframe_stub.dart'
+    if (dart.library.html) 'pet_renderer_iframe_web.dart';
 
 // ── PetRendererWidget ─────────────────────────────────────────────────────────
 //
@@ -79,18 +81,55 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
   bool _renderSent  = false;   // render params sent at least once
   Timer? _pollTimer;
   String _rendererHtml = '';
+  String? _webViewId;
+  static int _webViewCounter = 0;
 
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) _loadAndInit();
+    if (kIsWeb) {
+      _setupWebIFrameRenderer();
+      return;
+    }
+    _loadAndInit();
   }
 
   Future<void> _loadAndInit() async {
+    if (kIsWeb) return;
     _cachedRendererHtml ??= await rootBundle.loadString('assets/renderer/renderer.html');
     if (!mounted) return;
     setState(() => _rendererHtml = _cachedRendererHtml!);
     _initCtrl();
+  }
+
+  void _setupWebIFrameRenderer() {
+    final viewId = 'pet-renderer-${_webViewCounter++}';
+    registerIFrameFactory(viewId, _buildWebRendererUrl());
+    if (!mounted) return;
+    setState(() => _webViewId = viewId);
+  }
+
+  String _buildWebRendererUrl() {
+    final def = widget.def;
+    final params = <String, String>{
+      'body': 'body-normal',
+      'horn': _sampleForPart(def.horn.cardArtPath, def.bodyClass.name),
+      'back': _sampleForPart(def.back.cardArtPath, def.bodyClass.name),
+      'tail': _sampleForPart(def.tail.cardArtPath, def.bodyClass.name),
+      'mouth': _sampleForPart(def.mouth.cardArtPath, def.bodyClass.name),
+      'ears': '${def.bodyClass.name}-04',
+      'eyes': '${def.bodyClass.name}-04',
+      'colorIdx': '${_colorIdxFor(def.bodyClass)}',
+      'anim': widget.animation,
+      'figScale': widget._effectiveScale.toStringAsFixed(3),
+      'scaleMult': widget.scaleMult.toStringAsFixed(3),
+      'yOff': widget.yOff.toStringAsFixed(3),
+      'cw': '${widget.size.toInt()}',
+      'ch': '${widget.size.toInt()}',
+    };
+    final query = Uri(queryParameters: params).query;
+    final rendererUrl = Uri.base.resolve('assets/assets/renderer/renderer.html');
+    return '$rendererUrl?$query';
   }
 
   @override
@@ -186,10 +225,10 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       for (final v in ['02', '04', '06', '08', '10', '12'])
         '${def.bodyClass.name}-$v',
       // Specific variant for each part — critical for hybrid/cross-class parts
-      LikhaMixer.sampleFromCardArt(def.horn.cardArtPath),
-      LikhaMixer.sampleFromCardArt(def.back.cardArtPath),
-      LikhaMixer.sampleFromCardArt(def.tail.cardArtPath),
-      LikhaMixer.sampleFromCardArt(def.mouth.cardArtPath),
+      _sampleForPart(def.horn.cardArtPath, def.bodyClass.name),
+      _sampleForPart(def.back.cardArtPath, def.bodyClass.name),
+      _sampleForPart(def.tail.cardArtPath, def.bodyClass.name),
+      _sampleForPart(def.mouth.cardArtPath, def.bodyClass.name),
     };
 
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
@@ -247,7 +286,33 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
   @override
   void didUpdateWidget(PetRendererWidget old) {
     super.didUpdateWidget(old);
-    if (kIsWeb || _ctrl == null || !_pageReady) return;
+    if (kIsWeb) {
+      final modelChanged =
+          old.def.horn.id != widget.def.horn.id ||
+          old.def.back.id != widget.def.back.id ||
+          old.def.tail.id != widget.def.tail.id ||
+          old.def.mouth.id != widget.def.mouth.id ||
+          old.def.bodyClass != widget.def.bodyClass ||
+          old.size != widget.size ||
+          old._effectiveScale != widget._effectiveScale ||
+          old.scaleMult != widget.scaleMult ||
+          old.yOff != widget.yOff;
+      if (modelChanged) {
+        _setupWebIFrameRenderer();
+        return;
+      }
+
+      final animChanged = old.animation != widget.animation;
+      if (animChanged && _webViewId != null) {
+        postIFrameMessage(_webViewId!, {
+          'type': 'likha:playAnimation',
+          'animation': widget.animation,
+          'loop': _isLooping(widget.animation),
+        });
+      }
+      return;
+    }
+    if (_ctrl == null || !_pageReady) return;
 
     final partsChanged =
         old.def.horn.id != widget.def.horn.id ||
@@ -270,10 +335,10 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
 
   String _buildRenderCall() {
     final def  = widget.def;
-    final horn  = LikhaMixer.sampleFromCardArt(def.horn.cardArtPath);
-    final back  = LikhaMixer.sampleFromCardArt(def.back.cardArtPath);
-    final tail  = LikhaMixer.sampleFromCardArt(def.tail.cardArtPath);
-    final mouth = LikhaMixer.sampleFromCardArt(def.mouth.cardArtPath);
+    final horn  = _sampleForPart(def.horn.cardArtPath, def.bodyClass.name);
+    final back  = _sampleForPart(def.back.cardArtPath, def.bodyClass.name);
+    final tail  = _sampleForPart(def.tail.cardArtPath, def.bodyClass.name);
+    final mouth = _sampleForPart(def.mouth.cardArtPath, def.bodyClass.name);
 
     final params = {
       'body':      'body-normal',
@@ -307,9 +372,39 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
     CreatureClass.bug     => 30,
   };
 
+  static String _sampleForPart(String cardArtPath, String bodyClass) {
+    const validClasses = {'beast', 'plant', 'aquatic', 'reptile', 'bird', 'bug'};
+    const validVariants = {'02', '04', '06', '08', '10', '12'};
+
+    try {
+      final sample = LikhaMixer.sampleFromCardArt(cardArtPath);
+      final parts = sample.split('-');
+      if (parts.length == 2 &&
+          validClasses.contains(parts[0]) &&
+          validVariants.contains(parts[1])) {
+        return sample;
+      }
+    } catch (_) {}
+
+    final fallbackClass = validClasses.contains(bodyClass) ? bodyClass : 'beast';
+    return '$fallbackClass-04';
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb || _ctrl == null) return _fallback();
+    if (kIsWeb) {
+      if (_webViewId == null) return _fallback();
+      Widget view = buildIFrameView(_webViewId!, widget.size);
+      if (widget.flipHorizontal) {
+        view = Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.diagonal3Values(-1, 1, 1),
+          child: view,
+        );
+      }
+      return view;
+    }
+    if (_ctrl == null) return _fallback();
 
     Widget view = WebViewWidget(controller: _ctrl!);
     if (widget.flipHorizontal) {

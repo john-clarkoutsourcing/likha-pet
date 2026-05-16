@@ -1,6 +1,7 @@
 import 'package:flame/components.dart' hide Matrix4;
 import 'package:flame/game.dart' hide Matrix4;
 import 'package:flame/parallax.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 // Layers ordered back→front. Each subsequent layer moves ~1.35× faster.
@@ -53,5 +54,29 @@ class _BattleBackgroundWidgetState extends State<BattleBackgroundWidget> {
   }
 
   @override
-  Widget build(BuildContext context) => GameWidget(game: _game);
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return const _StaticBattleBackground();
+    }
+    return GameWidget(game: _game);
+  }
+}
+
+class _StaticBattleBackground extends StatelessWidget {
+  const _StaticBattleBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final layer in _kLayers)
+          Image.asset(
+            'assets/images/$layer',
+            fit: BoxFit.cover,
+            alignment: Alignment.bottomCenter,
+          ),
+      ],
+    );
+  }
 }

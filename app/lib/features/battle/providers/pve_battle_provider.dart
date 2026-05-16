@@ -521,9 +521,13 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     return hand.map((card) {
       final owner      = _playerPets.firstWhere((p) => p.id == card.ownerPetId);
       final isAssigned = allAssigned.contains(card.instanceId);
+      final ownerDef = _defFor(owner.id);
+      final partSlot = card.trait.part.name;
+      final cardArtPathOverride = ownerDef?.partCardArt[partSlot];
       return CardViewModel.fromCard(
         card, owner,
         availableEnergy: isAssigned ? null : remaining,
+        cardArtPathOverride: cardArtPathOverride,
       );
     }).toList();
   }

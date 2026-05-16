@@ -33,8 +33,11 @@ dependencies:
   http: ^1.6.0
   webview_flutter: ^4.10.0
   web: ^1.1.1
+  web_socket_channel: ^3.0.1
+  crypto: ^3.0.5
   widgetbook: ^3.23.0
   widgetbook_annotation: ^3.11.0
+  webview_flutter_web: ^0.2.3+4
 
 dev_dependencies:
   flutter_test:
@@ -50,15 +53,13 @@ flutter:
     - assets/images/
     - assets/images/bg2/
     - assets/images/cards/
+    - assets/images/classic-cards/
     - assets/images/part-cards/
+    - assets/images/pet-sub-effect/
     - assets/images/ui/
     - assets/images/icons/
     - assets/images/part-icons/
     - assets/images/status/
-    - assets/images/reference/
-    # Axie-style card frame templates
-    # Creature sprite fallbacks
-    - assets/sprites/
     # Spine skeletal animations — all 15 starter creatures + dusk
     - assets/spines/aquatic/
     - assets/spines/plant/

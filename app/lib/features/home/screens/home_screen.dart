@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
 import '../../battle/screens/battle_screen.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../pets/providers/player_provider.dart';
 import '../providers/pet_inventory_provider.dart';
 import '../models/pet_model.dart';
@@ -34,6 +35,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final player = ref.watch(playerProvider);
     final eggsAsync = ref.watch(eggsProvider);
+    final userId = ref.watch(userIdProvider) ?? '—';
+    final userEmail = ref.watch(userEmailProvider) ?? '—';
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -170,6 +173,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Profile (Debug)',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          userEmail,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        SelectableText(
+                          'UID: $userId',
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 10,
+                          ),
+                          maxLines: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   const Text(
                     'Main Menu',
                     style: TextStyle(
@@ -186,6 +229,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     subtitle: 'Roster · Team builder',
                     color: const Color(0xFF9C27B0),
                     onTap: () => context.push(Routes.roster),
+                  ),
+                  const SizedBox(height: 8),
+                  _MenuButton(
+                    icon: '🤺',
+                    label: 'Arena (PvP)',
+                    subtitle: 'Real-time · MMR ladder',
+                    color: const Color(0xFFEF5350),
+                    onTap: () => context.push(Routes.pvpQueue),
                   ),
                   const SizedBox(height: 8),
                   _MenuButton(

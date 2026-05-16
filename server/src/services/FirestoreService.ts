@@ -194,6 +194,32 @@ export class FirestoreService {
   }
 
   // ============================================================================
+  // MMR / PVP
+  // ============================================================================
+
+  async getUserMmr(userId: string): Promise<number> {
+    const doc = await this.db.collection('users').doc(userId).get();
+    if (!doc.exists) return 1000;
+    return (doc.data() as any).mmr ?? 1000;
+  }
+
+  async setUserMmr(userId: string, mmr: number): Promise<void> {
+    await this.db.collection('users').doc(userId).set({ mmr }, { merge: true });
+  }
+
+  async getMmrLeaderboard(limit = 20): Promise<Array<{ userId: string; email: string; mmr: number }>> {
+    const snapshot = await this.db
+      .collection('users')
+      .orderBy('mmr', 'desc')
+      .limit(limit)
+      .get();
+    return snapshot.docs.map((doc) => {
+      const d = doc.data() as any;
+      return { userId: doc.id, email: d.email ?? '', mmr: d.mmr ?? 1000 };
+    });
+  }
+
+  // ============================================================================
   // ADMIN / UTILITY
   // ============================================================================
 

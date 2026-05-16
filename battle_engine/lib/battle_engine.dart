@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'pet.dart';
 import 'trait.dart';
 import 'action_resolver.dart';
@@ -84,13 +85,17 @@ class BattleEngine {
   final TurnManager _turns = TurnManager();
   final AiController _ai = AiController();
   final List<BattleState> _history = [];
+  late final Random _rng;
 
   BattleEngine({
     required this.teamA,
     required this.teamB,
     this.teamAName = 'Team A',
     this.teamBName = 'Team B',
-  });
+    int? seed,
+  }) {
+    _rng = Random(seed);
+  }
 
   BattleResult run() {
     _logger.separator();
@@ -130,7 +135,7 @@ class BattleEngine {
 
       // ── Phase 4: Resolve actions in turn order ────────────────────────────
       _logger.phase('Action Phase');
-      final resolver   = ActionResolver(_logger);
+      final resolver   = ActionResolver(_logger, rng: _rng);
       final ordered    = _turns.buildResolutionOrder(slotsA, slotsB);
       final comboCount = <String, int>{}; // petId → cards played this round
 

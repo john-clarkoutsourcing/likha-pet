@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "paksi-game-beta",
+    "production": "paksi-game-beta",
+    "dev": "demo-likha-pet"
+  }
+}

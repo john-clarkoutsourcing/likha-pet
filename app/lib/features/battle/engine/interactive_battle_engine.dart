@@ -58,17 +58,23 @@ class ActionStepResult {
   });
 }
 
+enum BattleMode { pve, pvp }
+
 class _RoundExecution {
   final BattleLogger logger;
   final List<Action> orderedActions;
   final Map<String, List<String>> cardChoices;
+  // PvP: enemy card instance IDs played this round — so finishRound can discard them.
+  final List<String> enemyPlayedCards;
   int actionIndex;
 
   _RoundExecution({
     required this.logger,
     required this.orderedActions,
     required this.cardChoices,
-  }) : actionIndex = 0;
+    List<String>? enemyPlayedCards,
+  })  : actionIndex = 0,
+        enemyPlayedCards = enemyPlayedCards ?? [];
 }
 
 /// Interactive wrapper around the battle engine that processes one round at a time.
@@ -87,15 +93,20 @@ class InteractiveBattleEngine {
   final List<Pet> enemyTeam;
   final String playerTeamName;
   final String enemyTeamName;
+  final BattleMode mode;
 
   final AiController _ai    = AiController();
   final TurnManager  _turns = TurnManager();
   int _round = 0;
 
+  // PvP: set by the provider when a round:locked WS message arrives.
+  Map<String, List<String>>? _opponentChoices;
+
   static const int maxRounds = 30;
 
   late final SkillDeck _playerDeck;
   late final SkillDeck _enemyDeck;
+  late final Random _critRng;
   final PitySentinel _playerPity = PitySentinel();
   final PitySentinel _enemyPity  = PitySentinel();
 
@@ -112,8 +123,10 @@ class InteractiveBattleEngine {
     required this.playerTeamName,
     required this.enemyTeamName,
     int? battleSeed,
+    this.mode = BattleMode.pve,
   }) {
     final seed = battleSeed ?? Random().nextInt(0xFFFFFF);
+    _critRng    = Random(seed ^ 0xC47F);
     _playerDeck = SkillDeck.fromTeam(playerTeam, seed: seed);
     _enemyDeck  = SkillDeck.fromTeam(enemyTeam,  seed: seed ^ 0x5A3C);
 
@@ -174,10 +187,21 @@ class InteractiveBattleEngine {
 
     // ── Build actions ─────────────────────────────────────────────────────
     final playerActions = _buildPlayerActions(cardChoices);
-    final aiActions     = _buildAiActions();
+    final List<Action> opponentActions;
+    final List<String> enemyPlayed;
+
+    if (mode == BattleMode.pvp) {
+      final result = _buildEnemyActionsFromChoices(_opponentChoices ?? {});
+      opponentActions = result.$1;
+      enemyPlayed     = result.$2;
+      _opponentChoices = null;
+    } else {
+      opponentActions = _buildAiActions();
+      enemyPlayed     = [];
+    }
 
     logger.phase('Action Phase');
-    final ordered = _turns.buildResolutionOrder(playerActions, aiActions);
+    final ordered = _turns.buildResolutionOrder(playerActions, opponentActions);
     final frozenChoices = {
       for (final e in cardChoices.entries) e.key: List<String>.from(e.value),
     };
@@ -186,6 +210,7 @@ class InteractiveBattleEngine {
       logger: logger,
       orderedActions: ordered,
       cardChoices: frozenChoices,
+      enemyPlayedCards: enemyPlayed,
     );
 
     return RoundStartResult(
@@ -206,7 +231,7 @@ class InteractiveBattleEngine {
 
     final action = execution.orderedActions[execution.actionIndex++];
     final logger = execution.logger;
-    final resolver = ActionResolver(logger);
+    final resolver = ActionResolver(logger, rng: _critRng);
 
     if (!action.actor.isFainted) {
       if (action.actor.isStunned) {
@@ -258,6 +283,15 @@ class InteractiveBattleEngine {
         _playerDeck.play(instanceId);
       }
     }
+    // ── Discard used enemy cards (PvP — AI already discards during _buildAiActions) ──
+    for (final instanceId in execution.enemyPlayedCards) {
+      _enemyDeck.play(instanceId);
+    }
+    if (mode == BattleMode.pvp) {
+      _enemyPity.injectIfNeeded(_enemyDeck, enemyTeam);
+      _drawAliveOnly(_enemyDeck, enemyTeam);
+      _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
+    }
 
     // ── Prepare player's next hand ────────────────────────────────────────
     _playerPity.injectIfNeeded(_playerDeck, playerTeam);
@@ -302,6 +336,12 @@ class InteractiveBattleEngine {
   void discardFromPlayerHand(String instanceId) =>
       _playerDeck.discardCard(instanceId);
 
+  /// PvP only: supply the opponent's card selections before calling prepareRound.
+  /// Called by PvpBattleNotifier when a `round:locked` WS message arrives.
+  void setOpponentChoices(Map<String, List<String>> choices) {
+    _opponentChoices = Map.of(choices);
+  }
+
   bool get playerHandOverCap =>
       _playerDeck.handSize > SkillDeck.kHandLimit;
 
@@ -332,6 +372,34 @@ class InteractiveBattleEngine {
             pet.canAfford(c.trait.energyCost))
         .firstOrNull
         ?.trait;
+  }
+
+  /// PvP: build enemy actions from opponent's submitted card choices.
+  /// Returns (actions, played card instance IDs) so finishRound can discard them.
+  (List<Action>, List<String>) _buildEnemyActionsFromChoices(
+      Map<String, List<String>> choices) {
+    final actions = <Action>[];
+    final played  = <String>[];
+    for (final pet in enemyTeam) {
+      if (pet.isFainted) continue;
+      final instanceIds = choices[pet.id];
+      if (instanceIds == null || instanceIds.isEmpty) continue;
+      for (final instanceId in instanceIds) {
+        final trait = _enemyDeck.hand
+            .where((c) =>
+                c.instanceId == instanceId &&
+                c.ownerPetId == pet.id &&
+                c.trait.isReady &&
+                pet.canAfford(c.trait.energyCost))
+            .firstOrNull
+            ?.trait;
+        if (trait != null) {
+          actions.add(Action(actor: pet, trait: trait));
+          played.add(instanceId);
+        }
+      }
+    }
+    return (actions, played);
   }
 
   List<Action> _buildAiActions() {

@@ -40,8 +40,9 @@ const int kMaxShield           = 999; // Classic-style accumulated shield per ro
 ///   drives animations in the BattleScreen widget tree.
 class ActionResolver {
   final BattleLogger log;
+  final math.Random _rng;
 
-  ActionResolver(this.log);
+  ActionResolver(this.log, {required math.Random rng}) : _rng = rng;
 
   void resolve(Action action, List<Pet> actorTeam, List<Pet> enemyTeam,
       {int comboIndex = 0}) {
@@ -198,8 +199,6 @@ class ActionResolver {
   // Crit chance = attacker.morale × 0.1% − defender.speed × 0.05%
   // Clamped 0–30%.  Crits deal ×2 damage.
   // High-speed defenders are harder to crit — mimics Axie's speed/morale interplay.
-
-  static final _rng = math.Random();
 
   bool _rollCrit(Pet attacker, Pet defender) {
     final chance = (attacker.morale * 0.001 - defender.speed * 0.0005)

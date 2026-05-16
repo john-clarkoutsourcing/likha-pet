@@ -1,4 +1,4 @@
-May 16, 2026 2:20:45 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
+May 17, 2026 1:42:45 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
 INFO: Started WebSocket server on ws://127.0.0.1:9150
 
 API endpoint: http://127.0.0.1:8090
@@ -16,7 +16,63 @@ If you are running a Firestore in Datastore Mode project, run:
 Note: Support for Datastore Mode is in preview. If you encounter any bugs please file at https://github.com/firebase/firebase-tools/issues.
 Dev App Server is now running.
 
-May 16, 2026 2:20:49 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler initChannel
+May 17, 2026 1:42:49 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler initChannel
 INFO: Connected to new websocket client
-*** shutting down gRPC server since JVM is shutting down
-*** server shut down
+May 17, 2026 1:42:51 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler initChannel
+INFO: Connected to new websocket client
+May 17, 2026 1:43:45 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler initChannel
+INFO: Connected to new websocket client
+May 17, 2026 1:44:36 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected non-HTTP/2 connection.
+May 17, 2026 1:44:36 AM io.grpc.netty.TcpMetrics loadEpollInfo
+INFO: Epoll available during static init of TcpMetrics:false
+May 17, 2026 1:44:36 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected HTTP/2 connection.
+May 17, 2026 1:45:04 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected HTTP/2 connection.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+May 17, 2026 1:51:19 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected non-HTTP/2 connection.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+Multiple projectIds are not recommended in single project mode. Requested project ID likha-pet-dev, but the emulator is configured for demo-likha-pet. To opt-out of single project mode add/set the '"singleProjectMode": false' property in the firebase.json emulators config.
+May 17, 2026 2:01:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected HTTP/2 connection.
+May 17, 2026 2:12:36 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected non-HTTP/2 connection.
+May 17, 2026 2:23:28 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler channelClosed
+INFO: Websocket client disconnected
+May 17, 2026 2:27:18 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected HTTP/2 connection.
+May 17, 2026 2:39:34 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler channelClosed
+INFO: Websocket client disconnected
+May 17, 2026 2:39:34 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler channelClosed
+INFO: Websocket client disconnected

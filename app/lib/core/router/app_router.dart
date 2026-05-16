@@ -15,6 +15,9 @@ import '../../features/test/screens/test_battle_screen.dart';
 import '../../features/pets/screens/breeding_lab_screen.dart';
 import '../../features/library/screens/library_screen.dart';
 import '../../features/onboarding/screens/starter_pack_screen.dart';
+import '../../features/pvp/screens/pvp_queue_screen.dart';
+import '../../features/pvp/screens/pvp_battle_screen.dart';
+import '../../features/pvp/screens/pvp_result_screen.dart';
 
 class Routes {
   static const login         = '/login';
@@ -30,6 +33,9 @@ class Routes {
   static const battleResult  = '/battle/result';
   static const testBattle    = '/test-battle';
   static const library       = '/library';
+  static const pvpQueue      = '/pvp';
+  static const pvpBattle     = '/pvp/battle';
+  static const pvpResult     = '/pvp/result';
 }
 
 /// Create GoRouter with auth-based redirect using Riverpod
@@ -115,6 +121,21 @@ GoRouter createGoRouter(bool isAuthenticated) {
       GoRoute(
         path: Routes.library,
         builder: (_, __) => const LibraryScreen(),
+      ),
+      GoRoute(
+        path: Routes.pvpQueue,
+        builder: (_, __) => const PvpQueueScreen(),
+      ),
+      GoRoute(
+        path: Routes.pvpBattle,
+        builder: (_, __) => const PvpBattleScreen(),
+      ),
+      GoRoute(
+        path: Routes.pvpResult,
+        builder: (context, state) {
+          final extra = state.extra! as PvpResultArgs;
+          return PvpResultScreen(args: extra);
+        },
       ),
     ],
   );

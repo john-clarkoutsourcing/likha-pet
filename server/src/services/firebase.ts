@@ -18,9 +18,8 @@ export function initializeFirebase(): void {
 
   if (isEmulator) {
     console.log(`✓ Using Firebase Emulator at ${process.env.FIRESTORE_EMULATOR_HOST}`);
-    // For emulator, we can use a dummy service account
     admin.initializeApp({
-      projectId: 'likha-pet-dev',
+      projectId: process.env.FIREBASE_PROJECT_ID || 'demo-likha-pet',
     });
   } else {
     // For production, use service account from credentials file
@@ -29,7 +28,7 @@ export function initializeFirebase(): void {
     
     admin.initializeApp({
       credential: admin.credential.cert(credentialsPath),
-      projectId: process.env.FIREBASE_PROJECT_ID || 'likha-pet-prod',
+      projectId: process.env.FIREBASE_PROJECT_ID || 'paksi-game-beta',
     });
   }
 

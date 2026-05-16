@@ -5,11 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spine_flutter/spine_flutter.dart';
 import 'app.dart';
 import 'features/pets/providers/player_provider.dart';
+import 'web/webview_platform_stub.dart'
+    if (dart.library.html) 'web/webview_platform_web.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb) await initSpineFlutter();
+  if (kIsWeb) {
+    configureWebViewPlatformForWeb();
+  } else {
+    await initSpineFlutter();
+  }
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
