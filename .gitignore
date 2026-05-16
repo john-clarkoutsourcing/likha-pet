@@ -16,6 +16,9 @@ pubspec.lock
 # Firebase emulator data (if --export-on-exit is used)
 .firebase/
 firebase-export-*/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 
 # OS
 .DS_Store
@@ -29,4 +32,3 @@ Thumbs.db
 # Firebase credentials (never commit)
 firebase-credentials.json
 .firebase/
-
