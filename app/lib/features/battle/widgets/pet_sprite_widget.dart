@@ -13,32 +13,33 @@ import 'package:flutter/material.dart';
 ///
 /// Example:
 ///   PetAnimConfig(
-///     sheetFile: 'bakunawa_idle.png',
+///     sheetFile: 'beast_idle.png',
 ///     frameSize: Vector2(48, 48),
 ///     frameCount: 6,
 ///     stepTime: 0.10,
 ///   )
 class PetAnimConfig {
-  final String  sheetFile;
+  final String sheetFile;
   final Vector2 frameSize;
-  final int     frameCount;
-  final double  stepTime;
+  final int frameCount;
+  final double stepTime;
 
   const PetAnimConfig({
     required this.sheetFile,
     required this.frameSize,
     this.frameCount = 4,
-    this.stepTime   = 0.12,
+    this.stepTime = 0.12,
   });
 }
 
 class PetSpriteConfig {
-  final PetAnimConfig  idle;
+  final PetAnimConfig idle;
   final PetAnimConfig? attack;
   final PetAnimConfig? hurt;
   final PetAnimConfig? faint;
 
-  const PetSpriteConfig({required this.idle, this.attack, this.hurt, this.faint});
+  const PetSpriteConfig(
+      {required this.idle, this.attack, this.hurt, this.faint});
 }
 
 enum PetAnimState { idle, attack, hurt, faint }
@@ -50,12 +51,12 @@ final _spritesImages = Images(prefix: 'assets/sprites/');
 // ── Placeholder Flame game (animated until a real sheet is assigned) ──────────
 
 class _PlaceholderGame extends FlameGame {
-  final Color  _color;
+  final Color _color;
   final String _label;
 
   _PlaceholderGame(this._color, this._label);
 
-  double          _t      = 0;
+  double _t = 0;
   CircleComponent? _ring;
   CircleComponent? _fill;
 
@@ -66,7 +67,7 @@ class _PlaceholderGame extends FlameGame {
   Future<void> onLoad() async {
     final cx = size.x / 2;
     final cy = size.y / 2;
-    final r  = (size.x / 2) - 3;
+    final r = (size.x / 2) - 3;
 
     _fill = CircleComponent(
       radius: r,
@@ -108,7 +109,7 @@ class _PlaceholderGame extends FlameGame {
     super.update(dt);
     _t += dt;
     final bob = sin(_t * 2.8) * 2.5;
-    final cy  = size.y / 2;
+    final cy = size.y / 2;
     _fill?.position.y = cy + bob;
     _ring?.position.y = cy + bob;
   }
@@ -123,11 +124,11 @@ class _PlaceholderGame extends FlameGame {
 ///   loop is always visible and ready to swap in real sheets.
 class PetSpriteWidget extends StatefulWidget {
   final PetSpriteConfig? config;
-  final PetAnimState     animState;
-  final double           size;
-  final bool             flipHorizontal;
-  final String           petName;
-  final Color            petColor;
+  final PetAnimState animState;
+  final double size;
+  final bool flipHorizontal;
+  final String petName;
+  final Color petColor;
 
   const PetSpriteWidget({
     super.key,
@@ -135,7 +136,7 @@ class PetSpriteWidget extends StatefulWidget {
     required this.petName,
     required this.petColor,
     this.config,
-    this.animState      = PetAnimState.idle,
+    this.animState = PetAnimState.idle,
     this.flipHorizontal = false,
   });
 
@@ -163,9 +164,9 @@ class _PetSpriteWidgetState extends State<PetSpriteWidget> {
     if (c == null) return _noop;
     return switch (widget.animState) {
       PetAnimState.attack => c.attack ?? c.idle,
-      PetAnimState.hurt   => c.hurt   ?? c.idle,
-      PetAnimState.faint  => c.faint  ?? c.idle,
-      PetAnimState.idle   => c.idle,
+      PetAnimState.hurt => c.hurt ?? c.idle,
+      PetAnimState.faint => c.faint ?? c.idle,
+      PetAnimState.idle => c.idle,
     };
   }
 
@@ -182,11 +183,11 @@ class _PetSpriteWidgetState extends State<PetSpriteWidget> {
     if (widget.config != null) {
       final a = _animConfig;
       child = SpriteAnimationWidget.asset(
-        path:   a.sheetFile,
+        path: a.sheetFile,
         images: _spritesImages,
         data: SpriteAnimationData.sequenced(
-          amount:      a.frameCount,
-          stepTime:    a.stepTime,
+          amount: a.frameCount,
+          stepTime: a.stepTime,
           textureSize: a.frameSize,
           loop: widget.animState != PetAnimState.faint,
         ),

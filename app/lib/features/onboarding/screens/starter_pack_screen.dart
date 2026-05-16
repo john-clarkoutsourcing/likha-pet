@@ -294,6 +294,7 @@ class _EggCard extends StatelessWidget {
   Widget _buildEgg(bool isHatching) {
     return Center(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Pulsing egg glow
@@ -333,58 +334,56 @@ class _EggCard extends StatelessWidget {
     final def = pet.toCreatureDefinition();
     return ScaleTransition(
       scale: CurvedAnimation(parent: revealCtrl, curve: Curves.elasticOut),
-      child: Column(
-        children: [
-          // Pet renderer — width is always the tight constraint in landscape
-          // (card ≈ 200px wide × 350px tall).  Square WebView must fit the width.
-          Expanded(
-            flex: 5,
-            child: LayoutBuilder(
-              builder: (_, constraints) {
-                final side = (constraints.maxWidth * 0.90).clamp(60.0, 200.0);
-                return Center(
-                  child: PetRendererWidget(
-                    def:  def,
-                    size: side,
-                    yOff: 0.70,
-                  ),
-                );
-              },
-            ),
-          ),
+      child: LayoutBuilder(
+        builder: (_, constraints) {
+          // Badge row height ~50px; pet renderer gets remaining space
+          const badgeH = 50.0;
+          final petSide = (constraints.maxWidth * 0.88)
+              .clamp(60.0, (constraints.maxHeight - badgeH).clamp(60.0, 200.0));
 
-          // Class badge + part dots
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
-            child: Column(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: color.withValues(alpha: 0.6)),
-                ),
-                child: Text(cls.displayName,
-                  style: TextStyle(color: color, fontSize: 10,
-                      fontWeight: FontWeight.w800)),
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Pet renderer
+              SizedBox(
+                width:  petSide,
+                height: petSide,
+                child: PetRendererWidget(def: def, size: petSide),
               ),
-              const SizedBox(height: 6),
-              // Part class dots
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _PartDot(def.horn.partClass),
-                  const SizedBox(width: 4),
-                  _PartDot(def.back.partClass),
-                  const SizedBox(width: 4),
-                  _PartDot(def.tail.partClass),
-                  const SizedBox(width: 4),
-                  _PartDot(def.mouth.partClass),
-                ],
+
+              // Class badge + part dots
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: color.withValues(alpha: 0.6)),
+                    ),
+                    child: Text(cls.displayName,
+                      style: TextStyle(color: color, fontSize: 9,
+                          fontWeight: FontWeight.w800)),
+                  ),
+                  const SizedBox(height: 5),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _PartDot(def.horn.partClass),
+                      const SizedBox(width: 4),
+                      _PartDot(def.back.partClass),
+                      const SizedBox(width: 4),
+                      _PartDot(def.tail.partClass),
+                      const SizedBox(width: 4),
+                      _PartDot(def.mouth.partClass),
+                    ],
+                  ),
+                ]),
               ),
-            ]),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

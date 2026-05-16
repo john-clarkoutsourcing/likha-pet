@@ -14,18 +14,18 @@ void _printTraitReference() {
   final ts = TraitSystem();
 
   final allTraits = [
-    TraitLibrary.tikbalangCharge,
-    TraitLibrary.bakunawaSwallow,
-    TraitLibrary.aswangFang,
-    TraitLibrary.anakngLupaSlam,
-    TraitLibrary.lakanCounter,
-    TraitLibrary.amihanVeil,
-    TraitLibrary.bayanihanShield,
-    TraitLibrary.sarimanokAura,
-    TraitLibrary.diwataBlessing,
-    TraitLibrary.manananggalDrain,
-    TraitLibrary.kapreSmoke,
-    TraitLibrary.enkantoFlash,
+    TraitLibrary.beastHorn,
+    TraitLibrary.beastBack,
+    TraitLibrary.beastTail,
+    TraitLibrary.beastMouth,
+    TraitLibrary.plantHorn,
+    TraitLibrary.plantBack,
+    TraitLibrary.aquaticHorn,
+    TraitLibrary.aquaticMouth,
+    TraitLibrary.birdBack,
+    TraitLibrary.birdMouth,
+    TraitLibrary.bugHorn,
+    TraitLibrary.reptileBack,
   ];
 
   print('${'═' * 60}');
@@ -35,8 +35,8 @@ void _printTraitReference() {
   const typeLabels = {
     TraitType.offensive: '⚔  Offensive',
     TraitType.defensive: '🛡  Defensive',
-    TraitType.support:   '💚 Support  ',
-    TraitType.utility:   '⚡ Utility  ',
+    TraitType.support: '💚 Support  ',
+    TraitType.utility: '⚡ Utility  ',
   };
 
   for (final trait in allTraits) {
@@ -49,85 +49,75 @@ void _printTraitReference() {
 // ── Battle simulation ─────────────────────────────────────────────────────────
 
 void _runBattle() {
-  // ── Team Bayani (Aggressive / CC-heavy) ──────────────────────────────────
-  //
-  // Bakunawa:   Burst single-target + stun (high-value CC opener)
-  // Tikbalang:  Cheap spam + AoE to hit multiple targets
-  // Manananggal: Poison pressure + team defense buff
-
-  final bakunawa = Pet(
+  // ── Team A ────────────────────────────────────────────────────────────────
+  final beast = Pet(
     id: 'pet_001',
-    name: 'Bakunawa',
+    name: 'Beast',
     traits: [
-      TraitLibrary.aswangFang,        // 45 dmg, 3E, CD:2 — heavy hitter
-      TraitLibrary.enkantoFlash,      // Stun, 3E, CD:3  — CC opener
-      TraitLibrary.tikbalangCharge,   // 30 dmg, 1E, CD:0 — cheap filler
+      TraitLibrary.beastHorn,
+      TraitLibrary.beastBack,
+      TraitLibrary.beastTail,
     ],
   );
 
-  final tikbalang = Pet(
+  final plant = Pet(
     id: 'pet_002',
-    name: 'Tikbalang',
+    name: 'Plant',
     traits: [
-      TraitLibrary.anakngLupaSlam,    // AoE 25, 3E, CD:2
-      TraitLibrary.tikbalangCharge,   // 30 dmg, 1E, CD:0
-      TraitLibrary.kapreSmoke,        // AoE attackDown, 2E, CD:3
+      TraitLibrary.plantHorn,
+      TraitLibrary.plantBack,
+      TraitLibrary.plantTail,
     ],
   );
 
-  final manananggal = Pet(
+  final aquatic = Pet(
     id: 'pet_003',
-    name: 'Manananggal',
+    name: 'Aquatic',
     traits: [
-      TraitLibrary.manananggalDrain,  // Poison 8/round×3, 2E, CD:2
-      TraitLibrary.bayanihanShield,   // All-ally defenseUp +15, 3E, CD:3
-      TraitLibrary.amihanVeil,        // Self shield 40, 2E, CD:3
+      TraitLibrary.aquaticHorn,
+      TraitLibrary.aquaticTail,
+      TraitLibrary.aquaticMouth,
     ],
   );
 
-  // ── Team Diwata (Balanced / Support-heavy) ────────────────────────────────
-  //
-  // Diwata:    Full-team healer + self-defense
-  // Sarimanok: Single-target heal + burst damage
-  // Amihan:    Poison + AoE to mirror Team Bayani's pressure
-
-  final diwata = Pet(
+  // ── Team B ────────────────────────────────────────────────────────────────
+  final bird = Pet(
     id: 'pet_004',
-    name: 'Diwata',
+    name: 'Bird',
     traits: [
-      TraitLibrary.diwataBlessing,    // All-ally heal 20, 2E, CD:3
-      TraitLibrary.lakanCounter,      // Self defenseUp +15, 1E, CD:2
-      TraitLibrary.tikbalangCharge,   // 30 dmg, 1E, CD:0
+      TraitLibrary.birdHorn,
+      TraitLibrary.birdBack,
+      TraitLibrary.birdTail,
     ],
   );
 
-  final sarimanok = Pet(
+  final bug = Pet(
     id: 'pet_005',
-    name: 'Sarimanok',
+    name: 'Bug',
     traits: [
-      TraitLibrary.sarimanokAura,     // Heal lowest-HP ally 35, 2E, CD:3
-      TraitLibrary.bakunawaSwallow,   // 50 dmg lowest-HP enemy, 2E, CD:1
-      TraitLibrary.amihanVeil,        // Self shield 40, 2E, CD:3
+      TraitLibrary.bugHorn,
+      TraitLibrary.bugBack,
+      TraitLibrary.bugTail,
     ],
   );
 
-  final amihan = Pet(
+  final reptile = Pet(
     id: 'pet_006',
-    name: 'Amihan',
+    name: 'Reptile',
     traits: [
-      TraitLibrary.manananggalDrain,  // Poison 8/round×3, 2E, CD:2
-      TraitLibrary.anakngLupaSlam,    // AoE 25, 3E, CD:2
-      TraitLibrary.bayanihanShield,   // All-ally defenseUp +15, 3E, CD:3
+      TraitLibrary.reptileHorn,
+      TraitLibrary.reptileBack,
+      TraitLibrary.reptileTail,
     ],
   );
 
   // ── Run ───────────────────────────────────────────────────────────────────
 
   final engine = BattleEngine(
-    teamA: [bakunawa, tikbalang, manananggal],
-    teamB: [diwata, sarimanok, amihan],
-    teamAName: 'Team Bayani',
-    teamBName: 'Team Diwata',
+    teamA: [beast, plant, aquatic],
+    teamB: [bird, bug, reptile],
+    teamAName: 'Team Alpha',
+    teamBName: 'Team Beta',
   );
 
   final result = engine.run();

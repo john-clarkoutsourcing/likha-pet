@@ -7,14 +7,15 @@ import 'package:likha_pet_battle_engine/battle_state.dart';
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 class TestPetCreatorState {
-  final Map<TraitPart, String?> selectedTraitNames; // store trait names, not objects
+  final Map<TraitPart, String?>
+      selectedTraitNames; // store trait names, not objects
   final bool petCreated;
   final Pet? testPet;
   final Pet? dummyEnemy;
   final BattleEngine? engine;
   final BattleState? battleState;
-  final Map<String, String> petAnimStates;    // petId -> animStateName
-  final Map<String, String> petEffectVfx;     // petId -> effectType
+  final Map<String, String> petAnimStates; // petId -> animStateName
+  final Map<String, String> petEffectVfx; // petId -> effectType
   final String actionLog;
   final bool isWaitingForAction;
 
@@ -90,47 +91,48 @@ class TestBattleNotifier extends StateNotifier<TestPetCreatorState> {
   /// For body, return a curated list of base character types.
   List<String> getTraitNamesForPart(TraitPart part) {
     final allTraits = _getAllTraits();
-    
+
     // Body selector shows base character types (first trait of each archetype)
     if (part == TraitPart.body) {
       return [
-        'Aswang Fang',    // offensive beast
-        'Bakunawa Swallow', // aquatic
-        'Manananggal Drain', // support/utility
-        'Tikbalang Charge',  // tank/defensive
-        'Sarimanok Aura',    // healer
+        'Dual Blade', // beast
+        'Cactus', // plant
+        'Lam', // aquatic
+        'Eggshell', // bird
+        'Cerastes', // reptile
       ];
     }
-    
-    return allTraits
-        .where((t) => t.part == part)
-        .map((t) => t.name)
-        .toList();
+
+    return allTraits.where((t) => t.part == part).map((t) => t.name).toList();
   }
 
   /// Helper: get all trait objects from TraitLibrary.
   List<Trait> _getAllTraits() {
     return [
-      TraitLibrary.aswangFang,
-      TraitLibrary.amihanVeil,
-      TraitLibrary.enkantoFlash,
-      TraitLibrary.sarimanokAura,
-      TraitLibrary.tikbalangSnipe,
-      TraitLibrary.bayanihanShield,
-      TraitLibrary.kapreSmoke,
-      TraitLibrary.anakngLupaSlam,
-      TraitLibrary.bakunawaSwallow,
-      TraitLibrary.lakanCounter,
-      TraitLibrary.manananggalDrain,
-      TraitLibrary.nunoRegen,
-      TraitLibrary.tikbalangCharge,
-      TraitLibrary.diwataBlessing,
-      TraitLibrary.perlasStrike,
-      TraitLibrary.sigbinShadow,
-      TraitLibrary.bathalaWrath,
-      TraitLibrary.agimatWard,
-      TraitLibrary.lambanaDance,
-      TraitLibrary.kulamCurse,
+      TraitLibrary.beastHorn,
+      TraitLibrary.beastBack,
+      TraitLibrary.beastTail,
+      TraitLibrary.beastMouth,
+      TraitLibrary.plantHorn,
+      TraitLibrary.plantBack,
+      TraitLibrary.plantTail,
+      TraitLibrary.plantMouth,
+      TraitLibrary.aquaticHorn,
+      TraitLibrary.aquaticBack,
+      TraitLibrary.aquaticTail,
+      TraitLibrary.aquaticMouth,
+      TraitLibrary.birdHorn,
+      TraitLibrary.birdBack,
+      TraitLibrary.birdTail,
+      TraitLibrary.birdMouth,
+      TraitLibrary.bugHorn,
+      TraitLibrary.bugBack,
+      TraitLibrary.bugTail,
+      TraitLibrary.bugMouth,
+      TraitLibrary.reptileHorn,
+      TraitLibrary.reptileBack,
+      TraitLibrary.reptileTail,
+      TraitLibrary.reptileMouth,
     ];
   }
 
@@ -165,21 +167,21 @@ class TestBattleNotifier extends StateNotifier<TestPetCreatorState> {
       Pet(
         id: 'dummy_1',
         name: 'Dummy Front',
-        traits: [TraitLibrary.aswangFang],
+        traits: [TraitLibrary.beastHorn],
         speed: 20,
         hp: 100,
       ),
       Pet(
         id: 'dummy_2',
         name: 'Dummy Mid',
-        traits: [TraitLibrary.bayanihanShield],
+        traits: [TraitLibrary.plantBack],
         speed: 15,
         hp: 100,
       ),
       Pet(
         id: 'dummy_3',
         name: 'Dummy Back',
-        traits: [TraitLibrary.nunoRegen],
+        traits: [TraitLibrary.aquaticMouth],
         speed: 10,
         hp: 100,
       ),
@@ -195,7 +197,8 @@ class TestBattleNotifier extends StateNotifier<TestPetCreatorState> {
       testPet: testPet,
       dummyEnemy: dummyTeam.first,
       engine: engine,
-      battleState: null, // BattleEngine doesn't expose current state until battle runs
+      battleState:
+          null, // BattleEngine doesn't expose current state until battle runs
       petCreated: true,
       actionLog: 'Battle started! Select a skill to execute.',
       isWaitingForAction: true,
@@ -238,11 +241,21 @@ class TestBattleNotifier extends StateNotifier<TestPetCreatorState> {
   /// Get animation state name based on effect type.
   String _animStateForTrait(Trait trait) {
     final effectType = trait.effect.type.name;
-    if (effectType.contains('damage') || effectType.contains('attack')) return 'attack';
-    if (effectType.contains('shield') || effectType.contains('barrier')) return 'shield';
-    if (effectType.contains('heal') || effectType.contains('regen')) return 'heal';
-    if (effectType.contains('poison') || effectType.contains('debuff')) return 'debuff';
-    if (effectType.contains('buff') || effectType.contains('boost')) return 'buff';
+    if (effectType.contains('damage') || effectType.contains('attack')) {
+      return 'attack';
+    }
+    if (effectType.contains('shield') || effectType.contains('barrier')) {
+      return 'shield';
+    }
+    if (effectType.contains('heal') || effectType.contains('regen')) {
+      return 'heal';
+    }
+    if (effectType.contains('poison') || effectType.contains('debuff')) {
+      return 'debuff';
+    }
+    if (effectType.contains('buff') || effectType.contains('boost')) {
+      return 'buff';
+    }
     return 'attack';
   }
 

@@ -72,135 +72,184 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = authState == AuthState.authenticating;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Likha Pet'),
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      backgroundColor: const Color(0xFF0A0E1A),
+      body: SafeArea(
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // ── Left: branding panel ─────────────────────────────────────
+            SizedBox(
+              width: 240,
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(right: BorderSide(color: Color(0xFF1A1F35))),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Likha Pet',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1)),
+                    const SizedBox(height: 6),
+                    const Text('Filipino-inspired\nPet Strategy Game',
+                        style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 12,
+                            height: 1.4)),
+                    const SizedBox(height: 20),
+                    const Text('🐾 Collect & Battle',
+                        style: TextStyle(
+                            color: Colors.white54, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    const Text('⚔ 3v3 Turn-Based Combat',
+                        style: TextStyle(
+                            color: Colors.white54, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    const Text('🧬 Unique DNA Pets',
+                        style: TextStyle(
+                            color: Colors.white54, fontSize: 11)),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Right: login form ─────────────────────────────────────────
             Expanded(
-              child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Title
-                  Text(
-                    'Welcome Back',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Login to continue',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Welcome Back',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 4),
+                    const Text('Login to continue',
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 20),
 
                   // Email field
                   TextField(
                     controller: _emailController,
                     enabled: !isLoading,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: 'Email',
+                      labelStyle: const TextStyle(color: Colors.white54),
                       hintText: 'your@email.com',
-                      prefixIcon: const Icon(Icons.email),
+                      hintStyle: const TextStyle(color: Colors.white24),
+                      prefixIcon: const Icon(Icons.email, color: Colors.white38),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF1A1F35)),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF1A1F35)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF4FC3F7)),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFF111827),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                          horizontal: 16, vertical: 10),
                     ),
                     keyboardType: TextInputType.emailAddress,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
                   // Password field
                   TextField(
                     controller: _passwordController,
                     enabled: !isLoading,
                     obscureText: _obscurePassword,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: 'Password',
+                      labelStyle: const TextStyle(color: Colors.white54),
                       hintText: 'Enter your password',
-                      prefixIcon: const Icon(Icons.lock),
+                      hintStyle: const TextStyle(color: Colors.white24),
+                      prefixIcon: const Icon(Icons.lock, color: Colors.white38),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: Colors.white38,
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
+                        onPressed: () =>
+                            setState(() => _obscurePassword = !_obscurePassword),
                       ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF1A1F35)),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF1A1F35)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF4FC3F7)),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFF111827),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                          horizontal: 16, vertical: 10),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
                   // Login button
                   ElevatedButton(
                     onPressed: isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: Colors.blue,
-                      disabledBackgroundColor: Colors.grey[300],
+                      backgroundColor: const Color(0xFF4FC3F7),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                     ),
                     child: isLoading
                         ? const SizedBox(
-                            height: 16,
-                            width: 16,
+                            height: 16, width: 16,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text(
-                            'Login',
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white)))
+                        : const Text('Login',
                             style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
                   // Register link
                   Center(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          "Don't have an account? ",
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        const Text("Don't have an account? ",
+                            style: TextStyle(
+                                color: Colors.white54, fontSize: 12)),
                         GestureDetector(
                           onTap: () => context.go('/register'),
-                          child: Text(
-                            'Sign Up',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.blue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: const Text('Sign Up',
+                              style: TextStyle(
+                                  color: Color(0xFF4FC3F7),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
@@ -208,10 +257,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
               ),
             ),
-            ),
-          ],
-        ),
-      ),
-    );
+          ),   // Expanded
+          ],   // Row.children
+        ),     // Row
+      ),       // SafeArea
+    );         // Scaffold
   }
 }

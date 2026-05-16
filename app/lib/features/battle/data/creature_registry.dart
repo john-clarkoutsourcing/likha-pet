@@ -564,59 +564,59 @@ final Map<String, CreatureDefinition> kCreatureRegistry = {
   'plant_1': CreatureDefinition(
     id: 'plant_1', name: 'Treant',
     body:  B('plant_1'),
-    horn:  P('plant_horn'),   // Cactus   — DEF up + 45 shield
-    back:  P('plant_back'),   // Sponge   — DEF up + 35 shield
-    tail:  P('plant_tail'),   // Healing Herbs — heal ally
-    mouth: P('plant_mouth'),  // Serious  — 0-energy free shield
+    horn:  P('plant_horn_04'),
+    back:  P('plant_back_04'),
+    tail:  P('plant_tail_04'),
+    mouth: P('plant_mouth_04'),
   ),
 
   // ── Puffy — Aquatic body, pure-breed ──────────────────────────────────────
   'aquatic_1': CreatureDefinition(
     id: 'aquatic_1', name: 'Puffy',
     body:  B('aquatic_1'),
-    horn:  P('aquatic_horn'),   // Angry Lam    — pierce back row
-    back:  P('aquatic_back'),   // Shelter      — big DEF + shield
-    tail:  P('aquatic_tail'),   // Swift Escape — SPD up + shield
-    mouth: P('aquatic_mouth'),  // Upstream Swim — stun
+    horn:  P('aquatic_horn_04'),
+    back:  P('aquatic_back_04'),
+    tail:  P('aquatic_tail_04'),
+    mouth: P('aquatic_mouth_04'),
   ),
 
   // ── Buba — Beast body, pure-breed ─────────────────────────────────────────
   'beast_1': CreatureDefinition(
     id: 'beast_1', name: 'Buba',
     body:  B('beast_1'),
-    horn:  P('beast_horn'),   // Nut Crack       — 55 dmg
-    back:  P('beast_back'),   // Rage            — ATK up + shield
-    tail:  P('beast_tail'),   // Sinister Strike — 55 dmg
-    mouth: P('beast_mouth'),  // Chomp           — 50 dmg finisher
+    horn:  P('beast_horn_04'),
+    back:  P('beast_back_04'),
+    tail:  P('beast_tail_04'),
+    mouth: P('beast_mouth_04'),
   ),
 
   // ── Kida — Reptile body, pure-breed ───────────────────────────────────────
   'reptile_1': CreatureDefinition(
     id: 'reptile_1', name: 'Kida',
     body:  B('reptile_1'),
-    horn:  P('reptile_horn'),   // Tiny Dino      — 50 dmg + 25 shield
-    back:  P('reptile_back'),   // Bone Sail      — DEF up + 40 shield
-    tail:  P('reptile_tail'),   // Scale Regen    — REGEN 20/r for 3r
-    mouth: P('reptile_mouth'),  // Tiny Catapult  — pierce + 25 shield
+    horn:  P('reptile_horn_04'),
+    back:  P('reptile_back_04'),
+    tail:  P('reptile_tail_04'),
+    mouth: P('reptile_mouth_04'),
   ),
 
   // ── Momo — Bird body, pure-breed ──────────────────────────────────────────
   'bird_1': CreatureDefinition(
     id: 'bird_1', name: 'Momo',
     body:  B('bird_1'),
-    horn:  P('bird_horn'),   // Eggshell     — ATK up + 40 shield
-    back:  P('bird_back'),   // Feather Lunge — 65 dmg (max single hit)
-    tail:  P('bird_tail'),   // Pigeon Post   — 50 dmg
-    mouth: P('bird_mouth'),  // Peace Treaty  — shield break
+    horn:  P('bird_horn_04'),
+    back:  P('bird_back_04'),
+    tail:  P('bird_tail_04'),
+    mouth: P('bird_mouth_04'),
   ),
 
   // ── Plum — Bug body, pure-breed ───────────────────────────────────────────
   'bug_1': CreatureDefinition(
     id: 'bug_1', name: 'Plum',
     body:  B('bug_1'),
-    horn:  P('bug_horn'),   // Mandible Strike   — 60 dmg (best 1-energy)
-    back:  P('bug_back'),   // Sticky Goo        — slow + 25 shield
-    tail:  P('bug_tail'),   // Venom Spit        — poison stack
-    mouth: P('bug_mouth'),  // Numbing Lecretion — stun
+    horn:  P('bug_horn_04'),
+    back:  P('bug_back_04'),
+    tail:  P('bug_tail_04'),
+    mouth: P('bug_mouth_04'),
   ),
 };

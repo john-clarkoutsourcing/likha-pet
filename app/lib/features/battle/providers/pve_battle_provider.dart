@@ -208,8 +208,11 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     for (final action in started.actionQueue) {
       if (!mounted) return;
 
-      final actorId    = action.actor.id;
-      final effectType = action.trait.effect.type.name;
+      final actorId = action.actor.id;
+      final effectType = (action.trait.effect.type == EffectType.buff &&
+              action.trait.effect.buffType == BuffType.regen)
+          ? 'heal'
+          : action.trait.effect.type.name;
       final partSlot   = action.trait.part.name; // 'horn'|'back'|'tail'|'mouth'|'body'
       if (!action.actor.isFainted) {
         state = state.copyWith(

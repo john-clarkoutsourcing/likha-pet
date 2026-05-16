@@ -92,37 +92,72 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final isLoading = authState == AuthState.authenticating;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Likha Pet'),
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      backgroundColor: const Color(0xFF0A0E1A),
+      body: SafeArea(
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Title
-                  Text(
-                    'Create Account',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Join the adventure',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
+            // ── Left: branding ────────────────────────────────────────────
+            SizedBox(
+              width: 240,
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(
+                      right: BorderSide(color: Color(0xFF1A1F35))),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Likha Pet',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1)),
+                    const SizedBox(height: 6),
+                    const Text('Filipino-inspired\nPet Strategy Game',
+                        style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 12,
+                            height: 1.4)),
+                    const SizedBox(height: 20),
+                    const Text('🐾 Collect & Battle',
+                        style:
+                            TextStyle(color: Colors.white54, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    const Text('⚔ 3v3 Turn-Based Combat',
+                        style:
+                            TextStyle(color: Colors.white54, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    const Text('🧬 Unique DNA Pets',
+                        style:
+                            TextStyle(color: Colors.white54, fontSize: 11)),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Right: register form ──────────────────────────────────────
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Create Account',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 4),
+                    const Text('Join the adventure',
+                        style:
+                            TextStyle(color: Colors.white38, fontSize: 12),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
 
                   // Email field
                   TextField(
@@ -257,9 +292,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
+          ),   // Expanded
+          ],   // Row.children
+        ),     // Row
+      ),       // SafeArea
+    );         // Scaffold
   }
 }

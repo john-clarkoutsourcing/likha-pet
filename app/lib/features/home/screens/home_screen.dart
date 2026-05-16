@@ -38,164 +38,203 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 12),
-
-              // ── Title ──────────────────────────────────────────────────────
-              const Text(
-                'Likha Pet',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Left panel: branding + eggs ────────────────────────────────
+            SizedBox(
+              width: 240,
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(right: BorderSide(color: Color(0xFF1A1F35))),
                 ),
-              ),
-              const Text(
-                'Filipino-inspired AI Pet Strategy',
-                style: TextStyle(
-                  color: AppColors.secondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Likha Pet',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const Text(
+                            'Filipino-inspired Pet Strategy',
+                            style: TextStyle(
+                              color: AppColors.secondary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.divider),
+                            ),
+                            child: Text(
+                              'Phase 2  ·  ${player.roster.length} pets',
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 10,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
-              // ── Starter Pack Eggs Section ──────────────────────────────────
-              eggsAsync.when(
-                data: (eggs) {
-                  if (eggs.isNotEmpty) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Your Starter Pack (${eggs.length} Eggs)',
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 0.8,
-                          ),
-                          itemCount: eggs.length,
-                          itemBuilder: (context, index) {
-                            final egg = eggs[index];
-                            return _EggCardContainer(
-                              egg: egg,
-                              onHatchPressed: () async {
-                                await _handleHatchEgg(context, ref, egg.id);
-                              },
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, color: Color(0xFF1A1F35)),
+                    const SizedBox(height: 8),
+
+                    // Eggs section (scrollable)
+                    Expanded(
+                      child: eggsAsync.when(
+                        data: (eggs) {
+                          if (eggs.isEmpty) {
+                            return const Center(
+                              child: Text('No pending eggs',
+                                  style: TextStyle(
+                                      color: AppColors.textMuted,
+                                      fontSize: 11)),
                             );
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-                loading: () => Container(
-                  padding: const EdgeInsets.all(24),
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20),
+                                child: Text(
+                                  'Starter Eggs (${eggs.length})',
+                                  style: const TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: GridView.builder(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    crossAxisSpacing: 8,
+                                    mainAxisSpacing: 8,
+                                    childAspectRatio: 0.82,
+                                  ),
+                                  itemCount: eggs.length,
+                                  itemBuilder: (context, index) {
+                                    final egg = eggs[index];
+                                    return _EggCardContainer(
+                                      egg: egg,
+                                      onHatchPressed: () async {
+                                        await _handleHatchEgg(
+                                            context, ref, egg.id);
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        loading: () => const Center(
+                            child: CircularProgressIndicator()),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ],
                 ),
-                error: (_, __) => const SizedBox.shrink(),
               ),
+            ),
 
-              // ── Menu ───────────────────────────────────────────────────────
-              const Text(
-                'Main Menu',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _MenuButton(
-                icon: '🐾',
-                label: 'My Pets',
-                subtitle: 'Roster · Team builder',
-                color: const Color(0xFF9C27B0),
-                onTap: () => context.push(Routes.roster),
-              ),
-              const SizedBox(height: 10),
-
-              _MenuButton(
-                icon: '⚔',
-                label: 'Quick Battle (PvE)',
-                subtitle: player.hasFullTeam ? 'My Team  vs  Rivals' : 'Set up a team first',
-                color:
-                    player.hasFullTeam ? AppColors.primary : Colors.white24,
-                onTap: player.hasFullTeam
-                    ? () => context.push(
-                          Routes.battle,
-                          extra: const BattleScreenArgs(
-                            playerTeamName: 'My Team',
-                            enemyTeamName: 'Rivals',
-                          ),
-                        )
-                    : () => context.go(Routes.roster),
-              ),
-              const SizedBox(height: 10),
-
-              _MenuButton(
-                icon: '🗺',
-                label: 'Adventure Mode',
-                subtitle: 'PvE stages — Coming soon',
-                color: AppColors.accent,
-                onTap: () => context.push(Routes.worldMap),
-              ),
-              const SizedBox(height: 10),
-
-              _MenuButton(
-                icon: '🧪',
-                label: 'Test Battle Lab',
-                subtitle: 'Debug traits, body parts & animations',
-                color: const Color(0xFF7C3AED),
-                onTap: () => context.go(Routes.testBattle),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Phase label ────────────────────────────────────────────────
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.divider),
-                  ),
-                  child: Text(
-                    'Phase 2  ·  ${player.roster.length} pets',
+            // ── Right panel: scrollable menu buttons ───────────────────────
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                children: [
+                  const Text(
+                    'Main Menu',
                     style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0.5,
                     ),
                   ),
-                ),
+                  const SizedBox(height: 10),
+                  _MenuButton(
+                    icon: '🐾',
+                    label: 'My Pets',
+                    subtitle: 'Roster · Team builder',
+                    color: const Color(0xFF9C27B0),
+                    onTap: () => context.push(Routes.roster),
+                  ),
+                  const SizedBox(height: 8),
+                  _MenuButton(
+                    icon: '⚔',
+                    label: 'Quick Battle (PvE)',
+                    subtitle: player.hasFullTeam
+                        ? 'My Team  vs  Rivals'
+                        : 'Set up a team first',
+                    color: player.hasFullTeam
+                        ? AppColors.primary
+                        : Colors.white24,
+                    onTap: player.hasFullTeam
+                        ? () => context.push(
+                              Routes.battle,
+                              extra: const BattleScreenArgs(
+                                playerTeamName: 'My Team',
+                                enemyTeamName: 'Rivals',
+                              ),
+                            )
+                        : () => context.go(Routes.roster),
+                  ),
+                  const SizedBox(height: 8),
+                  _MenuButton(
+                    icon: '🗺',
+                    label: 'Adventure Mode',
+                    subtitle: 'PvE stages — Coming soon',
+                    color: AppColors.accent,
+                    onTap: () => context.push(Routes.worldMap),
+                  ),
+                  const SizedBox(height: 8),
+                  _MenuButton(
+                    icon: '📖',
+                    label: 'Library',
+                    subtitle: 'Parts · Classes · Skills',
+                    color: const Color(0xFF26C6DA),
+                    onTap: () => context.push(Routes.library),
+                  ),
+                  const SizedBox(height: 8),
+                  _MenuButton(
+                    icon: '🧪',
+                    label: 'Test Battle Lab',
+                    subtitle: 'Debug traits, body parts & animations',
+                    color: const Color(0xFF7C3AED),
+                    onTap: () => context.go(Routes.testBattle),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

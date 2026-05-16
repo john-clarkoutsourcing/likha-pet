@@ -59,12 +59,15 @@ CreatureDefinition _enemy(
   );
 }
 
-// Pure-breed shorthand
+// Pure-breed shorthand — uses _04 variant (base tier for each class).
 CreatureDefinition _pure(String bodyId, {String? name}) {
   final cls = kBodyCatalogue[bodyId]!.className;
-  return _enemy(bodyId, '${cls}_horn', '${cls}_back',
-      '${cls}_tail', '${cls}_mouth', nameOverride: name);
+  return _enemy(bodyId, '${cls}_horn_04', '${cls}_back_04',
+      '${cls}_tail_04', '${cls}_mouth_04', nameOverride: name);
 }
+
+// Shorthand: part key with _04 default variant.
+String _p(String cls, String slot) => '${cls}_${slot}_04';
 
 // ── Stage registry ────────────────────────────────────────────────────────────
 //
@@ -131,7 +134,7 @@ final List<StageConfig> kStageRegistry = [
       _pure('bug_1', name: 'Sting'),
       _pure('bug_1', name: 'Venom'),
       // Bug with aquatic body — faster
-      _enemy('aquatic_1', 'bug_horn', 'bug_back', 'bug_tail', 'bug_mouth',
+      _enemy('aquatic_1', _p('bug','horn'), _p('bug','back'), _p('bug','tail'), _p('bug','mouth'),
           nameOverride: 'Dart'),
     ],
   ),
@@ -148,7 +151,7 @@ final List<StageConfig> kStageRegistry = [
       _pure('bird_1', name: 'Talon'),
       _pure('bird_1', name: 'Swift'),
       // Bird with beast back — even higher single-hit
-      _enemy('bird_1', 'bird_horn', 'beast_back', 'bird_tail', 'bird_mouth',
+      _enemy('bird_1', _p('bird','horn'), _p('beast','back'), _p('bird','tail'), _p('bird','mouth'),
           nameOverride: 'Apex'),
     ],
   ),
@@ -165,8 +168,8 @@ final List<StageConfig> kStageRegistry = [
       _pure('reptile_1', name: 'Scale'),
       _pure('reptile_1', name: 'Shell'),
       // Reptile with plant back (Sponge) — extra DEF
-      _enemy('reptile_1', 'reptile_horn', 'plant_back', 'reptile_tail',
-          'reptile_mouth', nameOverride: 'Bastion'),
+      _enemy('reptile_1', _p('reptile','horn'), _p('plant','back'), _p('reptile','tail'),
+          _p('reptile','mouth'), nameOverride: 'Bastion'),
     ],
   ),
 
@@ -182,10 +185,10 @@ final List<StageConfig> kStageRegistry = [
       // Plant body — strong vs your Aquatic
       _pure('plant_1', name: 'Warden'),
       // Beast body — strong vs your Aquatic too, fast attacker
-      _enemy('beast_1', 'beast_horn', 'beast_back', 'beast_tail', 'bug_mouth',
+      _enemy('beast_1', _p('beast','horn'), _p('beast','back'), _p('beast','tail'), _p('bug','mouth'),
           nameOverride: 'Ravager'),
       // Bird body — strong vs your Beast
-      _enemy('bird_1', 'bird_back', 'bird_horn', 'aquatic_tail', 'bird_mouth',
+      _enemy('bird_1', _p('bird','horn'), _p('bird','back'), _p('aquatic','tail'), _p('bird','mouth'),
           nameOverride: 'Falcon'),
     ],
   ),
@@ -200,14 +203,12 @@ final List<StageConfig> kStageRegistry = [
     recommendedPurity: 3,
     enemyDefs: [
       // Aquatic with Bug tail (poison + speed)
-      _enemy('aquatic_1', 'aquatic_horn', 'aquatic_back', 'bug_tail',
-          'aquatic_mouth', nameOverride: 'Viper'),
-      // Bug with high damage
-      _enemy('bug_1', 'bug_horn', 'bug_back', 'beast_tail', 'bug_mouth',
+      _enemy('aquatic_1', _p('aquatic','horn'), _p('aquatic','back'), _p('bug','tail'),
+          _p('aquatic','mouth'), nameOverride: 'Viper'),
+      _enemy('bug_1', _p('bug','horn'), _p('bug','back'), _p('beast','tail'), _p('bug','mouth'),
           nameOverride: 'Crusher'),
-      // Reptile with regen + Aquatic stun mouth
-      _enemy('reptile_1', 'reptile_horn', 'reptile_back', 'reptile_tail',
-          'aquatic_mouth', nameOverride: 'Bulwark'),
+      _enemy('reptile_1', _p('reptile','horn'), _p('reptile','back'), _p('reptile','tail'),
+          _p('aquatic','mouth'), nameOverride: 'Bulwark'),
     ],
   ),
 
@@ -221,13 +222,11 @@ final List<StageConfig> kStageRegistry = [
     recommendedPurity: 4,
     enemyDefs: [
       // Plant body with Beast horn (Nut Crack) — has class advantage over Aquatic + burst
-      _enemy('plant_1', 'beast_horn', 'plant_back', 'plant_tail', 'plant_mouth',
+      _enemy('plant_1', _p('beast','horn'), _p('plant','back'), _p('plant','tail'), _p('plant','mouth'),
           nameOverride: 'Thornskull'),
-      // Reptile body with Bug tail (poison) + Bird horn (Eggshell)
-      _enemy('reptile_1', 'bird_horn', 'reptile_back', 'bug_tail',
-          'reptile_mouth', nameOverride: 'Ironvenom'),
-      // Bird body with Plant back (Sponge) + free Serious shield
-      _enemy('bird_1', 'bird_horn', 'plant_back', 'bird_tail', 'plant_mouth',
+      _enemy('reptile_1', _p('bird','horn'), _p('reptile','back'), _p('bug','tail'),
+          _p('reptile','mouth'), nameOverride: 'Ironvenom'),
+      _enemy('bird_1', _p('bird','horn'), _p('plant','back'), _p('bird','tail'), _p('plant','mouth'),
           nameOverride: 'Shieldwing'),
     ],
   ),
@@ -242,13 +241,11 @@ final List<StageConfig> kStageRegistry = [
     recommendedPurity: 4,
     enemyDefs: [
       // Perfect anti-Aquatic Plant tank with Serious mouth (free shield every round)
-      _enemy('plant_1', 'plant_horn', 'plant_back', 'plant_tail', 'plant_mouth',
+      _enemy('plant_1', _p('plant','horn'), _p('plant','back'), _p('plant','tail'), _p('plant','mouth'),
           nameOverride: 'Ancient Oak'),
-      // Anti-Beast/Bug Aquatic speed + stun
-      _enemy('aquatic_1', 'aquatic_horn', 'aquatic_back', 'aquatic_tail',
-          'aquatic_mouth', nameOverride: 'Torrent'),
-      // Anti-Plant/Reptile Beast burst with all high-dmg cards
-      _enemy('beast_1', 'beast_horn', 'beast_back', 'beast_tail', 'beast_mouth',
+      _enemy('aquatic_1', _p('aquatic','horn'), _p('aquatic','back'), _p('aquatic','tail'),
+          _p('aquatic','mouth'), nameOverride: 'Torrent'),
+      _enemy('beast_1', _p('beast','horn'), _p('beast','back'), _p('beast','tail'), _p('beast','mouth'),
           nameOverride: 'Apex Predator'),
     ],
   ),

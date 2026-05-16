@@ -7,18 +7,26 @@ import 'package:flutter/material.dart';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 class ProjectileConfig {
-  final String sheetFile;   // filename in assets/sprites/
+  final String sheetFile;   // filename under assetPrefix
+  final String assetPrefix; // e.g. assets/sprites/
   final int    frameCount;
+  final int?   amountPerRow;
   final double frameSize;   // px per frame (square)
+  final double textureSize; // source frame size in sprite sheet
   final double stepTime;    // seconds per frame
   final double scale;       // visual scale on screen
+  final bool   useScreenBlend;
 
   const ProjectileConfig({
     required this.sheetFile,
+    this.assetPrefix = 'assets/sprites/',
     required this.frameCount,
+    this.amountPerRow,
     this.frameSize = 120,
+    this.textureSize = 120,
     this.stepTime  = 0.10,
     this.scale     = 1.0,
+    this.useScreenBlend = false,
   });
 }
 
@@ -35,7 +43,17 @@ const kPetProjectiles = <String, ProjectileConfig>{
 const kEffectProjectiles = <String, ProjectileConfig>{
   'damage': ProjectileConfig(sheetFile: 'fire_arrow.png', frameCount: 8, scale: 0.9),
   'aoe': ProjectileConfig(sheetFile: 'fire_ball.png', frameCount: 8, scale: 1.1),
-  'heal': ProjectileConfig(sheetFile: 'water_spell.png', frameCount: 8, scale: 1.0),
+  'heal': ProjectileConfig(
+    sheetFile: 'healing_particle_effect.png',
+    assetPrefix: 'assets/images/effects/',
+    frameCount: 12,
+    amountPerRow: 4,
+    frameSize: 160,
+    textureSize: 256,
+    stepTime: 0.06,
+    scale: 1.0,
+    useScreenBlend: true,
+  ),
   'shield': ProjectileConfig(sheetFile: 'water_ball.png', frameCount: 12, scale: 1.0),
   'buff': ProjectileConfig(sheetFile: 'water_spell.png', frameCount: 8, scale: 1.0),
   'debuff': ProjectileConfig(sheetFile: 'fire_spell.png', frameCount: 8, scale: 1.0),
@@ -51,7 +69,9 @@ ProjectileConfig resolveProjectileConfig(String petId, {String? effectType}) {
       const ProjectileConfig(sheetFile: 'water_ball.png', frameCount: 12);
 }
 
-final _sheetImages = Images(prefix: 'assets/sprites/');
+final _imagesByPrefix = <String, Images>{};
+Images _imagesForPrefix(String prefix) =>
+    _imagesByPrefix.putIfAbsent(prefix, () => Images(prefix: prefix));
 
 // ── Projectile data passed to overlay ────────────────────────────────────────
 
@@ -132,13 +152,20 @@ class _ProjectileWidgetState extends State<ProjectileWidget>
         width: size, height: size,
         child: SpriteAnimationWidget.asset(
           path:   cfg.sheetFile,
-          images: _sheetImages,
+          images: _imagesForPrefix(cfg.assetPrefix),
           data: SpriteAnimationData.sequenced(
             amount:      cfg.frameCount,
+            amountPerRow: cfg.amountPerRow ?? cfg.frameCount,
             stepTime:    cfg.stepTime,
-            textureSize: Vector2(cfg.frameSize, cfg.frameSize),
+            textureSize: Vector2(cfg.textureSize, cfg.textureSize),
             loop: true,
           ),
+          paint: cfg.useScreenBlend
+              ? (Paint()
+                ..isAntiAlias = true
+                ..filterQuality = FilterQuality.high
+                ..blendMode = BlendMode.screen)
+              : null,
           errorBuilder: (_) => const SizedBox.shrink(),
         ),
       ),

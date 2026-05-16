@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:likha_pet_battle_engine/trait_system.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/battle_view_model.dart';
 
@@ -16,99 +17,167 @@ class TraitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final usable    = trait.isUsable;
+    final usable = trait.isUsable;
+    final classKey = _classKeyFromTraitId(trait.id);
     final typeColor = _typeColor(trait.typeName);
+    final frameColor = _classColor(classKey) ?? typeColor;
+    final cardArtPath = TraitSystem().cardTemplatePathForId(trait.id);
 
     return GestureDetector(
       onTap: usable ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.zero,
         decoration: BoxDecoration(
           color: isSelected
-              ? typeColor.withValues(alpha: 0.22)
+              ? frameColor.withValues(alpha: 0.22)
               : AppColors.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected
-                ? typeColor
+                ? frameColor
                 : usable
-                    ? typeColor.withValues(alpha: 0.45)
+                    ? frameColor.withValues(alpha: 0.45)
                     : AppColors.divider,
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Opacity(
           opacity: usable ? 1.0 : 0.38,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ── Type badge + name ──────────────────────────────────────
-              Row(
-                children: [
-                  _TypeBadge(typeName: trait.typeName, color: typeColor),
-                  const SizedBox(width: 4),
-                  _PartBadge(partName: trait.partName),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      trait.name,
-                      style: TextStyle(
-                        color: isSelected
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (cardArtPath != null)
+                  Image.asset(
+                    cardArtPath,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    errorBuilder: (_, __, ___) =>
+                        Container(color: _cardBgColor(frameColor)),
+                  )
+                else
+                  Container(color: _cardBgColor(frameColor)),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.70),
+                          Colors.black.withValues(alpha: 0.90),
+                        ],
+                        stops: const [0.0, 0.45, 1.0],
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 5),
-
-              // ── Effect summary (big) ───────────────────────────────────
-              Text(
-                trait.effectSummary,
-                style: TextStyle(
-                  color: typeColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.3,
                 ),
-              ),
-              const SizedBox(height: 4),
-
-              // ── Targeting badge + cost ─────────────────────────────────
-              Row(
-                children: [
-                  _TargetingBadge(mode: trait.targetingMode, label: trait.targetSummary),
-                  const Spacer(),
-                  _EnergyCost(cost: trait.energyCost, canAfford: trait.canAfford),
-                ],
-              ),
-
-              // ── Cooldown ───────────────────────────────────────────────
-              if (!trait.isReady) ...[
-                const SizedBox(height: 4),
-                _CooldownRow(remaining: trait.cooldownRemaining, max: trait.cooldownMax),
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          _TypeBadge(
+                              typeName: trait.typeName, color: frameColor),
+                          const SizedBox(width: 4),
+                          _PartBadge(partName: trait.partName),
+                        ],
+                      ),
+                      const Spacer(),
+                      Text(
+                        trait.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          shadows: [Shadow(blurRadius: 3, color: Colors.black)],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        trait.effectSummary,
+                        style: TextStyle(
+                          color: frameColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          _TargetingBadge(
+                            mode: trait.targetingMode,
+                            label: trait.targetSummary,
+                          ),
+                          const Spacer(),
+                          _EnergyCost(
+                              cost: trait.energyCost,
+                              canAfford: trait.canAfford),
+                        ],
+                      ),
+                      if (!trait.isReady) ...[
+                        const SizedBox(height: 4),
+                        _CooldownRow(
+                          remaining: trait.cooldownRemaining,
+                          max: trait.cooldownMax,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  static String? _classKeyFromTraitId(String id) {
+    final i = id.indexOf('_');
+    if (i <= 0) return null;
+    final cls = id.substring(0, i);
+    return switch (cls) {
+      'beast' || 'bug' || 'bird' || 'plant' || 'aquatic' || 'reptile' => cls,
+      _ => null,
+    };
+  }
+
+  static Color? _classColor(String? cls) => switch (cls) {
+        'beast' => const Color(0xFFF39A32),
+        'aquatic' => const Color(0xFF2F9BFF),
+        'plant' => const Color(0xFF7AC943),
+        'bird' => const Color(0xFFFF8CC8),
+        'bug' => const Color(0xFFB06BFF),
+        'reptile' => const Color(0xFF4AB48B),
+        _ => null,
+      };
+
+  static Color _cardBgColor(Color c) => Color.alphaBlend(
+        c.withValues(alpha: 0.35),
+        const Color(0xFF101623),
+      );
+
   static Color _typeColor(String t) => switch (t) {
-    'offensive' => AppColors.offensive,
-    'defensive' => AppColors.defensive,
-    'support'   => AppColors.support,
-    'utility'   => AppColors.utility,
-    _           => AppColors.primary,
-  };
+        'offensive' => AppColors.offensive,
+        'defensive' => AppColors.defensive,
+        'support' => AppColors.support,
+        'utility' => AppColors.utility,
+        _ => AppColors.primary,
+      };
 }
 
 // ── Sub-widgets ───────────────────────────────────────────────────────────────
@@ -123,9 +192,9 @@ class _TypeBadge extends StatelessWidget {
     final icon = switch (typeName) {
       'offensive' => '⚔',
       'defensive' => '🛡',
-      'support'   => '💚',
-      'utility'   => '⚡',
-      _           => '✦',
+      'support' => '💚',
+      'utility' => '⚡',
+      _ => '✦',
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -173,7 +242,7 @@ class _PartBadge extends StatelessWidget {
 
 /// Shows how a skill targets: front-only, piercing, AoE, or ally.
 class _TargetingBadge extends StatelessWidget {
-  final String mode;  // 'front' | 'pierce' | 'aoe' | 'ally'
+  final String mode; // 'front' | 'pierce' | 'aoe' | 'ally'
   final String label;
   const _TargetingBadge({required this.mode, required this.label});
 
@@ -181,9 +250,9 @@ class _TargetingBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, color) = switch (mode) {
       'pierce' => ('🎯', AppColors.offensive),
-      'aoe'    => ('💥', AppColors.utility),
-      'ally'   => ('🤝', AppColors.support),
-      _        => ('▶', AppColors.textMuted),   // front
+      'aoe' => ('💥', AppColors.utility),
+      'ally' => ('🤝', AppColors.support),
+      _ => ('▶', AppColors.textMuted), // front
     };
 
     return Row(
@@ -193,7 +262,8 @@ class _TargetingBadge extends StatelessWidget {
         const SizedBox(width: 2),
         Text(
           label,
-          style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w600),
+          style:
+              TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -235,7 +305,8 @@ class _CooldownRow extends StatelessWidget {
       children: [
         const Icon(Icons.timer_outlined, size: 9, color: AppColors.utility),
         const SizedBox(width: 2),
-        Text('CD $remaining', style: const TextStyle(color: AppColors.utility, fontSize: 9)),
+        Text('CD $remaining',
+            style: const TextStyle(color: AppColors.utility, fontSize: 9)),
         const SizedBox(width: 4),
         Expanded(
           child: ClipRRect(

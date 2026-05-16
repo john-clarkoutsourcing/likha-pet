@@ -13,82 +13,145 @@ class WorldMapScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final player = ref.watch(playerProvider);
+    final completed = player.completedStages.length;
+    final total     = kStageRegistry.length;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Column(children: [
-          // ── Header ──────────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 16, 4),
-            child: Row(children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                onPressed: () => context.pop(),
-              ),
-              Text('Adventure',
-                style: GoogleFonts.rajdhani(
-                  color: Colors.white, fontSize: 22,
-                  fontWeight: FontWeight.w800)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A2535),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Left info panel ────────────────────────────────────────────────
+            SizedBox(
+              width: 180,
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(right: BorderSide(color: Color(0xFF1A1F35))),
                 ),
-                child: Text(
-                  '${player.completedStages.length} / ${kStageRegistry.length} Stages',
-                  style: const TextStyle(
-                    color: Colors.white70, fontSize: 11,
-                    fontWeight: FontWeight.w700)),
-              ),
-            ]),
-          ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Back
+                    GestureDetector(
+                      onTap: () => context.pop(),
+                      child: const Row(children: [
+                        Icon(Icons.arrow_back_ios,
+                            color: Colors.white38, size: 14),
+                        Text(' Back',
+                            style: TextStyle(
+                                color: Colors.white38, fontSize: 12)),
+                      ]),
+                    ),
+                    const SizedBox(height: 20),
 
-          // Progress bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: kStageRegistry.isEmpty
-                    ? 0
-                    : player.completedStages.length / kStageRegistry.length,
-                backgroundColor: Colors.white12,
-                valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-                minHeight: 4,
+                    Text('Adventure',
+                        style: GoogleFonts.rajdhani(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900)),
+                    Text('PvE Stages',
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 12)),
+
+                    const SizedBox(height: 20),
+
+                    // Progress
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('$completed / $total',
+                            style: GoogleFonts.rajdhani(
+                                color: AppColors.primary,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900)),
+                        const Text('Stages',
+                            style: TextStyle(
+                                color: Colors.white38, fontSize: 11)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: total == 0 ? 0 : completed / total,
+                        backgroundColor: Colors.white12,
+                        valueColor: const AlwaysStoppedAnimation(
+                            AppColors.primary),
+                        minHeight: 6,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Divider(color: Color(0xFF1A1F35)),
+                    const SizedBox(height: 12),
+
+                    // Crystals earned
+                    const Text('CRYSTALS EARNED',
+                        style: TextStyle(
+                            color: Colors.white24,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1)),
+                    const SizedBox(height: 4),
+                    Text('💎 ${player.soulCrystals}',
+                        style: GoogleFonts.rajdhani(
+                            color: const Color(0xFF44BBFF),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+
+                    const Spacer(),
+
+                    if (!player.hasFullTeam)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.orangeAccent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: Colors.orangeAccent.withValues(
+                                  alpha: 0.3)),
+                        ),
+                        child: const Text(
+                          '⚠ Set a team of 3 in My Pets first',
+                          style: TextStyle(
+                              color: Colors.orangeAccent, fontSize: 10),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // ── Stage list ───────────────────────────────────────────────────────
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-              itemCount: kStageRegistry.length,
-              itemBuilder: (_, i) {
-                final stage    = kStageRegistry[i];
-                final done     = player.isStageCompleted(stage.id);
-                final unlocked = i == 0 ||
-                    player.isStageCompleted(kStageRegistry[i - 1].id);
-                final isCurrent = !done && unlocked;
+            // ── Stage list ─────────────────────────────────────────────────────
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: kStageRegistry.length,
+                itemBuilder: (_, i) {
+                  final stage    = kStageRegistry[i];
+                  final done     = player.isStageCompleted(stage.id);
+                  final unlocked = i == 0 ||
+                      player.isStageCompleted(kStageRegistry[i - 1].id);
+                  final isCurrent = !done && unlocked;
 
-                return _StageCard(
-                  stage:     stage,
-                  done:      done,
-                  unlocked:  unlocked,
-                  isCurrent: isCurrent,
-                  onTap: unlocked
-                      ? () => context.push(Routes.stagePreview
-                          .replaceFirst(':stageId', stage.id))
-                      : null,
-                );
-              },
+                  return _StageCard(
+                    stage:     stage,
+                    done:      done,
+                    unlocked:  unlocked,
+                    isCurrent: isCurrent,
+                    onTap:     unlocked
+                        ? () => context.push(
+                            Routes.stagePreview
+                                .replaceFirst(':stageId', stage.id))
+                        : null,
+                  );
+                },
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -121,39 +184,41 @@ class _StageCard extends StatelessWidget {
         : isCurrent ? AppColors.primary : Colors.white24;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: locked ? const Color(0xFF0A0F18) : const Color(0xFF111A28),
-              borderRadius: BorderRadius.circular(14),
+              color: locked
+                  ? const Color(0xFF0A0F18)
+                  : const Color(0xFF111A28),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isCurrent
                     ? AppColors.primary.withValues(alpha: 0.6)
-                    : accentColor.withValues(alpha: 0.25),
+                    : accentColor.withValues(alpha: 0.2),
                 width: isCurrent ? 1.5 : 1,
               ),
-              boxShadow: isCurrent ? [
-                BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    blurRadius: 12),
-              ] : null,
+              boxShadow: isCurrent
+                  ? [BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      blurRadius: 8)]
+                  : null,
             ),
             child: Row(children: [
-              // Emoji / lock
+              // Icon
               Container(
-                width: 52, height: 52,
+                width: 44, height: 44,
                 decoration: BoxDecoration(
                   color: locked
                       ? Colors.white.withValues(alpha: 0.04)
                       : accentColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                       color: locked
                           ? Colors.white12
@@ -161,9 +226,9 @@ class _StageCard extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(locked ? '🔒' : stage.emoji,
-                      style: const TextStyle(fontSize: 24))),
+                      style: const TextStyle(fontSize: 20))),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
 
               // Info
               Expanded(
@@ -172,37 +237,47 @@ class _StageCard extends StatelessWidget {
                   children: [
                     Row(children: [
                       Text('Stage ${stage.id}',
-                        style: TextStyle(
-                          color: locked ? Colors.white24 : Colors.white54,
-                          fontSize: 10, fontWeight: FontWeight.w700,
-                          letterSpacing: 1)),
-                      const SizedBox(width: 8),
+                          style: TextStyle(
+                              color: locked
+                                  ? Colors.white24
+                                  : Colors.white38,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1)),
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
+                            horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: _diffColor(stage.difficultyLabel)
                               .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(stage.difficultyLabel,
-                          style: TextStyle(
-                            color: locked
-                                ? Colors.white24
-                                : _diffColor(stage.difficultyLabel),
-                            fontSize: 8, fontWeight: FontWeight.w800)),
+                            style: TextStyle(
+                                color: locked
+                                    ? Colors.white24
+                                    : _diffColor(stage.difficultyLabel),
+                                fontSize: 7,
+                                fontWeight: FontWeight.w800)),
                       ),
                     ]),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(stage.name,
-                      style: GoogleFonts.rajdhani(
-                        color: locked ? Colors.white24 : Colors.white,
-                        fontSize: 16, fontWeight: FontWeight.w800)),
+                        style: GoogleFonts.rajdhani(
+                            color: locked
+                                ? Colors.white24
+                                : Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800)),
                     Text(stage.description,
-                      style: TextStyle(
-                        color: locked ? Colors.white12 : Colors.white38,
-                        fontSize: 11),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                        style: TextStyle(
+                            color: locked
+                                ? Colors.white12
+                                : Colors.white38,
+                            fontSize: 10),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -210,25 +285,27 @@ class _StageCard extends StatelessWidget {
               // Status + reward
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (done)
                     const Icon(Icons.check_circle,
-                        color: Color(0xFF44FF88), size: 22)
+                        color: Color(0xFF44FF88), size: 18)
                   else if (isCurrent)
                     const Icon(Icons.play_circle_fill,
-                        color: AppColors.primary, size: 22)
+                        color: AppColors.primary, size: 18)
                   else if (locked)
                     const Icon(Icons.lock_outline,
-                        color: Colors.white24, size: 18),
+                        color: Colors.white24, size: 16),
                   const SizedBox(height: 4),
                   Text('💎 ${stage.crystalReward}',
-                    style: TextStyle(
-                      color: locked
-                          ? Colors.white24
-                          : done
-                              ? Colors.white38
-                              : const Color(0xFF44BBFF),
-                      fontSize: 11, fontWeight: FontWeight.w700)),
+                      style: TextStyle(
+                          color: locked
+                              ? Colors.white24
+                              : done
+                                  ? Colors.white38
+                                  : const Color(0xFF44BBFF),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700)),
                 ],
               ),
             ]),

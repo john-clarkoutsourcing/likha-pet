@@ -1,42 +1,36 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter/services.dart';
 import 'package:likha_pet_battle_engine/trait.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../data/creature_registry.dart';
 import '../services/likha_mixer.dart';
 import '../widgets/pet_composite_widget.dart';
 import '../../pets/models/owned_pet.dart';
-import 'pet_renderer_iframe_stub.dart'
-    if (dart.library.html) 'pet_renderer_iframe_web.dart' as iframe;
 
 // ── PetRendererWidget ─────────────────────────────────────────────────────────
 //
-// Mobile (iOS/Android): uses WebView to load localhost:3001/render
-// Web (Chrome):         uses HtmlElementView (<iframe>) to embed the same URL
+// Renders a pet using the bundled Pixi.js + pixi-spine + @axieinfinity/mixer
+// renderer loaded as a Flutter asset (assets/renderer/renderer.html).
 //
-// Both paths use @axieinfinity/mixer + Pixi.js + pixi-spine to render a fully
-// animated Axie assembled from the pet's actual parts.
+// Readiness detection uses two strategies:
+//   1. RendererReady JS channel (fast path, fires when mixer init completes)
+//   2. Polling via runJavaScriptReturningResult every 800ms (fallback)
 //
-// Requires the pet-renderer Next.js service running on port 3001.
-
-const _kRendererBase = 'http://localhost:3001';
-
-// Tracks view IDs already registered so we never double-register.
-final _registeredWebViews = <String>{};
+// Both check window._mixerReady which is set by standalone.js after initMixer().
 
 class PetRendererWidget extends StatefulWidget {
   final CreatureDefinition def;
   final double size;
   final bool flipHorizontal;
   final String animation;
-  final bool transparent;
 
-  /// [figScale] — Pixi figure scale. Null = auto-calculate from [size].
-  ///   Auto formula: size/1400, clamped 0.07–0.22.
-  ///   Explicit override useful for non-square containers.
-  /// [scaleMult] — Additional multiplier applied to figScale (default 1.0).
-  ///   Use to shrink oversized skeletons (e.g., 0.1 for 10% of default size).
-  /// [yOff] — figure Y anchor as fraction of canvas height (0.72 default).
+  /// figScale — Pixi figure scale within the 400×400 internal canvas.
+  /// Default 0.22 fills ~66% of the internal canvas height.
+  /// The canvas is CSS-scaled to [size] for display, so this value is
+  /// independent of display size — change it only to make the pet larger/smaller.
   final double? figScale;
   final double scaleMult;
   final double yOff;
@@ -44,28 +38,24 @@ class PetRendererWidget extends StatefulWidget {
   const PetRendererWidget({
     super.key,
     required this.def,
-    this.size           = 200,
+    this.size          = 200,
     this.flipHorizontal = false,
-    this.animation      = 'action/idle/normal',
-    this.transparent    = true,
-    this.figScale,          // null = auto
-    this.scaleMult      = 1.0,
-    this.yOff           = 0.72,
+    this.animation     = 'action/idle/normal',
+    this.figScale,
+    this.scaleMult     = 1.0,
+    this.yOff          = 0.80,
   });
 
-  /// Auto-calculated scale so the figure fits inside the canvas.
-  /// Axie figures look correct at 0.18 on a ~400px canvas → divisor ≈ 2200.
-  /// When figScale is explicitly set, use it directly (no clamping).
-  double get _effectiveScale =>
-      (figScale ?? (size / 2200).clamp(0.05, 0.16));
+  // Fixed scale for the 400px internal canvas — display-size-independent.
+  double get _effectiveScale => figScale ?? 0.22;
 
   static PetRendererWidget fromOwned(
     OwnedPet pet, {
-    double size          = 200,
-    bool flipHorizontal  = false,
-    String animation     = 'action/idle/normal',
+    double size         = 200,
+    bool flipHorizontal = false,
+    String animation    = 'action/idle/normal',
     double? figScale,
-    double yOff          = 0.72,
+    double yOff         = 0.80,
   }) =>
       PetRendererWidget(
         def:            pet.toCreatureDefinition(),
@@ -80,98 +70,232 @@ class PetRendererWidget extends StatefulWidget {
   State<PetRendererWidget> createState() => _PetRendererWidgetState();
 }
 
+/// Cached renderer HTML loaded once per app session.
+String? _cachedRendererHtml;
+
 class _PetRendererWidgetState extends State<PetRendererWidget> {
   WebViewController? _ctrl;
-  bool _ready = false;
-  String? _webViewId;
+  bool _pageReady   = false;   // page fully loaded
+  bool _renderSent  = false;   // render params sent at least once
+  Timer? _pollTimer;
+  String _rendererHtml = '';
 
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      _setupWebIframe();
-    } else {
-      _initCtrl();
-    }
+    if (!kIsWeb) _loadAndInit();
   }
 
-  void _setupWebIframe() {
-    final url = _buildUrl();
-    final viewId = 'pet-renderer-${url.hashCode.abs()}';
-    if (!_registeredWebViews.contains(viewId)) {
-      _registeredWebViews.add(viewId);
-      iframe.registerIFrameFactory(viewId, url);
-    }
-    setState(() => _webViewId = viewId);
+  Future<void> _loadAndInit() async {
+    _cachedRendererHtml ??= await rootBundle.loadString('assets/renderer/renderer.html');
+    if (!mounted) return;
+    setState(() => _rendererHtml = _cachedRendererHtml!);
+    _initCtrl();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   void _initCtrl() {
     _ctrl = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent)
+      // Fast path: JS notifies Flutter when mixer is ready.
+      ..addJavaScriptChannel(
+        'RendererReady',
+        onMessageReceived: (msg) {
+          if (!mounted) return;
+          _pollTimer?.cancel();
+          if (msg.message.startsWith('error:')) {
+            debugPrint('[WebView] RendererReady error: ${msg.message}');
+            return;
+          }
+          _onMixerReady();
+        },
+      )
+      ..addJavaScriptChannel(
+        'FlutterLog',
+        onMessageReceived: (msg) => debugPrint('[WebView] ${msg.message}'),
+      )
       ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (_) => setState(() => _ready = true),
+        onWebResourceError: (e) =>
+            debugPrint('[WebView] Resource error: ${e.description}'),
+        onPageFinished: (url) {
+          debugPrint('[WebView] Page loaded: $url');
+          if (!mounted) return;
+          // Start polling in case JS channels don't fire.
+          _startPolling();
+        },
       ))
-      ..loadRequest(Uri.parse(_buildUrl()));
+      ..loadHtmlString(
+        // Load as HTML string (not file://) so the browser gives the page
+        // a non-file origin, which fixes transparent WebGL compositing on
+        // iOS WKWebView. All textures are injected as base64 data: URLs so
+        // no file-system access is needed.
+        _rendererHtml,
+      );
+  }
+
+  void _onMixerReady() {
+    if (!mounted) return;
+    if (!_pageReady) {
+      _pageReady = true;
+      setState(() {});
+    }
+    if (!_renderSent) {
+      _renderSent = true;
+      _injectTexturesAndRender();
+    }
+  }
+
+  Future<void> _injectTexturesAndRender() async {
+    if (!mounted || _ctrl == null) return;
+    try {
+      final textures = await _preloadTextures(widget.def);
+      if (!mounted) return;
+      if (textures.isNotEmpty) {
+        final json = jsonEncode(textures);
+        await _ctrl!.runJavaScript('window.preloadedTextures = $json;');
+        debugPrint('[WebView] Injected ${textures.length} preloaded textures');
+      }
+    } catch (e) {
+      debugPrint('[WebView] Texture preload error: $e');
+    }
+    if (!mounted) return;
+    _ctrl!.runJavaScript(_buildRenderCall());
+  }
+
+  /// Loads PNG textures needed to render this specific pet from Flutter assets.
+  /// Returns base64 data URLs keyed by relative path within the mixer-stuffs dir.
+  ///
+  /// Loads:
+  ///  • body-normal — shared body skeleton
+  ///  • All 6 variants of the body class — for consistent ear/eyes rendering
+  ///  • The specific variant folder for each part (horn/back/tail/mouth)
+  ///    so hybrid pets with cross-class parts render correctly
+  Future<Map<String, String>> _preloadTextures(CreatureDefinition def) async {
+    const prefix = 'assets/renderer/mixer-stuffs/v3/';
+
+    // All variant directories needed for this pet
+    final neededDirs = <String>{
+      'body-normal',
+      // All 6 variants of the body class (for ears, eyes, and body-specific anims)
+      for (final v in ['02', '04', '06', '08', '10', '12'])
+        '${def.bodyClass.name}-$v',
+      // Specific variant for each part — critical for hybrid/cross-class parts
+      LikhaMixer.sampleFromCardArt(def.horn.cardArtPath),
+      LikhaMixer.sampleFromCardArt(def.back.cardArtPath),
+      LikhaMixer.sampleFromCardArt(def.tail.cardArtPath),
+      LikhaMixer.sampleFromCardArt(def.mouth.cardArtPath),
+    };
+
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final all = manifest.listAssets();
+    final result = <String, String>{};
+
+    for (final asset in all) {
+      if (!asset.startsWith(prefix) || !asset.endsWith('.png')) continue;
+      final relPath = asset.substring(prefix.length); // e.g. "beast-04/back.png"
+      final dir = relPath.split('/').first;
+      if (!neededDirs.contains(dir)) continue;
+      try {
+        final data = await rootBundle.load(asset);
+        final b64 = base64Encode(data.buffer.asUint8List());
+        result[relPath] = 'data:image/png;base64,$b64';
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    int attempts = 0;
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 800), (timer) async {
+      if (!mounted) { timer.cancel(); return; }
+      attempts++;
+      if (attempts > 30) {
+        // 24s timeout — give up
+        timer.cancel();
+        debugPrint('[WebView] Poll timeout — renderer not ready after 24s');
+        if (!_pageReady) { _pageReady = true; setState(() {}); }
+        return;
+      }
+      try {
+        final result = await _ctrl!.runJavaScriptReturningResult(
+          'window._mixerReady === true ? "ready" : (window._renderError ? "error:" + window._renderError : "wait")',
+        );
+        final r = result.toString().replaceAll('"', '');
+        if (r == 'ready') {
+          timer.cancel();
+          debugPrint('[WebView] Poll: mixer ready (attempt $attempts)');
+          _onMixerReady();
+        } else if (r.startsWith('error:')) {
+          timer.cancel();
+          debugPrint('[WebView] Poll: render error: $r');
+          if (!_pageReady) { _pageReady = true; setState(() {}); }
+        }
+        // else "wait" — keep polling
+      } catch (e) {
+        debugPrint('[WebView] Poll error: $e');
+      }
+    });
   }
 
   @override
   void didUpdateWidget(PetRendererWidget old) {
     super.didUpdateWidget(old);
-    if (kIsWeb) {
-      if (_urlChanged(old)) _setupWebIframe();
-      return;
-    }
-    if (_ctrl == null) return;
-    if (_urlChanged(old)) {
-      setState(() => _ready = false);
-      _ctrl!.loadRequest(Uri.parse(_buildUrl()));
+    if (kIsWeb || _ctrl == null || !_pageReady) return;
+
+    final partsChanged =
+        old.def.horn.id != widget.def.horn.id ||
+        old.def.back.id != widget.def.back.id ||
+        old.def.tail.id != widget.def.tail.id ||
+        old.def.mouth.id != widget.def.mouth.id ||
+        old.def.bodyClass != widget.def.bodyClass;
+
+    if (partsChanged || old._effectiveScale != widget._effectiveScale || old.yOff != widget.yOff) {
+      _renderSent = false;
+      _onMixerReady();
     } else if (old.animation != widget.animation) {
-      _ctrl!.runJavaScript("window.playAnimation('${widget.animation}', true)");
+      // One-shot animations (hit, attack, buff, etc.) play once then auto-return
+      // to idle. Only idle/random variants loop continuously.
+      final loop = _isLooping(widget.animation);
+      _ctrl!.runJavaScript(
+          "window.LikhaPetRenderer.playAnimation('${widget.animation}', $loop)");
     }
   }
 
-  bool _urlChanged(PetRendererWidget old) =>
-      old.def.id != widget.def.id ||
-      old.def.horn.id != widget.def.horn.id ||
-      old.def.back.id != widget.def.back.id ||
-      old.def.tail.id != widget.def.tail.id ||
-      old.def.mouth.id != widget.def.mouth.id ||
-      old._effectiveScale != widget._effectiveScale ||
-      old.yOff != widget.yOff;
-
-  String _buildUrl() {
-    final def = widget.def;
-    final horn = LikhaMixer.sampleFromCardArt(def.horn.cardArtPath);
-    final back = LikhaMixer.sampleFromCardArt(def.back.cardArtPath);
-    final tail = LikhaMixer.sampleFromCardArt(def.tail.cardArtPath);
+  String _buildRenderCall() {
+    final def  = widget.def;
+    final horn  = LikhaMixer.sampleFromCardArt(def.horn.cardArtPath);
+    final back  = LikhaMixer.sampleFromCardArt(def.back.cardArtPath);
+    final tail  = LikhaMixer.sampleFromCardArt(def.tail.cardArtPath);
     final mouth = LikhaMixer.sampleFromCardArt(def.mouth.cardArtPath);
-    
+
     final params = {
-      'bodyId':   '4',  // Use bodyValue=4 which maps to beast-04 skeleton
-      'body':     'body-normal',
-      'horn':     horn,
-      'back':     back,
-      'tail':     tail,
-      'mouth':    mouth,
-      'ears':     '${def.bodyClass.name}-04',
-      'eyes':     '${def.bodyClass.name}-04',
-      'colorIdx': _colorIdxFor(def.bodyClass).toString(),
-      'anim':     widget.animation,
-      'figScale': widget._effectiveScale.toStringAsFixed(3),
-      'scaleMult': widget.scaleMult.toStringAsFixed(3),
-      'yOff':     widget.yOff.toStringAsFixed(3),
-      'cw':       widget.size.toInt().toString(),
-      'ch':       widget.size.toInt().toString(),
+      'body':      'body-normal',
+      'horn':      horn,
+      'back':      back,
+      'tail':      tail,
+      'mouth':     mouth,
+      'ears':      '${def.bodyClass.name}-04',
+      'eyes':      '${def.bodyClass.name}-04',
+      'colorIdx':  _colorIdxFor(def.bodyClass),
+      'anim':      widget.animation,
+      'figScale':  double.parse(widget._effectiveScale.toStringAsFixed(3)),
+      'scaleMult': double.parse(widget.scaleMult.toStringAsFixed(3)),
+      'yOff':      double.parse(widget.yOff.toStringAsFixed(3)),
+      'width':     widget.size.toInt(),
+      'height':    widget.size.toInt(),
     };
-    final query = params.entries
-        .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
-        .join('&');
-    final url = '$_kRendererBase/render?$query';
-    print('[PetRenderer] Parts: horn=$horn back=$back tail=$tail mouth=$mouth');
-    print('[PetRenderer] figScale=${widget._effectiveScale} scaleMult=${widget.scaleMult} size=${widget.size}');
-    print('[PetRenderer] URL: $url');
-    return url;
+
+    debugPrint('[WebView] Sending render: horn=$horn back=$back tail=$tail mouth=$mouth '
+        'colorIdx=${params["colorIdx"]} figScale=${params["figScale"]}');
+    final json = jsonEncode(params);
+    return 'window.LikhaPetRenderer.render($json)';
   }
 
   static int _colorIdxFor(CreatureClass cls) => switch (cls) {
@@ -185,22 +309,7 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // ── Web: HtmlElementView iframe ──────────────────────────────────────
-    if (kIsWeb) {
-      if (_webViewId == null) return _fallback();
-      Widget view = iframe.buildIFrameView(_webViewId!, widget.size);
-      if (widget.flipHorizontal) {
-        view = Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.diagonal3Values(-1, 1, 1),
-          child: view,
-        );
-      }
-      return view;
-    }
-
-    // ── Native: WebView ──────────────────────────────────────────────────
-    if (_ctrl == null) return _fallback();
+    if (kIsWeb || _ctrl == null) return _fallback();
 
     Widget view = WebViewWidget(controller: _ctrl!);
     if (widget.flipHorizontal) {
@@ -216,12 +325,17 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       height: widget.size,
       child: Stack(fit: StackFit.expand, children: [
         view,
-        if (!_ready)
+        if (!_pageReady)
           const Center(child: CircularProgressIndicator(
               strokeWidth: 2, color: Colors.white38)),
       ]),
     );
   }
+
+  /// Only idle and random-idle animations should loop.
+  /// Attack, hit, buff, debuff, heal, shield, move, faint all play once.
+  static bool _isLooping(String anim) =>
+      anim.startsWith('action/idle') || anim.startsWith('action/mix');
 
   Widget _fallback() => PetCompositeWidget(
     def:  widget.def,

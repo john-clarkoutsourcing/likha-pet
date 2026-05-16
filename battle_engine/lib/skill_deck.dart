@@ -6,7 +6,7 @@ import 'skill_card.dart';
 /// (team size × traits per pet × 2 copies).
 ///
 /// Draw mechanics:
-///   - Draw 3 cards per turn into a shared hand (max 6 cards).
+///   - Draw 3 cards per turn into a shared hand (max 12 cards).
 ///   - If the hand is full before drawing, the oldest card is auto-discarded.
 ///   - When the draw pile empties, the discard pile is reshuffled into a new draw pile.
 ///   - Cards stay in hand until played or overflowed.
@@ -23,7 +23,7 @@ class SkillDeck {
   final List<SkillCard> _hand    = [];
   final List<SkillCard> _discard = [];
 
-  static const int kHandLimit   = 10; // player manually discards when exceeded
+  static const int kHandLimit   = 12; // player manually discards when exceeded
   static const int kDrawPerTurn = 3;  // per round after the initial deal
 
   SkillDeck.fromTeam(List<Pet> pets, {required int seed}) {

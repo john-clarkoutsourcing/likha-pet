@@ -76,13 +76,11 @@ class PetRevealSheet extends StatelessWidget {
           ),
           borderRadius: const BorderRadius.only(topLeft: Radius.circular(20)),
         ),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          PetRendererWidget(
-            def: def,
-            size: 400,
-            scaleMult: 0.15,
-            yOff: 0.65,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+          PetRendererWidget(def: def, size: petSize * 0.85),
           const SizedBox(height: 8),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             _ClassBadge(cls: body.bodyClass, color: bodyColor),
@@ -194,12 +192,7 @@ class PetRevealSheet extends StatelessWidget {
           ),
           clipBehavior: Clip.antiAlias,
           child: Center(
-            child: PetRendererWidget(
-              def: def,
-              size: 400,
-              scaleMult: 0.15,
-              yOff: 0.65,
-            ),
+            child: PetRendererWidget(def: def, size: 400),
           ),
         ),
 

@@ -4,18 +4,60 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:likha_pet_battle_engine/trait.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../battle/data/creature_registry.dart';
+import '../../battle/data/trait_card_catalog.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 Color _clsColor(String cls) => switch (cls) {
-  'plant'   => const Color(0xFF4CAF50),
-  'aquatic' => const Color(0xFF29B6F6),
-  'beast'   => const Color(0xFFFF9800),
-  'reptile' => const Color(0xFF66BB6A),
-  'bird'    => const Color(0xFFFF80AB),
-  'bug'     => const Color(0xFFFF5252),
-  _         => const Color(0xFF9C27B0),
-};
+      'plant' => const Color(0xFF4CAF50),
+      'aquatic' => const Color(0xFF29B6F6),
+      'beast' => const Color(0xFFFF9800),
+      'reptile' => const Color(0xFF66BB6A),
+      'bird' => const Color(0xFFFF80AB),
+      'bug' => const Color(0xFFFF5252),
+      'curse' => const Color(0xFF9C27B0),
+      'others' => const Color(0xFF9E9E9E),
+      'tool' => const Color(0xFF795548),
+      _ => const Color(0xFF9C27B0),
+    };
+
+String _titleCase(String s) => s
+    .split(' ')
+    .map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1))
+    .join(' ');
+
+/// A catalog entry built from a card-template PNG file + Origins card data.
+class _CardEntry {
+  final String templatePath;
+  final String cls;
+  final String name;
+
+  // Origins card stats (always available for all 205 cards)
+  final int energy;
+  final int attack;
+  final int defense;
+  final int healing;
+  final String abilityType;
+  final String partType;
+  final String description;
+
+  // Engine trait — only present for ~24 battle-mapped cards
+  final Trait? trait;
+
+  const _CardEntry({
+    required this.templatePath,
+    required this.cls,
+    required this.name,
+    required this.energy,
+    required this.attack,
+    required this.defense,
+    required this.healing,
+    required this.abilityType,
+    required this.partType,
+    required this.description,
+    this.trait,
+  });
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -30,132 +72,193 @@ class _LibraryScreenState extends State<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   String _filterClass = 'all';
-  String _filterSlot  = 'all';
+  List<_CardEntry> _cards = [];
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
     _tabs.addListener(() => setState(() {}));
+    _loadCards();
+  }
+
+  void _loadCards() {
+    final entries = TraitCardCatalog.build()
+        .map(
+          (e) => _CardEntry(
+            templatePath: e.templatePath,
+            cls: e.cardClass,
+            name: _titleCase(e.imageName),
+            energy: e.card.energy,
+            attack: e.card.attack,
+            defense: e.card.defense,
+            healing: e.card.healing,
+            abilityType: e.card.abilityType,
+            partType: e.card.partType,
+            description: e.card.description,
+            trait: e.trait,
+          ),
+        )
+        .toList(growable: false);
+    if (mounted) {
+      setState(() {
+        _cards = entries;
+        _loading = false;
+      });
+    }
   }
 
   @override
-  void dispose() { _tabs.dispose(); super.dispose(); }
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  List<_CardEntry> get _filteredCards {
+    if (_filterClass == 'all') return _cards;
+    return _cards.where((c) => c.cls == _filterClass).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Column(children: [
-          // ── Header ──────────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 16, 0),
-            child: Row(children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                onPressed: () => context.pop(),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Left panel: header + tabs + filters ───────────────────────
+            SizedBox(
+              width: 168,
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(right: BorderSide(color: Color(0xFF1A1F35))),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      child: Row(children: [
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.arrow_back,
+                              color: Colors.white54, size: 18),
+                          onPressed: () => context.pop(),
+                        ),
+                        const SizedBox(width: 4),
+                        Text('Library',
+                            style: GoogleFonts.rajdhani(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800)),
+                      ]),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Tabs
+                    TabBar(
+                      controller: _tabs,
+                      indicatorColor: AppColors.primary,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white38,
+                      labelStyle: GoogleFonts.rajdhani(
+                          fontSize: 11, fontWeight: FontWeight.w800),
+                      tabs: const [
+                        Tab(text: 'SKILLS'),
+                        Tab(text: 'CLASSES'),
+                      ],
+                    ),
+
+                    const Divider(height: 1, color: Color(0xFF1A1F35)),
+                    const SizedBox(height: 8),
+
+                    // Class filters (only on SKILLS tab)
+                    if (_tabs.index == 0) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text('CLASS',
+                            style: const TextStyle(
+                                color: Colors.white24,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1)),
+                      ),
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            _Chip('All', _filterClass == 'all',
+                                () => setState(() => _filterClass = 'all')),
+                            for (final cls in [
+                              'beast',
+                              'plant',
+                              'aquatic',
+                              'reptile',
+                              'bird',
+                              'bug',
+                            ])
+                              _Chip(
+                                cls[0].toUpperCase() + cls.substring(1),
+                                _filterClass == cls,
+                                () => setState(() => _filterClass = cls),
+                                color: _clsColor(cls),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Count
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                            _loading
+                                ? 'Loading…'
+                                : '${_filteredCards.length} cards',
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 10)),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              Text('Catalogue',
-                style: GoogleFonts.rajdhani(
-                  color: Colors.white, fontSize: 22,
-                  fontWeight: FontWeight.w800)),
-              const Spacer(),
-              Text(
-                '${kBodyCatalogue.length} bodies  ·  ${kPartCatalogue.length} parts',
-                style: const TextStyle(color: Colors.white38, fontSize: 11)),
-            ]),
-          ),
-
-          // ── Tabs ─────────────────────────────────────────────────────────────
-          TabBar(
-            controller: _tabs,
-            indicatorColor: AppColors.primary,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white38,
-            labelStyle: GoogleFonts.rajdhani(
-                fontSize: 14, fontWeight: FontWeight.w800),
-            tabs: const [
-              Tab(text: 'BODIES'),
-              Tab(text: 'PARTS'),
-            ],
-          ),
-
-          // ── Filters for Parts tab ─────────────────────────────────────────
-          if (_tabs.index == 1)
-            _Filters(
-              filterClass: _filterClass,
-              filterSlot:  _filterSlot,
-              onClassChanged: (v) => setState(() => _filterClass = v),
-              onSlotChanged:  (v) => setState(() => _filterSlot  = v),
             ),
 
-          // ── Content ────────────────────────────────────────────────────────
-          Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: [
-                _BodiesTab(),
-                _PartsTab(filterClass: _filterClass, filterSlot: _filterSlot),
-              ],
+            // ── Right panel: grid ─────────────────────────────────────────
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child:
+                          CircularProgressIndicator(color: AppColors.primary))
+                  : TabBarView(
+                      controller: _tabs,
+                      children: [
+                        _SkillsGrid(cards: _filteredCards),
+                        _ClassesGrid(),
+                      ],
+                    ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Filters ───────────────────────────────────────────────────────────────────
+// ── Filter chip ───────────────────────────────────────────────────────────────
 
-class _Filters extends StatelessWidget {
-  final String filterClass, filterSlot;
-  final ValueChanged<String> onClassChanged, onSlotChanged;
-  const _Filters({
-    required this.filterClass, required this.filterSlot,
-    required this.onClassChanged, required this.onSlotChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Row(children: [
-        _FilterChip('All', filterClass == 'all', () => onClassChanged('all')),
-        const SizedBox(width: 4),
-        for (final cls in ['beast','plant','aquatic','reptile','bird','bug'])
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: _FilterChip(
-              cls[0].toUpperCase() + cls.substring(1),
-              filterClass == cls,
-              () => onClassChanged(cls),
-              color: _clsColor(cls),
-            ),
-          ),
-        const Spacer(),
-        _FilterChip('All', filterSlot == 'all', () => onSlotChanged('all')),
-        const SizedBox(width: 4),
-        for (final slot in ['horn','back','tail','mouth'])
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: _FilterChip(
-              slot[0].toUpperCase(),
-              filterSlot == slot,
-              () => onSlotChanged(slot),
-            ),
-          ),
-      ]),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
+class _Chip extends StatelessWidget {
   final String label;
-  final bool   active;
+  final bool active;
   final VoidCallback onTap;
   final Color? color;
-  const _FilterChip(this.label, this.active, this.onTap, {this.color});
+  const _Chip(this.label, this.active, this.onTap, {this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -163,120 +266,353 @@ class _FilterChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        duration: const Duration(milliseconds: 130),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: BoxDecoration(
-          color: active ? c.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(6),
+          color: active
+              ? c.withValues(alpha: 0.2)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(5),
           border: Border.all(
-            color: active ? c.withValues(alpha: 0.7) : Colors.white12,
-          ),
+              color: active ? c.withValues(alpha: 0.7) : Colors.white12),
         ),
         child: Text(label,
-          style: TextStyle(
-            color: active ? c : Colors.white38,
-            fontSize: 10, fontWeight: FontWeight.w700)),
+            style: TextStyle(
+                color: active ? c : Colors.white38,
+                fontSize: 9,
+                fontWeight: FontWeight.w700)),
       ),
     );
   }
 }
 
-// ── Bodies tab ────────────────────────────────────────────────────────────────
+// ── Skills grid ───────────────────────────────────────────────────────────────
 
-class _BodiesTab extends StatelessWidget {
+class _SkillsGrid extends StatelessWidget {
+  final List<_CardEntry> cards;
+  const _SkillsGrid({required this.cards});
+
+  @override
+  Widget build(BuildContext context) {
+    if (cards.isEmpty) {
+      return const Center(
+          child: Text('No cards', style: TextStyle(color: Colors.white38)));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(10),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 5,
+        childAspectRatio: 0.72,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+      ),
+      itemCount: cards.length,
+      itemBuilder: (_, i) => _SkillCard(entry: cards[i]),
+    );
+  }
+}
+
+class _SkillCard extends StatelessWidget {
+  final _CardEntry entry;
+  const _SkillCard({required this.entry});
+
+  void _showDetail(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _SkillDetailDialog(entry: entry),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _clsColor(entry.cls);
+
+    return GestureDetector(
+      onTap: () => _showDetail(context),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Image.asset(
+          entry.templatePath,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            color: color.withValues(alpha: 0.1),
+            child: Center(
+              child: Text(entry.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white54, fontSize: 8)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Skill detail dialog ───────────────────────────────────────────────────────
+
+class _SkillDetailDialog extends StatelessWidget {
+  final _CardEntry entry;
+  const _SkillDetailDialog({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _clsColor(entry.cls);
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Large card image ────────────────────────────────────────────
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              width: 200,
+              child: Image.asset(
+                entry.templatePath,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 200,
+                  height: 272,
+                  color: color.withValues(alpha: 0.15),
+                  child: Center(
+                    child: Text(entry.name,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 14)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          // ── Info panel ──────────────────────────────────────────────────
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: color.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Class badge
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: color.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      entry.cls[0].toUpperCase() + entry.cls.substring(1),
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Card name
+                  Text(entry.name,
+                      style: GoogleFonts.rajdhani(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900)),
+
+                  const SizedBox(height: 6),
+                  // Energy cost
+                  Row(children: [
+                    const Text('Energy  ',
+                        style: TextStyle(color: Colors.white38, fontSize: 11)),
+                    if (entry.energy == 0)
+                      const Text('Free',
+                          style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic))
+                    else
+                      ...List.generate(
+                        entry.energy,
+                        (_) => Container(
+                          width: 10,
+                          height: 10,
+                          margin: const EdgeInsets.only(right: 3),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFF4FC3F7),
+                          ),
+                        ),
+                      ),
+                  ]),
+                  const SizedBox(height: 6),
+                  // Ability type + part
+                  Text(
+                    '${entry.abilityType.toUpperCase()}  ·  ${entry.partType.toUpperCase()}',
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+
+                  // Stats row (attack / defense / healing)
+                  if (entry.attack > 0 || entry.defense > 0 || entry.healing > 0) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 10, children: [
+                      if (entry.attack > 0)
+                        _StatChip(label: 'ATK', value: entry.attack, color: Colors.redAccent),
+                      if (entry.defense > 0)
+                        _StatChip(label: 'DEF', value: entry.defense, color: Colors.blueAccent),
+                      if (entry.healing > 0)
+                        _StatChip(label: 'HEAL', value: entry.healing, color: Colors.greenAccent),
+                    ]),
+                  ],
+
+                  const SizedBox(height: 8),
+                  // Description
+                  Text(
+                    entry.description.isEmpty
+                        ? 'No description available.'
+                        : entry.description,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+                  // Close
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.06),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Close',
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Classes grid ──────────────────────────────────────────────────────────────
+
+class _ClassesGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bodies = kBodyCatalogue.values.toList();
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.85,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
+        crossAxisCount: 3,
+        childAspectRatio: 1.05,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: bodies.length,
-      itemBuilder: (_, i) => _BodyCard(body: bodies[i]),
+      itemBuilder: (_, i) => _ClassCard(body: bodies[i]),
     );
   }
 }
 
-class _BodyCard extends StatelessWidget {
+class _ClassCard extends StatelessWidget {
   final BodyDefinition body;
-  const _BodyCard({required this.body});
+  const _ClassCard({required this.body});
 
   @override
   Widget build(BuildContext context) {
-    final cls    = body.className;
-    final color  = _clsColor(cls);
-    final base   = body.bodyClass.baseBodyStats;
-    final bonusPerPart = body.bodyClass.partStatBonus;
+    final cls = body.className;
+    final color = _clsColor(cls);
+    final base = body.bodyClass.baseBodyStats;
+    final bonus = body.bodyClass.partStatBonus;
 
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF111A28),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Column(children: [
-        // Icon area
+        // Icon + gradient header
         Expanded(
-          child: Stack(children: [
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(13)),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [
-                      color.withValues(alpha: 0.25),
-                      color.withValues(alpha: 0.08),
-                    ],
-                  ),
+          flex: 3,
+          child: Stack(fit: StackFit.expand, children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(13)),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    color.withValues(alpha: 0.3),
+                    color.withValues(alpha: 0.08),
+                  ],
                 ),
               ),
             ),
             Center(
               child: Image.asset(
                 'assets/images/icons/$cls.png',
-                width: 64, height: 64,
-                errorBuilder: (_, __, ___) =>
-                    Icon(Icons.pets, size: 48,
-                        color: color.withValues(alpha: 0.5)),
+                width: 52,
+                height: 52,
+                errorBuilder: (_, __, ___) => Icon(Icons.pets,
+                    size: 40, color: color.withValues(alpha: 0.5)),
               ),
+            ),
+            Positioned(
+              top: 6,
+              left: 8,
+              child: Text(body.bodyClass.displayName,
+                  style: TextStyle(
+                      color: color, fontSize: 11, fontWeight: FontWeight.w900)),
             ),
           ]),
         ),
-        // Info
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Text(body.name,
-                  style: GoogleFonts.rajdhani(
-                    color: Colors.white, fontSize: 13,
-                    fontWeight: FontWeight.w800),
-                  overflow: TextOverflow.ellipsis),
-                const Spacer(),
-                Text(body.bodyClass.displayName,
-                  style: TextStyle(
-                    color: color, fontSize: 9,
-                    fontWeight: FontWeight.w700)),
-              ]),
-              const SizedBox(height: 5),
-              // Base stats
-              _StatLine('❤ HP', '${base.hp}', const Color(0xFF66FF88)),
-              _StatLine('⚡ SPD', '${base.speed}', const Color(0xFFFFCC44)),
-              _StatLine('🏅 SKL', '${base.skill}', const Color(0xFF88CCFF)),
-              _StatLine('🔥 MOR', '${base.morale}', const Color(0xFFFF9944)),
-              const SizedBox(height: 4),
-              Text('Per part: +HP${bonusPerPart.hp} +SPD${bonusPerPart.speed}'
-                  ' +MOR${bonusPerPart.morale}',
-                style: const TextStyle(color: Colors.white24, fontSize: 8)),
-            ],
+
+        // Stats
+        Expanded(
+          flex: 2,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 2, 8, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Row('❤', '${base.hp}', const Color(0xFF66FF88)),
+                _Row('⚡', '${base.speed}', const Color(0xFFFFCC44)),
+                _Row('🏅', '${base.skill}', const Color(0xFF88CCFF)),
+                _Row('🔥', '${base.morale}', const Color(0xFFFF9944)),
+                Text('+${bonus.hp}HP/part',
+                    style: const TextStyle(color: Colors.white24, fontSize: 7)),
+              ],
+            ),
           ),
         ),
       ]),
@@ -284,168 +620,39 @@ class _BodyCard extends StatelessWidget {
   }
 }
 
-class _StatLine extends StatelessWidget {
-  final String label, value;
+class _Row extends StatelessWidget {
+  final String icon, value;
   final Color color;
-  const _StatLine(this.label, this.value, this.color);
+  const _Row(this.icon, this.value, this.color);
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 1),
-    child: Row(children: [
-      Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9)),
-      const Spacer(),
-      Text(value,
-        style: TextStyle(color: color, fontSize: 9,
-            fontWeight: FontWeight.w700)),
-    ]),
-  );
+  Widget build(BuildContext context) => Row(
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 8)),
+          const SizedBox(width: 3),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontSize: 9, fontWeight: FontWeight.w700)),
+        ],
+      );
 }
 
-// ── Parts tab ─────────────────────────────────────────────────────────────────
-
-class _PartsTab extends StatelessWidget {
-  final String filterClass, filterSlot;
-  const _PartsTab({required this.filterClass, required this.filterSlot});
-
-  @override
-  Widget build(BuildContext context) {
-    var parts = kPartCatalogue.values.toList();
-    if (filterClass != 'all') {
-      parts = parts.where((p) => p.className == filterClass).toList();
-    }
-    if (filterSlot != 'all') {
-      parts = parts.where((p) => p.partType == filterSlot).toList();
-    }
-    // Sort: by class, then slot
-    parts.sort((a, b) {
-      final cls = a.className.compareTo(b.className);
-      if (cls != 0) return cls;
-      return a.partType.compareTo(b.partType);
-    });
-
-    if (parts.isEmpty) {
-      return Center(
-        child: Text('No parts match this filter',
-          style: const TextStyle(color: Colors.white38)));
-    }
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.62,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-      ),
-      itemCount: parts.length,
-      itemBuilder: (_, i) => _PartCard(part: parts[i]),
-    );
-  }
-}
-
-class _PartCard extends StatelessWidget {
-  final PartDefinition part;
-  const _PartCard({required this.part});
+class _StatChip extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+  const _StatChip({required this.label, required this.value, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    final color = _clsColor(part.className);
-    final trait = part.buildTrait();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(fit: StackFit.expand, children: [
-        // Card art
-        Image.asset(part.cardArtPath, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: color.withValues(alpha: 0.1))),
-
-        // Top gradient
-        Positioned(
-          top: 0, left: 0, right: 0, height: 40,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [Colors.black87, Colors.transparent]),
-            ),
-          ),
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
-
-        // Bottom gradient
-        Positioned(
-          bottom: 0, left: 0, right: 0, height: 70,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                colors: [Colors.black, Colors.transparent]),
-            ),
-          ),
-        ),
-
-        // Class + slot badge
-        Positioned(
-          top: 5, left: 5,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.25),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: color.withValues(alpha: 0.6)),
-            ),
-            child: Text(
-              '${part.className[0].toUpperCase()}  ${part.partType.toUpperCase()}',
-              style: TextStyle(color: color, fontSize: 7,
-                  fontWeight: FontWeight.w900, letterSpacing: 0.5)),
-          ),
-        ),
-
-        // Energy cost
-        Positioned(
-          top: 5, right: 5,
-          child: Container(
-            width: 20, height: 20,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Color(0xFFFF9800),
-            ),
-            child: Center(
-              child: Text('${trait.energyCost}',
-                style: const TextStyle(
-                  color: Colors.white, fontSize: 10,
-                  fontWeight: FontWeight.w900)),
-            ),
-          ),
-        ),
-
-        // Trait name + description
-        Positioned(
-          bottom: 4, left: 5, right: 5,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(trait.name,
-                style: GoogleFonts.rajdhani(
-                  color: Colors.white, fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  shadows: const [Shadow(blurRadius: 3, color: Colors.black)]),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(trait.description,
-                style: const TextStyle(
-                  color: Colors.white60, fontSize: 6.5, height: 1.2),
-                maxLines: 3, overflow: TextOverflow.ellipsis),
-            ],
-          ),
-        ),
-      ]),
-    );
-  }
+        child: Text('$label $value',
+            style: TextStyle(
+                color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+      );
 }

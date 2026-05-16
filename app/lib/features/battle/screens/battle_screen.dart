@@ -13,6 +13,7 @@ import '../providers/pve_battle_provider.dart';
 import '../providers/battle_view_model.dart';
 import '../widgets/pet_character_widget.dart';
 import '../widgets/battle_background_widget.dart';
+import '../widgets/pet_renderer_widget.dart';
 import '../widgets/pet_sprite_widget.dart';
 import '../widgets/projectile_widget.dart';
 import 'battle_result_screen.dart';
@@ -20,46 +21,42 @@ import 'battle_result_screen.dart';
 // ── Route args ────────────────────────────────────────────────────────────────
 
 class BattleScreenArgs {
-  final String  playerTeamName;
-  final String  enemyTeamName;
+  final String playerTeamName;
+  final String enemyTeamName;
   final String? stageId; // non-null for PvE stage battles
   const BattleScreenArgs({
     this.playerTeamName = 'My Team',
-    this.enemyTeamName  = 'Rivals',
+    this.enemyTeamName = 'Rivals',
     this.stageId,
   });
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const _kRoundSeconds  = 30;
-const _kSpriteBase    = 58.0;
+const _kRoundSeconds = 30;
+const _kPanelH = 182.0; // card panel height
 
-/// Slime chimera used as the floating-soul sprite for fainted pets.
-const _kSoulConfig = PetCharacterConfig(
-  texturePath:       'assets/sprites/aquatic_full.png', // Flame fallback (unused on native)
-  spineAtlasPath:    'assets/spines/soul/slime.atlas',
-  spineSkeletonPath: 'assets/spines/soul/slime.json',
-);
+/// Base sprite size — scales multiply this for depth effect.
+const _kSpriteBase = 130.0;
 
-/// Depth scaling: front is biggest & brightest, back is smallest & dimmer.
-const _kScaleByPos    = [1.50, 1.50, 1.50];
-const _kOpacityByPos  = [1.00, 1.00, 1.00];
+/// Depth: front largest/brightest, back smallest/dimmer.
+const _kScaleByPos   = [1.40, 1.40, 1.40];
+const _kOpacityByPos = [1.00, 1.00, 1.00];
 
 /// Battlefield positions as (left%, top%) fractions.
-/// Player faces right — front pet is closest to the centre line.
-/// Enemy mirrors.
-// Y capped at ~0.42 so the back pets don't overflow below the card panel
-// or off the bottom of the screen in landscape on iPhone 17.
+/// Battlefield = full SafeArea height (~331 px).
+/// Card panel overlays bottom 168 px → pets above y < (331-168)/331 ≈ 0.49 are clear.
+// Positions = fractions of FULL screen (no SafeArea inset).
+// Full screen ~375px tall, card panel 168px → y < 0.45 visible above panel.
 const _kPlayerPos = [
-  Offset(0.23, 0.32), // FRONT
-  Offset(0.10, 0.08), // MID
-  Offset(0.02, 0.42), // BACK
+  Offset(0.17, 0.22), // FRONT
+  Offset(0.03, 0.03), // MID
+  Offset(0.00, 0.48), // BACK
 ];
 const _kEnemyPos = [
-  Offset(0.60, 0.32), // FRONT
-  Offset(0.76, 0.08), // MID
-  Offset(0.87, 0.42), // BACK
+  Offset(0.55, 0.22), // FRONT
+  Offset(0.77, 0.03), // MID
+  Offset(0.88, 0.48), // BACK
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -101,18 +98,22 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
   @override
   void dispose() {
     _timer.dispose();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
     super.dispose();
   }
 
   void _autoEndTurn() {
     final vm = ref.read(pveBattleProvider);
-    if (!vm.isBattleOver && !vm.isResolving) {
-      ref.read(pveBattleProvider.notifier).executeRound();
+    if (vm.isBattleOver || vm.isResolving) return;
+
+    // If the player assigned no cards at all, skip the round — no combat fires.
+    final hasAnyCard = vm.pendingSkills.values.any((list) => list.isNotEmpty);
+    if (!hasAnyCard) {
+      // Restart the timer so the player gets another chance.
+      _restartTimer();
+      return;
     }
+
+    ref.read(pveBattleProvider.notifier).executeRound();
   }
 
   void _restartTimer() {
@@ -132,13 +133,14 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
         _timer.stop();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            context.go(Routes.battleResult, extra: BattleResultArgs(
-              outcome: next.outcome!,
-              totalRounds: next.currentRound,
-              playerTeamName: next.playerTeamName,
-              enemyTeamName: next.enemyTeamName,
-              stageId: widget.args.stageId,
-            ));
+            context.go(Routes.battleResult,
+                extra: BattleResultArgs(
+                  outcome: next.outcome!,
+                  totalRounds: next.currentRound,
+                  playerTeamName: next.playerTeamName,
+                  enemyTeamName: next.enemyTeamName,
+                  stageId: widget.args.stageId,
+                ));
           }
         });
         return;
@@ -165,12 +167,15 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.screen_rotation, color: Colors.white54, size: 48),
+              const Icon(Icons.screen_rotation,
+                  color: Colors.white54, size: 48),
               const SizedBox(height: 16),
               Text(
                 'Rotate to landscape',
                 style: GoogleFonts.rajdhani(
-                  color: Colors.white70, fontSize: 20, fontWeight: FontWeight.w700,
+                  color: Colors.white70,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -179,53 +184,57 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
       );
     }
 
-    // Card panel height — cards float over the lower battlefield.
-    const double panelH = 160;
+    const double panelH = _kPanelH;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,   // fill edge-to-edge, no implicit margins
         children: [
-          // ── Background ──────────────────────────────────────────────────────
+          // ── Background (full screen) ─────────────────────────────────────
           const BattleBackgroundWidget(),
 
-          // ── HUD + full-height battlefield ──────────────────────────────────
-          SafeArea(
-            bottom: false,
-            child: Column(
-              children: [
-                _TopHUD(vm: vm, timer: _timer),
-                Expanded(child: _Battlefield(vm: vm)),
-              ],
+          // ── Battlefield fills full safe area ────────────────────────────
+          // Battlefield — truly full screen, no SafeArea
+          Positioned.fill(
+            child: _Battlefield(vm: vm),
+          ),
+
+          // ── HUD overlays the top ─────────────────────────────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: _TopHUD(vm: vm, timer: _timer),
             ),
           ),
 
-          // ── Battle feed — floats just above the card panel ─────────────────
+          // ── Battle feed just above the card panel ────────────────────────
           if (!vm.isResolving)
             Positioned(
-              left: 0, right: 0,
+              left: 0,
+              right: 0,
               bottom: panelH,
               child: _BattleFeed(log: vm.roundLog),
             ),
 
-          // ── Card panel — overlay at the bottom ─────────────────────────────
+          // ── Card panel at bottom ─────────────────────────────────────────
           Positioned(
-            left: 0, right: 0, bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: _BottomPanel(vm: vm, ref: ref, timer: _timer),
-            ),
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _BottomPanel(vm: vm, ref: ref, timer: _timer),
           ),
 
-          // ── Discard popup ───────────────────────────────────────────────────
-          if (vm.needsDiscard)
-            _DiscardPopup(vm: vm, ref: ref),
+          // ── Discard popup ────────────────────────────────────────────────
+          if (vm.needsDiscard) _DiscardPopup(vm: vm, ref: ref),
         ],
       ),
     );
   }
 }
-
 
 // ── Top HUD ───────────────────────────────────────────────────────────────────
 
@@ -237,55 +246,54 @@ class _TopHUD extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 80,
+      height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
           colors: [
-            Colors.black.withValues(alpha: 0.72),
-            Colors.black.withValues(alpha: 0.42),
-            Colors.black.withValues(alpha: 0.72),
+            Colors.black.withValues(alpha: 0.82),
+            Colors.black.withValues(alpha: 0.0),
           ],
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Player label
+          // ── Player side ────────────────────────────────────────────────
           _PlayerTag(name: vm.playerTeamName, isPlayer: true),
-          const SizedBox(width: 8),
 
-          // Centre: round + timer + attack order
+          // ── Centre block ───────────────────────────────────────────────
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Round + timer row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Round ${vm.currentRound}',
+                      'ROUND ${vm.currentRound}',
                       style: GoogleFonts.rajdhani(
-                        color: Colors.white,
-                        fontSize: 12,
+                        color: Colors.white70,
+                        fontSize: 10,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                        shadows: const [Shadow(blurRadius: 6, color: Colors.black)],
+                        letterSpacing: 2,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     _RoundTimer(timer: timer),
-                    const SizedBox(width: 10),
-                    _DeckCounter(drawSize: vm.deckDrawSize, discardSize: vm.deckDiscardSize),
                   ],
                 ),
                 const SizedBox(height: 3),
+                // Attack order — compact
                 _AttackOrderStrip(vm: vm),
               ],
             ),
           ),
 
-          const SizedBox(width: 8),
-          // Enemy label
+          // ── Enemy side ─────────────────────────────────────────────────
           _PlayerTag(name: vm.enemyTeamName, isPlayer: false),
         ],
       ),
@@ -372,7 +380,9 @@ class _DeckCounter extends StatelessWidget {
           children: [
             Icon(icon, size: 9, color: color),
             const SizedBox(width: 2),
-            Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700)),
+            Text(label,
+                style: TextStyle(
+                    color: color, fontSize: 9, fontWeight: FontWeight.w700)),
           ],
         ),
       );
@@ -389,14 +399,19 @@ class _PlayerTag extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = isPlayer ? AppColors.accent : AppColors.offensive;
     final avatar = Container(
-      width: 26, height: 26,
+      width: 26,
+      height: 26,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: color.withValues(alpha: 0.2),
         border: Border.all(color: color, width: 2),
       ),
       child: Center(
-        child: Text(name[0], style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
+        child: Text(name[0],
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w900)),
       ),
     );
     final label = Text(
@@ -408,8 +423,12 @@ class _PlayerTag extends StatelessWidget {
       ),
     );
     return isPlayer
-        ? Row(mainAxisSize: MainAxisSize.min, children: [label, const SizedBox(width: 5), avatar])
-        : Row(mainAxisSize: MainAxisSize.min, children: [avatar, const SizedBox(width: 5), label]);
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [label, const SizedBox(width: 5), avatar])
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [avatar, const SizedBox(width: 5), label]);
   }
 }
 
@@ -442,13 +461,14 @@ class _AttackOrderStrip extends StatelessWidget {
 
 class _OrderBadge extends StatelessWidget {
   final TurnOrderEntry entry;
-  final int  number;
+  final int number;
   final bool isFirst;
-  const _OrderBadge({required this.entry, required this.number, required this.isFirst});
+  const _OrderBadge(
+      {required this.entry, required this.number, required this.isFirst});
 
   @override
   Widget build(BuildContext context) {
-    final c    = entry.isPlayer ? AppColors.accent : AppColors.offensive;
+    final c = entry.isPlayer ? AppColors.accent : AppColors.offensive;
     final size = isFirst ? 32.0 : 26.0;
     return Stack(
       clipBehavior: Clip.none,
@@ -456,31 +476,40 @@ class _OrderBadge extends StatelessWidget {
         // Creature class icon circle
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: size, height: size,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: c.withValues(alpha: isFirst ? 0.30 : 0.15),
             border: Border.all(color: c, width: isFirst ? 2.0 : 1.5),
             boxShadow: isFirst
-                ? [BoxShadow(color: c.withValues(alpha: 0.6), blurRadius: 8, spreadRadius: 2)]
+                ? [
+                    BoxShadow(
+                        color: c.withValues(alpha: 0.6),
+                        blurRadius: 8,
+                        spreadRadius: 2)
+                  ]
                 : null,
           ),
           child: ClipOval(
             child: entry.texturePath != null
                 ? Image.asset(
                     entry.texturePath!,
-                    width: size, height: size,
+                    width: size,
+                    height: size,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Center(
                       child: Text(entry.name[0],
-                          style: TextStyle(color: Colors.white,
+                          style: TextStyle(
+                              color: Colors.white,
                               fontSize: isFirst ? 13 : 10,
                               fontWeight: FontWeight.w900)),
                     ),
                   )
                 : Center(
                     child: Text(entry.name[0],
-                        style: TextStyle(color: Colors.white,
+                        style: TextStyle(
+                            color: Colors.white,
                             fontSize: isFirst ? 13 : 10,
                             fontWeight: FontWeight.w900)),
                   ),
@@ -488,18 +517,25 @@ class _OrderBadge extends StatelessWidget {
         ),
         // Turn number badge
         Positioned(
-          top: -4, left: -4,
+          top: -4,
+          left: -4,
           child: Container(
-            width: 14, height: 14,
+            width: 14,
+            height: 14,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: c,
               border: Border.all(color: Colors.black, width: 1),
-              boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 2)],
+              boxShadow: const [
+                BoxShadow(color: Colors.black54, blurRadius: 2)
+              ],
             ),
             child: Center(
               child: Text('$number',
-                  style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900)),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 7,
+                      fontWeight: FontWeight.w900)),
             ),
           ),
         ),
@@ -507,7 +543,6 @@ class _OrderBadge extends StatelessWidget {
     );
   }
 }
-
 
 // ── Battlefield ───────────────────────────────────────────────────────────────
 
@@ -524,12 +559,16 @@ class _Battlefield extends ConsumerStatefulWidget {
 class _FloatNum {
   final String id;
   final String text;
-  final Color  color;
+  final Color color;
   final double x;
   final double y;
   final double jitter; // horizontal drift so numbers don't stack
-  const _FloatNum({required this.id, required this.text,
-      required this.color, required this.x, required this.y,
+  const _FloatNum(
+      {required this.id,
+      required this.text,
+      required this.color,
+      required this.x,
+      required this.y,
       this.jitter = 0.0});
 }
 
@@ -537,7 +576,7 @@ class _FloatNum {
 
 class _BattlefieldState extends ConsumerState<_Battlefield> {
   final List<ProjectileInstance> _projectiles = [];
-  final List<_FloatNum>          _floatNums   = [];
+  final List<_FloatNum> _floatNums = [];
   int _nextId = 0;
   Set<String> _lastAttackIds = {};
 
@@ -548,7 +587,8 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
     _maybeSpawnFloatNums(old.vm, widget.vm);
   }
 
-  void _maybeSpawnFloatNums(PveBattleViewModel oldVm, PveBattleViewModel newVm) {
+  void _maybeSpawnFloatNums(
+      PveBattleViewModel oldVm, PveBattleViewModel newVm) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final box = context.findRenderObject() as RenderBox?;
@@ -573,28 +613,35 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
             // Crit heuristic: damage > 70 (above normal single-hit max ~65 + class bonus)
             final isCrit = delta.abs() > 70 && !wasPoisoned;
             final Color dmgColor = wasPoisoned && (delta.abs() % 4 == 0)
-                ? const Color(0xFFB44FD4)   // purple — poison tick
+                ? const Color(0xFFB44FD4) // purple — poison tick
                 : isCrit
                     ? const Color(0xFFFFAA00) // orange — critical hit
                     : const Color(0xFFFF3333); // red — normal damage
-            final text = isCrit ? '★${delta}' : '$delta';
+            final text = isCrit ? '★$delta' : '$delta';
             nums.add(_FloatNum(
-              id: '${_nextId++}', text: text, color: dmgColor,
-              x: x, y: y, jitter: (rng.nextDouble() - 0.5) * 24,
+              id: '${_nextId++}',
+              text: text,
+              color: dmgColor,
+              x: x,
+              y: y,
+              jitter: (rng.nextDouble() - 0.5) * 24,
             ));
           }
           if (delta > 0) {
             nums.add(_FloatNum(
-              id: '${_nextId++}', text: '+$delta',
+              id: '${_nextId++}',
+              text: '+$delta',
               color: const Color(0xFF44FF88),
-              x: x, y: y, jitter: (rng.nextDouble() - 0.5) * 24,
+              x: x,
+              y: y,
+              jitter: (rng.nextDouble() - 0.5) * 24,
             ));
           }
         }
       }
 
       check(oldVm.playerTeam, newVm.playerTeam, _kPlayerPos.toList());
-      check(oldVm.enemyTeam,  newVm.enemyTeam,  _kEnemyPos.toList());
+      check(oldVm.enemyTeam, newVm.enemyTeam, _kEnemyPos.toList());
 
       if (nums.isNotEmpty) setState(() => _floatNums.addAll(nums));
     });
@@ -636,23 +683,25 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
         final startFrac = attackerPositions[attackerIdx];
 
         final spriteOffset = 29.0; // half the sprite visual centre offset
-        final start = Offset(w * startFrac.dx + spriteOffset, h * startFrac.dy + spriteOffset);
+        final start = Offset(
+            w * startFrac.dx + spriteOffset, h * startFrac.dy + spriteOffset);
 
         // Support effects should feel self/ally-centered instead of attack-like.
         Offset end = start;
         if (!_isSelfCenteredEffect(effectType)) {
           final targetPositions = isPlayer ? _kEnemyPos : _kPlayerPos;
-          final targetTeam      = isPlayer ? vm.enemyTeam : vm.playerTeam;
+          final targetTeam = isPlayer ? vm.enemyTeam : vm.playerTeam;
           final targetIdx = targetTeam.indexWhere((p) => !p.isFainted);
           if (targetIdx < 0) continue;
           final endFrac = targetPositions[targetIdx];
-          end = Offset(w * endFrac.dx + spriteOffset, h * endFrac.dy + spriteOffset);
+          end = Offset(
+              w * endFrac.dx + spriteOffset, h * endFrac.dy + spriteOffset);
         }
 
         newProjectiles.add(ProjectileInstance(
-          id:     '${_nextId++}',
-          start:  start,
-          end:    end,
+          id: '${_nextId++}',
+          start: start,
+          end: end,
           config: cfg,
         ));
       }
@@ -690,12 +739,13 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
         final h = constraints.maxHeight;
 
         return Stack(
-          clipBehavior: Clip.none,
+          clipBehavior: Clip.hardEdge,
           children: [
             // Ground line
             Positioned(
               top: h * 0.52,
-              left: 0, right: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 height: 1.5,
                 decoration: BoxDecoration(
@@ -710,45 +760,55 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
               ),
             ),
 
-            // Enemy pets — tappable to inspect skills
+            // Enemy pets
             for (var i = 0; i < vm.enemyTeam.length; i++)
-              _placed(w, h, _kEnemyPos[i], _BattlePet(
-                pet: vm.enemyTeam[i],
-                isPlayer: false,
-                isSelected: false,
-                hasSkill: false,
-                positionIndex: i,
-                animState:   vm.petAnimStates[vm.enemyTeam[i].id],
-                attackSlot:  vm.petAttackSlots[vm.enemyTeam[i].id],
-                onTap: () => _PetInfoSheet.show(context, vm.enemyTeam[i]),
-              )),
+              _placed(
+                  w, h, _kEnemyPos[i],
+                  _BattlePet(
+                    pet:          vm.enemyTeam[i],
+                    isPlayer:     false,
+                    isSelected:   false,
+                    hasSkill:     false,
+                    positionIndex: i,
+                    animState:    vm.petAnimStates[vm.enemyTeam[i].id],
+                    attackSlot:   vm.petAttackSlots[vm.enemyTeam[i].id],
+                    onTap: () => _PetInfoSheet.show(context, vm.enemyTeam[i]),
+                  ),
+                  dash: vm.petDashOffsets[vm.enemyTeam[i].id] ?? Offset.zero),
 
-            // Player pets — tappable to inspect skills
+            // Player pets
             for (var i = 0; i < vm.playerTeam.length; i++)
-              _placed(w, h, _kPlayerPos[i], _BattlePet(
-                pet: vm.playerTeam[i],
-                isPlayer: true,
-                isSelected: false,
-                hasSkill: vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ?? false,
-                positionIndex: i,
-                animState:   vm.petAnimStates[vm.playerTeam[i].id],
-                attackSlot:  vm.petAttackSlots[vm.playerTeam[i].id],
-                onTap: () => _PetInfoSheet.show(context, vm.playerTeam[i]),
-              )),
+              _placed(
+                  w, h, _kPlayerPos[i],
+                  _BattlePet(
+                    pet:          vm.playerTeam[i],
+                    isPlayer:     true,
+                    isSelected:   vm.selectedPetId == vm.playerTeam[i].id,
+                    hasSkill:     vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ?? false,
+                    positionIndex: i,
+                    animState:    vm.petAnimStates[vm.playerTeam[i].id],
+                    attackSlot:   vm.petAttackSlots[vm.playerTeam[i].id],
+                    onTap: () => ref
+                        .read(pveBattleProvider.notifier)
+                        .selectPet(vm.playerTeam[i].id),
+                    onLongPress: () =>
+                        _PetInfoSheet.show(context, vm.playerTeam[i]),
+                  ),
+                  dash: vm.petDashOffsets[vm.playerTeam[i].id] ?? Offset.zero),
 
             // Flying projectiles
             for (final p in _projectiles)
               ProjectileWidget(
-                key:    ValueKey(p.id),
-                data:   p,
+                key: ValueKey(p.id),
+                data: p,
                 onDone: () => _removeProjectile(p.id),
               ),
 
             // Floating damage / heal numbers
             for (final n in _floatNums)
               _FloatingNumberWidget(
-                key:    ValueKey(n.id),
-                num:    n,
+                key: ValueKey(n.id),
+                num: n,
                 onDone: () => _removeFloatNum(n.id),
               ),
           ],
@@ -757,9 +817,13 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
     );
   }
 
-  Widget _placed(double w, double h, Offset pos, Widget child) => Positioned(
-        left: w * pos.dx,
-        top:  h * pos.dy,
+  Widget _placed(double w, double h, Offset pos, Widget child,
+          {Offset dash = Offset.zero}) =>
+      AnimatedPositioned(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeInOut,
+        left: w * pos.dx + w * dash.dx,
+        top:  h * pos.dy  + h * dash.dy,
         child: child,
       );
 }
@@ -767,9 +831,10 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
 // ── Floating number widget ────────────────────────────────────────────────────
 
 class _FloatingNumberWidget extends StatefulWidget {
-  final _FloatNum   num;
+  final _FloatNum num;
   final VoidCallback onDone;
-  const _FloatingNumberWidget({super.key, required this.num, required this.onDone});
+  const _FloatingNumberWidget(
+      {super.key, required this.num, required this.onDone});
 
   @override
   State<_FloatingNumberWidget> createState() => _FloatingNumberWidgetState();
@@ -778,33 +843,37 @@ class _FloatingNumberWidget extends StatefulWidget {
 class _FloatingNumberWidgetState extends State<_FloatingNumberWidget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double>   _rise;
-  late final Animation<double>   _fade;
-  late final Animation<double>   _scale;
+  late final Animation<double> _rise;
+  late final Animation<double> _fade;
+  late final Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
-    _ctrl  = AnimationController(vsync: this, duration: const Duration(milliseconds: 1300));
-    _rise  = Tween(begin: 0.0, end: -72.0).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    _fade  = Tween(begin: 1.0, end: 0.0).animate(
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1300));
+    _rise = Tween(begin: 0.0, end: -72.0)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+    _fade = Tween(begin: 1.0, end: 0.0).animate(
         CurvedAnimation(parent: _ctrl, curve: const Interval(0.5, 1.0)));
-    _scale = Tween(begin: 1.6, end: 1.0).animate(
-        CurvedAnimation(parent: _ctrl,
-            curve: const Interval(0.0, 0.4, curve: Curves.easeOutBack)));
+    _scale = Tween(begin: 1.6, end: 1.0).animate(CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.0, 0.4, curve: Curves.easeOutBack)));
     _ctrl.forward().then((_) => widget.onDone());
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final n = widget.num;
     return Positioned(
       left: n.x + n.jitter,
-      top:  n.y,
+      top: n.y,
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) => Opacity(
@@ -815,16 +884,21 @@ class _FloatingNumberWidgetState extends State<_FloatingNumberWidget>
               scale: _scale.value,
               child: Stack(
                 children: [
-                  Text(n.text, style: TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.w900,
-                    foreground: Paint()
-                      ..style = PaintingStyle.stroke
-                      ..strokeWidth = 3
-                      ..color = Colors.black87,
-                  )),
-                  Text(n.text, style: TextStyle(
-                    color: n.color, fontSize: 22, fontWeight: FontWeight.w900,
-                  )),
+                  Text(n.text,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        foreground: Paint()
+                          ..style = PaintingStyle.stroke
+                          ..strokeWidth = 3
+                          ..color = Colors.black87,
+                      )),
+                  Text(n.text,
+                      style: TextStyle(
+                        color: n.color,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      )),
                 ],
               ),
             ),
@@ -844,6 +918,7 @@ class _BattlePet extends StatelessWidget {
   final bool hasSkill;
   final int positionIndex;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final PetCharacterAnimState? animState;
   final String? attackSlot;
 
@@ -854,48 +929,55 @@ class _BattlePet extends StatelessWidget {
     required this.hasSkill,
     required this.positionIndex,
     this.onTap,
+    this.onLongPress,
     this.animState,
     this.attackSlot,
   });
 
   @override
   Widget build(BuildContext context) {
-    final scale   = _kScaleByPos[positionIndex.clamp(0, 2)];
-    final opacity = _kOpacityByPos[positionIndex.clamp(0, 2)];
+    final scale      = _kScaleByPos[positionIndex.clamp(0, 2)];
+    final opacity    = _kOpacityByPos[positionIndex.clamp(0, 2)];
     final spriteSize = _kSpriteBase * scale;
-
-    // Fainted pets show the floating soul — give it good visibility.
+    final barWidth   = spriteSize + 14;
     final effectiveOpacity = pet.isFainted ? 0.88 : opacity;
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Opacity(
         opacity: effectiveOpacity,
-        child: Transform.scale(
-          scale: scale,
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            width: spriteSize + 16,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Hide HP bar for fainted souls — show it for living pets only.
-                if (!pet.isFainted)
-                  _FloatingHpBar(pet: pet, width: spriteSize + 14),
-                if (!pet.isFainted) const SizedBox(height: 3),
-                _Sprite(
-                  pet: pet,
-                  size: spriteSize,
-                  isSelected: isSelected,
-                  hasSkill: hasSkill,
-                  isPlayer: isPlayer,
-                  animState:  animState,
-                  attackSlot: attackSlot,
-                ),
-                const SizedBox(height: 2),
-                _PetName(pet: pet),
-              ],
-            ),
+        child: SizedBox(
+          width: spriteSize + 16,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // HP bar + pet in a Stack so the bar overlays the TOP
+              // of the pet widget, not floating free above it.
+              Stack(
+                alignment: Alignment.topCenter,
+                clipBehavior: Clip.none,
+                children: [
+                  _Sprite(
+                    pet: pet,
+                    size: spriteSize,
+                    isSelected: isSelected,
+                    hasSkill: hasSkill,
+                    isPlayer: isPlayer,
+                    animState: animState,
+                    attackSlot: attackSlot,
+                  ),
+                  if (!pet.isFainted)
+                    Positioned(
+                      top: -2,
+                      left: 0, right: 0,
+                      child: _FloatingHpBar(pet: pet, width: barWidth),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              _PetName(pet: pet),
+            ],
           ),
         ),
       ),
@@ -931,31 +1013,31 @@ class _FloatingHpBar extends StatelessWidget {
               const SizedBox(width: 2),
               Text('${pet.hp}',
                   style: const TextStyle(
-                      color: Color(0xFF66FF88), fontSize: 9, fontWeight: FontWeight.w800)),
+                      color: Color(0xFF66FF88),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800)),
               const Spacer(),
               if (pet.shield > 0) ...[
                 const Icon(Icons.shield, size: 9, color: AppColors.shieldGold),
                 const SizedBox(width: 1),
                 Text('${pet.shield}',
                     style: const TextStyle(
-                        color: AppColors.shieldGold, fontSize: 9, fontWeight: FontWeight.w800)),
+                        color: AppColors.shieldGold,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800)),
               ],
             ],
           ),
           const SizedBox(height: 2),
           HpBar(current: pet.hp, max: pet.maxHp, height: 4),
 
-          // ── Status effects row (only when active) ───────────────
+          // ── Status effects (wrap to prevent overflow) ───────────
           if (statusIcons.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: statusIcons
-                  .map((s) => Padding(
-                        padding: const EdgeInsets.only(right: 3),
-                        child: s,
-                      ))
-                  .toList(),
+            const SizedBox(height: 2),
+            Wrap(
+              spacing: 2,
+              runSpacing: 2,
+              children: statusIcons,
             ),
           ],
         ],
@@ -964,43 +1046,32 @@ class _FloatingHpBar extends StatelessWidget {
   }
 
   List<Widget> _buildStatusIcons() {
+    const s = 'assets/images/status/classic/';
     final icons = <Widget>[];
 
-    // Buffs — text chips (no sprite assets for these)
-    if (pet.activeBuffs.contains('attackUp'))  { icons.add(_textChip('ATK+', const Color(0xFFFF6B35))); }
-    if (pet.activeBuffs.contains('defenseUp')) { icons.add(_textChip('DEF+', const Color(0xFF4FC3F7))); }
-    if (pet.activeBuffs.contains('speedUp'))   { icons.add(_textChip('SPD+', const Color(0xFF81D4FA))); }
-    if (pet.activeBuffs.contains('energized')) { icons.add(_spriteChip('assets/images/status/energy.png')); }
-    if (pet.activeBuffs.contains('regen'))     { icons.add(_spriteChip('assets/images/status/regen.png')); }
+    // Buffs
+    if (pet.activeBuffs.contains('attackUp'))   icons.add(_s('${s}attack-up.png'));
+    if (pet.activeBuffs.contains('defenseUp'))  icons.add(_s('${s}raise-shield.png'));
+    if (pet.activeBuffs.contains('speedUp'))    icons.add(_s('${s}speed-up.png'));
+    if (pet.activeBuffs.contains('energized'))  icons.add(_s('${s}gain-energy.png'));
+    if (pet.activeBuffs.contains('regen'))      icons.add(_s('${s}self-heal.png'));
 
-    // Debuffs — sprite chips where available
-    if (pet.activeDebuffs.contains('stunned'))     { icons.add(_spriteChip('assets/images/status/stun.png')); }
-    if (pet.activeDebuffs.contains('poisoned'))    { icons.add(_textChip('☠×${pet.poisonStacks}', const Color(0xFF7CFC00))); }
-    if (pet.activeDebuffs.contains('burned'))      { icons.add(_spriteChip('assets/images/status/burn.png')); }
-    if (pet.activeDebuffs.contains('attackDown'))  { icons.add(_textChip('ATK-', Colors.red.shade300)); }
-    if (pet.activeDebuffs.contains('defenseDown')) { icons.add(_spriteChip('assets/images/status/def_down.png')); }
-    if (pet.activeDebuffs.contains('speedDown'))   { icons.add(_spriteChip('assets/images/status/slow.png')); }
+    // Debuffs
+    if (pet.activeDebuffs.contains('stunned'))      icons.add(_s('${s}stun.png'));
+    if (pet.activeDebuffs.contains('poisoned'))     icons.add(_s('${s}poison.png'));
+    if (pet.activeDebuffs.contains('burned'))       icons.add(_s('${s}critical.png'));
+    if (pet.activeDebuffs.contains('attackDown'))   icons.add(_s('${s}attack-down.png'));
+    if (pet.activeDebuffs.contains('defenseDown'))  icons.add(_s('${s}fragile.png'));
+    if (pet.activeDebuffs.contains('speedDown'))    icons.add(_s('${s}speed-down.png'));
 
     return icons;
   }
 
-  static Widget _spriteChip(String assetPath) => SizedBox(
-        width: 14, height: 14,
-        child: Image.asset(assetPath, fit: BoxFit.contain),
-      );
+  static Widget _s(String path) => SizedBox(
+    width: 13, height: 13,
+    child: Image.asset(path, fit: BoxFit.contain),
+  );
 
-  static Widget _textChip(String label, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.25),
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(color: color.withValues(alpha: 0.65), width: 0.8),
-        ),
-        child: Text(label,
-            style: TextStyle(
-                color: color, fontSize: 6, fontWeight: FontWeight.w800,
-                letterSpacing: 0.3)),
-      );
 }
 
 // ── Pet sprite ────────────────────────────────────────────────────────────────
@@ -1032,68 +1103,80 @@ class _Sprite extends StatelessWidget {
       alignment: Alignment.center,
       clipBehavior: Clip.none,
       children: [
-        // Ground shadow
+        // Soft elliptical ground shadow (gradient blob, no BoxShape.circle)
         Positioned(
-          bottom: -8,
+          bottom: -4,
           child: Container(
-            width: size * 1.2,
-            height: 14,
+            width: size * 0.72,
+            height: 16,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(50),
+              gradient: RadialGradient(
+                colors: [
+                  Colors.black.withValues(alpha: 0.55),
+                  Colors.black.withValues(alpha: 0.0),
+                ],
+                radius: 0.85,
+              ),
             ),
           ),
         ),
 
-        // Sprite body
-        // Priority: Spine animation (native only) → 384×384 portrait texture (Flame)
-        //           → spritesheet → placeholder circle.
-        // Fainted → floating soul (slime chimera Spine animation).
+        // Pet body — PetRendererWidget when definition available, else placeholder.
+        // Fainted → floating soul placeholder circle.
         if (pet.isFainted)
-          PetCharacterWidget(
-            config:         _kSoulConfig,
-            size:           size,
-            animState:      PetCharacterAnimState.idle,
+          PetSpriteWidget(
+            size: size,
             flipHorizontal: isPlayer,
+            petName: '✦',
+            petColor: Colors.white24,
           )
-        else if (pet.characterConfig != null)
-          PetCharacterWidget(
-            config:         pet.characterConfig!,
-            size:           size,
-            flipHorizontal: isPlayer,
-            animState:      animState ?? PetCharacterAnimState.idle,
-            attackSlot:     attackSlot,
+        else if (pet.creatureDef != null)
+          SizedBox(
+            width: size, height: size,
+            child: PetRendererWidget(
+              def: pet.creatureDef!,
+              size: size,
+              flipHorizontal: isPlayer,
+              animation: _animFor(animState),
+            ),
           )
         else
           PetSpriteWidget(
-            config:         pet.spriteConfig,
-            size:           size,
+            config: pet.spriteConfig,
+            size: size,
             flipHorizontal: isPlayer,
-            petName:        pet.name,
-            petColor:       color,
+            petName: pet.name,
+            petColor: color,
           ),
 
         // Skill-assigned checkmark
         if (hasSkill && !pet.isFainted)
           Positioned(
-            top: 0, right: 0,
+            top: 0,
+            right: 0,
             child: Container(
-              width: 16, height: 16,
+              width: 16,
+              height: 16,
               decoration: const BoxDecoration(
-                shape: BoxShape.circle, color: AppColors.accent,
+                shape: BoxShape.circle,
+                color: AppColors.accent,
               ),
               child: const Icon(Icons.check, size: 10, color: Colors.white),
             ),
           ),
-
       ],
     );
   }
 
   static Color _petColor(String name) {
     const c = [
-      Color(0xFF6C3FA1), Color(0xFF3FCFA1), Color(0xFFE8A838),
-      Color(0xFFE53935), Color(0xFF1E88E5), Color(0xFF43A047),
+      Color(0xFF6C3FA1),
+      Color(0xFF3FCFA1),
+      Color(0xFFE8A838),
+      Color(0xFFE53935),
+      Color(0xFF1E88E5),
+      Color(0xFF43A047),
     ];
     return c[name.codeUnits.first % c.length];
   }
@@ -1171,7 +1254,8 @@ class _BottomPanel extends StatelessWidget {
   final PveBattleViewModel vm;
   final WidgetRef ref;
   final AnimationController timer;
-  const _BottomPanel({required this.vm, required this.ref, required this.timer});
+  const _BottomPanel(
+      {required this.vm, required this.ref, required this.timer});
 
   @override
   Widget build(BuildContext context) {
@@ -1179,20 +1263,41 @@ class _BottomPanel extends StatelessWidget {
     if (vm.isResolving) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 160,
+      height: _kPanelH,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Translucent dark tray — no wood background so the battlefield shows through
+          // Panel tray — dark with a crisp top border
+          // Card tray background — dark solid like Axie Origin
           Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.0),
-                  Colors.black.withValues(alpha: 0.75),
+                  Color(0xB80A0E1A),   // soft top (lets battlefield show a bit)
+                  Color(0xF80A0E1A),   // solid bottom
                 ],
+              ),
+              border: Border(
+                top: BorderSide(color: Color(0xFF2A3860), width: 2),
+              ),
+            ),
+          ),
+          // Inner top shadow to ground the tray
+          Positioned(
+            top: 2, left: 0, right: 0,
+            child: Container(
+              height: 18,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.28),
+                    Colors.transparent,
+                  ],
+                ),
               ),
             ),
           ),
@@ -1207,206 +1312,501 @@ class _BottomPanelContent extends StatelessWidget {
   final PveBattleViewModel vm;
   final WidgetRef ref;
   final AnimationController timer;
-  const _BottomPanelContent({required this.vm, required this.ref, required this.timer});
+  const _BottomPanelContent(
+      {required this.vm, required this.ref, required this.timer});
 
   @override
   Widget build(BuildContext context) {
     final living = vm.playerTeam.where((p) => !p.isFainted).toList();
 
-    // Build a flat ordered list of (pet, card) pairs grouped by character.
+    // When a player pet is tapped, filter hand to only that pet's cards.
+    final filterPet = vm.selectedPetId != null
+        ? living.where((p) => p.id == vm.selectedPetId).firstOrNull
+        : null;
+    final visiblePets = filterPet != null ? [filterPet] : living;
+
     final entries = <(PetViewModel, CardViewModel)>[];
-    for (final pet in living) {
+    for (final pet in visiblePets) {
       for (final card in vm.hand.where((c) => c.ownerPetId == pet.id)) {
         entries.add((pet, card));
       }
     }
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(width: 8),
-        Center(child: _EnergyOrb(energy: vm.playerTeamEnergy, maxEnergy: kTeamEnergyCap)),
-        const SizedBox(width: 6),
+        // ── Energy display ───────────────────────────────────────────────
+        SizedBox(
+          width: 76,
+          child: Center(
+            child: _EnergyDisplay(
+                energy: vm.playerTeamEnergy, max: kTeamEnergyCap),
+          ),
+        ),
 
+        // ── Flat card row ────────────────────────────────────────────────
         if (!vm.isBattleOver)
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Single unified card scroll ──────────────────────────────
-                Expanded(
-                  child: entries.isEmpty
-                      ? const Center(
-                          child: Text('No cards drawn',
-                              style: TextStyle(color: Colors.white30, fontSize: 11)),
-                        )
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.only(left: 6, top: 4),
-                          itemCount: entries.length,
-                          itemBuilder: (_, i) {
-                            final (pet, card) = entries[i];
-                            final assigned    = vm.pendingSkills[pet.id] ?? [];
-                            final isAssigned  = assigned.contains(card.instanceId);
-                            final isNew       = vm.newCardIds.contains(card.instanceId);
+            child: filterPet != null && entries.isEmpty
+                ? Center(
+                    child: Text('No cards for ${filterPet.name}',
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 11)))
+                : entries.isEmpty
+                ? const Center(
+                    child: Text('No cards',
+                        style: TextStyle(color: Colors.white38, fontSize: 12)))
+                : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+                    itemCount: entries.length,
+                    itemBuilder: (_, i) {
+                      final (pet, card) = entries[i];
+                      final assigned   = vm.pendingSkills[pet.id] ?? [];
+                      final isAssigned = assigned.contains(card.instanceId);
+                      final comboIdx   = isAssigned
+                          ? assigned.indexOf(card.instanceId) + 1
+                          : null;
+                      final isNew     = vm.newCardIds.contains(card.instanceId);
+                      final isFizzled = vm.fizzledCardIds.contains(card.instanceId);
 
-                            // Thin group separator before the first card of each
-                            // new character (except the very first card).
-                            final prevPet = i > 0 ? entries[i - 1].$1 : null;
-                            final needsSep = prevPet != null && prevPet.id != pet.id;
+                      // Tiny colored dot above first card of each new pet group
+                      final prevPet  = i > 0 ? entries[i - 1].$1 : null;
+                      final isNewPet = prevPet == null || prevPet.id != pet.id;
+                      final petColor = _PetCardSection._clsColor(
+                          pet.creatureDef?.bodyClass.name ?? '');
 
-                            Widget w = Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (needsSep)
-                                  Container(
-                                    width: 1, height: 100,
-                                    margin: const EdgeInsets.only(right: 6),
-                                    color: Colors.white.withValues(alpha: 0.18),
-                                  ),
-                                _SkillCard(
-                                  trait:       card.trait,
-                                  petName:     card.ownerPetName,
-                                  isSelected:  isAssigned,
-                                  isPity:      card.isPity,
-                                  cardArtPath: card.cardArtPath,
-                                  onTap: () {
-                                    final n = ref.read(pveBattleProvider.notifier);
-                                    n.selectPet(pet.id);
-                                    n.assignSkill(card.instanceId);
-                                  },
-                                ),
-                                const SizedBox(width: 5),
-                              ],
-                            );
+                      // Pet class label above the first card of each group
+                      final clsName = pet.creatureDef?.bodyClass.name ?? '';
+                      final clsLabel = clsName.isEmpty ? '' :
+                          clsName[0].toUpperCase() + clsName.substring(1);
 
-                            if (isNew) {
-                              w = _CardEntrance(
-                                key:   ValueKey(card.instanceId),
-                                delay: Duration(milliseconds: i * 80),
-                                child: w,
-                              );
-                            }
-                            return w;
-                          },
-                        ),
-                ),
-
-                // ── Character labels — one per living pet ───────────────────
-                SizedBox(
-                  height: 22,
-                  child: Row(
-                    children: [
-                      for (final pet in living)
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () =>
-                                ref.read(pveBattleProvider.notifier).selectPet(pet.id),
-                            child: _CharacterLabel(pet: pet, vm: vm),
+                      Widget w = Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            height: 20,
+                            child: isNewPet && clsLabel.isNotEmpty
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: petColor.withValues(alpha: 0.18),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: petColor.withValues(alpha: 0.55),
+                                          width: 1),
+                                    ),
+                                    child: Text(
+                                      clsLabel,
+                                      style: TextStyle(
+                                          color: petColor,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.3),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
                           ),
+                          const SizedBox(height: 3),
+                          _SkillCard(
+                            trait:            card.trait,
+                            petName:          card.ownerPetName,
+                            isSelected:       isAssigned,
+                            isPity:           card.isPity,
+                            isFizzled:        isFizzled,
+                            cardArtPath:      card.cardArtPath,
+                            cardTemplatePath: card.cardTemplatePath,
+                            comboIndex:       comboIdx,
+                            onTap: () => ref
+                                .read(pveBattleProvider.notifier)
+                                .assignSkill(card.instanceId),
+                          ),
+                        ],
+                      );
+
+                      if (isNew) {
+                        w = _CardEntrance(
+                          key: ValueKey(card.instanceId),
+                          delay: Duration(milliseconds: i * 55),
+                          child: w,
+                        );
+                      }
+
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          left: isNewPet && i > 0 ? 14 : 3,
+                          right: 3,
                         ),
-                    ],
+                        child: w,
+                      );
+                    },
                   ),
-                ),
-                const SizedBox(height: 2),
-              ],
-            ),
           ),
 
-        const SizedBox(width: 8),
-        Center(child: _EndTurnButton(vm: vm, ref: ref)),
-        const SizedBox(width: 8),
+        // ── End turn ─────────────────────────────────────────────────────
+        SizedBox(
+          width: 88,
+          child: Center(child: _EndTurnButton(vm: vm, ref: ref)),
+        ),
       ],
     );
   }
 }
 
-// ── Energy orb ────────────────────────────────────────────────────────────────
+// ── Per-pet card section ──────────────────────────────────────────────────────
 
-class _EnergyOrb extends StatelessWidget {
-  final int energy;
-  final int maxEnergy;
-  const _EnergyOrb({required this.energy, required this.maxEnergy});
+class _PetCardSection extends StatelessWidget {
+  final PetViewModel        pet;
+  final List<CardViewModel> cards;
+  final PveBattleViewModel  vm;
+  final WidgetRef           ref;
+  final Set<String>         newCardIds;
+  final Set<String>         fizzledCardIds;
+
+  const _PetCardSection({
+    required this.pet,
+    required this.cards,
+    required this.vm,
+    required this.ref,
+    required this.newCardIds,
+    required this.fizzledCardIds,
+  });
+
+  static Color _clsColor(String name) => switch (name.toLowerCase()) {
+    'beast'   => const Color(0xFFFF9800),
+    'plant'   => const Color(0xFF4CAF50),
+    'aquatic' => const Color(0xFF29B6F6),
+    'reptile' => const Color(0xFF66BB6A),
+    'bird'    => const Color(0xFFFF80AB),
+    'bug'     => const Color(0xFFFF5252),
+    _         => const Color(0xFF9C27B0),
+  };
 
   @override
   Widget build(BuildContext context) {
-    final max  = maxEnergy;
-    final frac = max > 0 ? energy / max : 0.0;
+    final assigned = vm.pendingSkills[pet.id] ?? [];
+    final allDone  = cards.isNotEmpty &&
+        cards.every((c) => assigned.contains(c.instanceId));
+    final cls      = pet.creatureDef?.bodyClass.name ?? pet.name;
+    final color    = _clsColor(cls);
 
-    return SizedBox(
-      width: 60, height: 60,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  AppColors.energyBlue.withValues(alpha: 0.45),
-                  AppColors.energyBlue.withValues(alpha: 0.08),
+    final hpFrac = pet.maxHp > 0 ? (pet.hp / pet.maxHp).clamp(0.0, 1.0) : 0.0;
+    final hpCol  = hpFrac > 0.5
+        ? const Color(0xFF66FF88)
+        : hpFrac > 0.25
+            ? const Color(0xFFFFCC44)
+            : const Color(0xFFFF4444);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: color, width: 3)),
+        borderRadius: const BorderRadius.only(
+          topRight:    Radius.circular(8),
+          bottomRight: Radius.circular(8),
+        ),
+        color: color.withValues(alpha: 0.06),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,        // ← don't stretch to fill height
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Pet header ───────────────────────────────────────────────
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Class name badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: color.withValues(alpha: 0.5)),
+                  ),
+                  child: Text(
+                    cls.isEmpty ? 'Pet' : (cls[0].toUpperCase() + cls.substring(1)),
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // HP mini-bar
+                SizedBox(
+                  width: 44,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${pet.hp}',
+                          style: TextStyle(
+                              color: hpCol,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 1),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: SizedBox(
+                          height: 3,
+                          width: 44,
+                          child: LinearProgressIndicator(
+                            value: hpFrac,
+                            backgroundColor: Colors.white12,
+                            valueColor: AlwaysStoppedAnimation<Color>(hpCol),
+                            minHeight: 3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (allDone) ...[
+                  const SizedBox(width: 4),
+                  Icon(Icons.check_circle_rounded, size: 13, color: color),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // ── Cards row — natural height, no stretching ───────────────
+            if (cards.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text('No cards',
+                    style: TextStyle(color: Colors.white24, fontSize: 10)),
+              )
+            else
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (int ci = 0; ci < cards.length; ci++) ...[
+                    if (ci > 0) const SizedBox(width: 5),
+                    _buildCard(cards[ci], ci),
+                  ],
                 ],
               ),
-            ),
-          ),
-          CustomPaint(
-            size: const Size(54, 54),
-            painter: _ArcPainter(fraction: frac),
-          ),
-          Container(
-            width: 38, height: 38,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF0C2540),
-              border: Border.all(color: AppColors.energyBlue.withValues(alpha: 0.55), width: 1.5),
-            ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(CardViewModel card, int cardIndex) {
+    final assigned   = vm.pendingSkills[pet.id] ?? [];
+    final isAssigned = assigned.contains(card.instanceId);
+    final comboIdx   = isAssigned
+        ? assigned.indexOf(card.instanceId) + 1
+        : null;
+    final isNew      = newCardIds.contains(card.instanceId);
+    final isFizzled  = fizzledCardIds.contains(card.instanceId);
+
+    Widget w = _SkillCard(
+      trait:            card.trait,
+      petName:          card.ownerPetName,
+      isSelected:       isAssigned,
+      isPity:           card.isPity,
+      isFizzled:        isFizzled,
+      cardArtPath:      card.cardArtPath,
+      cardTemplatePath: card.cardTemplatePath,
+      comboIndex:       comboIdx,
+      onTap: () => ref
+          .read(pveBattleProvider.notifier)
+          .assignSkill(card.instanceId),
+    );
+
+    if (isNew) {
+      w = _CardEntrance(
+        key: ValueKey(card.instanceId),
+        delay: Duration(milliseconds: cardIndex * 60),
+        child: w,
+      );
+    }
+    return w;
+  }
+}
+
+// ── Energy display (reference-style: big orb + number) ───────────────────────
+
+class _EnergyDisplay extends StatelessWidget {
+  final int energy;
+  final int max;
+  const _EnergyDisplay({required this.energy, required this.max});
+
+  @override
+  Widget build(BuildContext context) {
+    const c = AppColors.energyBlue;
+    final frac = max > 0 ? (energy / max).clamp(0.0, 1.0) : 0.0;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Orb
+        SizedBox(
+          width: 52,
+          height: 52,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Glow ring
+              Container(
+                width: 52, height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      c.withValues(alpha: frac * 0.5),
+                      c.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+              // Orb body
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    center: const Alignment(-0.3, -0.3),
+                    colors: [
+                      energy > 0
+                          ? c.withValues(alpha: 0.9)
+                          : Colors.white.withValues(alpha: 0.1),
+                      energy > 0
+                          ? const Color(0xFF0A3A6A)
+                          : Colors.black45,
+                    ],
+                  ),
+                  border: Border.all(
+                      color: energy > 0
+                          ? c.withValues(alpha: 0.8)
+                          : Colors.white12,
+                      width: 2),
+                  boxShadow: energy > 0
+                      ? [BoxShadow(
+                          color: c.withValues(alpha: 0.6),
+                          blurRadius: 12,
+                          spreadRadius: 1)]
+                      : null,
+                ),
+                child: Center(
+                  child: Text(
                     '$energy',
                     style: GoogleFonts.rajdhani(
-                      color: AppColors.energyBlue,
-                      fontSize: 15, fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
                     ),
                   ),
-                  Text(
-                    '/$max',
-                    style: const TextStyle(color: Colors.white30, fontSize: 7),
-                  ),
-                ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        // Tiny gem row
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(max, (i) => AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 7, height: 7,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i < energy ? c : Colors.white12,
+              boxShadow: i < energy
+                  ? [BoxShadow(color: c.withValues(alpha: 0.7), blurRadius: 4)]
+                  : null,
+            ),
+          )),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Pet group header (inline card-row divider) ────────────────────────────────
+
+class _PetGroupHeader extends StatelessWidget {
+  final PetViewModel pet;
+  final PveBattleViewModel vm;
+  const _PetGroupHeader({required this.pet, required this.vm});
+
+  @override
+  Widget build(BuildContext context) {
+    final assigned = vm.pendingSkills[pet.id] ?? [];
+    final hasDone  = assigned.isNotEmpty;
+    final hpFrac   = pet.maxHp > 0 ? pet.hp / pet.maxHp : 0.0;
+    final hpColor  = hpFrac > 0.5
+        ? const Color(0xFF66FF88)
+        : hpFrac > 0.25
+            ? const Color(0xFFFFCC44)
+            : const Color(0xFFFF4444);
+
+    return Container(
+      width: 32,
+      margin: const EdgeInsets.only(right: 4),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Assigned checkmark or empty circle
+          Container(
+            width: 20, height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: hasDone
+                  ? AppColors.accent.withValues(alpha: 0.25)
+                  : Colors.white.withValues(alpha: 0.06),
+              border: Border.all(
+                color: hasDone
+                    ? AppColors.accent.withValues(alpha: 0.8)
+                    : Colors.white24,
+                width: 1.5,
               ),
             ),
+            child: hasDone
+                ? const Icon(Icons.check, size: 11, color: AppColors.accent)
+                : null,
+          ),
+          const SizedBox(height: 4),
+          // Mini HP bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: SizedBox(
+              width: 20, height: 3,
+              child: LinearProgressIndicator(
+                value: hpFrac.clamp(0.0, 1.0),
+                backgroundColor: Colors.white12,
+                valueColor: AlwaysStoppedAnimation<Color>(hpColor),
+                minHeight: 3,
+              ),
+            ),
+          ),
+          const SizedBox(height: 3),
+          // Pet initial
+          Text(
+            pet.name.isNotEmpty ? pet.name[0] : '?',
+            style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 8,
+                fontWeight: FontWeight.w700),
+          ),
+          // Vertical line separator
+          Container(
+            width: 1, height: 20,
+            margin: const EdgeInsets.only(top: 4),
+            color: Colors.white.withValues(alpha: 0.12),
           ),
         ],
       ),
     );
   }
-}
-
-class _ArcPainter extends CustomPainter {
-  final double fraction;
-  const _ArcPainter({required this.fraction});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawArc(
-      Rect.fromLTWH(2, 2, size.width - 4, size.height - 4),
-      -math.pi / 2,
-      math.pi * 2 * fraction,
-      false,
-      Paint()
-        ..color = AppColors.energyBlue
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.5
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ArcPainter old) => old.fraction != fraction;
 }
 
 // ── Discard popup ─────────────────────────────────────────────────────────────
@@ -1426,15 +1826,19 @@ class _DiscardPopupState extends State<_DiscardPopup>
   int _remaining = _kSeconds;
 
   late final AnimationController _slideCtrl;
-  late final Animation<Offset>   _slide;
-  late final _ticker = Stream.periodic(const Duration(seconds: 1), (i) => _kSeconds - 1 - i)
-      .take(_kSeconds)
-      .listen((s) { if (mounted) setState(() => _remaining = s); });
+  late final Animation<Offset> _slide;
+  late final _ticker =
+      Stream.periodic(const Duration(seconds: 1), (i) => _kSeconds - 1 - i)
+          .take(_kSeconds)
+          .listen((s) {
+    if (mounted) setState(() => _remaining = s);
+  });
 
   @override
   void initState() {
     super.initState();
-    _slideCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 320));
+    _slideCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 320));
     _slide = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
         .animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
     _slideCtrl.forward();
@@ -1447,16 +1851,21 @@ class _DiscardPopupState extends State<_DiscardPopup>
     super.dispose();
   }
 
-  PveBattleViewModel get vm  => widget.vm;
-  WidgetRef          get ref => widget.ref;
+  PveBattleViewModel get vm => widget.vm;
+  WidgetRef get ref => widget.ref;
 
-  Color get _timerColor => _remaining <= 3
-      ? const Color(0xFFFF4444)
-      : const Color(0xFFFF9933);
+  Color get _timerColor =>
+      _remaining <= 3 ? const Color(0xFFFF4444) : const Color(0xFFFF9933);
 
   @override
   Widget build(BuildContext context) {
     final needed = vm.excessDiscards;
+
+    // Build pet-id → class color from player team for pet label colors.
+    final petColors = {
+      for (final p in vm.playerTeam)
+        p.id: _PetCardSection._clsColor(p.creatureDef?.bodyClass.name ?? ''),
+    };
 
     return Stack(
       children: [
@@ -1471,7 +1880,9 @@ class _DiscardPopupState extends State<_DiscardPopup>
 
         // Slide-up panel from the bottom
         Positioned(
-          left: 0, right: 0, bottom: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           child: SlideTransition(
             position: _slide,
             child: Container(
@@ -1483,17 +1894,19 @@ class _DiscardPopupState extends State<_DiscardPopup>
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFFCC3030).withValues(alpha: 0.3),
-                    blurRadius: 20, spreadRadius: 2, offset: const Offset(0, -4),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(0, -4),
                   ),
                 ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-
                   // ── Header bar ───────────────────────────────────────────
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
                     color: const Color(0xFF2E0808),
                     child: Row(
                       children: [
@@ -1504,28 +1917,35 @@ class _DiscardPopupState extends State<_DiscardPopup>
                           'HAND FULL',
                           style: GoogleFonts.rajdhani(
                             color: const Color(0xFFFF6060),
-                            fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.5,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFAA3030).withValues(alpha: 0.3),
+                            color:
+                                const Color(0xFFAA3030).withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(color: const Color(0xFFAA3030)),
                           ),
                           child: Text(
                             'Discard $needed card${needed > 1 ? "s" : ""}',
                             style: GoogleFonts.rajdhani(
-                              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                         const Spacer(),
                         // Countdown ring
                         SizedBox(
-                          width: 36, height: 36,
+                          width: 36,
+                          height: 36,
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
@@ -1539,7 +1959,8 @@ class _DiscardPopupState extends State<_DiscardPopup>
                                 '$_remaining',
                                 style: TextStyle(
                                   color: _timerColor,
-                                  fontSize: 12, fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
                                 ),
                               ),
                             ],
@@ -1563,25 +1984,65 @@ class _DiscardPopupState extends State<_DiscardPopup>
 
                   // ── Card row ─────────────────────────────────────────────
                   SizedBox(
-                    height: 160,
+                    height: 182,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       itemCount: vm.hand.length,
                       itemBuilder: (_, i) {
                         final card = vm.hand[i];
+                        final prevPetId = i > 0 ? vm.hand[i - 1].ownerPetId : null;
+                        final isNewPet = prevPetId != card.ownerPetId;
+                        final petColor = petColors[card.ownerPetId] ?? AppColors.primary;
+
                         return Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: _SkillCard(
-                            trait:       card.trait,
-                            petName:     card.ownerPetName,
-                            isSelected:  false,
-                            isPity:      card.isPity,
-                            discardMode: true,
-                            cardArtPath: card.cardArtPath,
-                            onTap: () => ref
-                                .read(pveBattleProvider.notifier)
-                                .discardCard(card.instanceId),
+                          padding: EdgeInsets.only(
+                            left: isNewPet && i > 0 ? 14 : 0,
+                            right: 10,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                height: 20,
+                                child: isNewPet
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: petColor.withValues(alpha: 0.18),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(
+                                              color: petColor.withValues(alpha: 0.55),
+                                              width: 1),
+                                        ),
+                                        child: Text(
+                                          card.ownerPetName,
+                                          style: TextStyle(
+                                              color: petColor,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.3),
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                              const SizedBox(height: 3),
+                              _SkillCard(
+                                trait: card.trait,
+                                petName: card.ownerPetName,
+                                isSelected: false,
+                                isPity: card.isPity,
+                                discardMode: true,
+                                cardArtPath: card.cardArtPath,
+                                cardTemplatePath: card.cardTemplatePath,
+                                onTap: () => ref
+                                    .read(pveBattleProvider.notifier)
+                                    .discardCard(card.instanceId),
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -1602,7 +2063,7 @@ class _DiscardPopupState extends State<_DiscardPopup>
 // ── Card entrance animation ───────────────────────────────────────────────────
 
 class _CardEntrance extends StatefulWidget {
-  final Widget   child;
+  final Widget child;
   final Duration delay;
   const _CardEntrance({super.key, required this.child, required this.delay});
 
@@ -1613,17 +2074,18 @@ class _CardEntrance extends StatefulWidget {
 class _CardEntranceState extends State<_CardEntrance>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
-  late Animation<double>   _opacity;
-  late Animation<Offset>   _slide;
+  late Animation<double> _opacity;
+  late Animation<Offset> _slide;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
-    _opacity = Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    _slide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 380));
+    _opacity = Tween<double>(begin: 0, end: 1)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+    _slide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
 
     Future.delayed(widget.delay, () {
       if (mounted) _ctrl.forward();
@@ -1631,7 +2093,10 @@ class _CardEntranceState extends State<_CardEntrance>
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => FadeTransition(
@@ -1644,181 +2109,178 @@ class _CardEntranceState extends State<_CardEntrance>
 
 class _SkillCard extends StatelessWidget {
   final TraitViewModel trait;
-  final String         petName;
-  final bool           isSelected;
-  final bool           isPity;
-  final bool           discardMode;
-  final String?        cardArtPath;
-  final VoidCallback?  onTap;
+  final String petName;
+  final bool isSelected;
+  final bool isPity;
+  final bool discardMode;
+  final bool isFizzled;
+  final String? cardArtPath;
+  final String? cardTemplatePath;
+  /// 1-based combo position badge when assigned; null = not yet assigned.
+  final int? comboIndex;
+  final VoidCallback? onTap;
 
   const _SkillCard({
     required this.trait,
     required this.petName,
     required this.isSelected,
-    this.isPity      = false,
+    this.isPity = false,
     this.discardMode = false,
+    this.isFizzled = false,
     this.cardArtPath,
+    this.cardTemplatePath,
+    this.comboIndex,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final usable     = discardMode || trait.isUsable;
-    final tc         = discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
-    final borderCol  = discardMode
-        ? const Color(0xFFCC3030)
-        : isSelected ? Colors.white
-        : usable     ? tc.withValues(alpha: 0.8)
-        : Colors.white12;
+    final usable = discardMode || trait.isUsable;
+    final tc = discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
 
-    final cardW = discardMode ? 100.0 : 90.0;
-    final cardH = discardMode ? 148.0 : 128.0;
-    const lift  = -10.0;
+    // Cards fill ~80% of panel height (182px panel, 20px pet label → ~142px usable)
+    final cardW = discardMode ? 108.0 : 96.0;
+    final cardH = discardMode ? 148.0 : 134.0;
+    const lift = -14.0;
+
+    final hasTemplate = cardTemplatePath != null;
 
     return GestureDetector(
-      onTap: usable ? onTap : null,
+      onTap: usable && !isFizzled ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 110),
-        width:  cardW,
+        width: cardW,
         height: cardH,
         transform: isSelected
             ? (Matrix4.identity()..translateByDouble(0, lift, 0, 1))
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderCol, width: isSelected || discardMode ? 2.5 : 1.5),
+          borderRadius: BorderRadius.circular(11),
           boxShadow: [
-            if (isSelected)
-              BoxShadow(color: tc.withValues(alpha: 0.7), blurRadius: 14, spreadRadius: 2),
+            if (isSelected) ...[
+              BoxShadow(
+                  color: tc.withValues(alpha: 0.85),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                  offset: const Offset(0, -2)),
+              BoxShadow(
+                  color: tc.withValues(alpha: 0.4),
+                  blurRadius: 36,
+                  spreadRadius: 4),
+            ],
             if (discardMode)
-              const BoxShadow(color: Color(0xFFCC2020), blurRadius: 10, spreadRadius: 1),
-            const BoxShadow(color: Colors.black87, blurRadius: 6, offset: Offset(0, 2)),
+              const BoxShadow(
+                  color: Color(0xFFCC2020), blurRadius: 14, spreadRadius: 3),
+            const BoxShadow(
+                color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
           ],
         ),
         child: Opacity(
-          opacity: usable ? 1.0 : 0.35,
+          opacity: isFizzled ? 0.3 : (usable ? 1.0 : 0.38),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(10),
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // ── Art area (top ~65%) ──────────────────────────────────────
-                Positioned.fill(
-                  child: cardArtPath != null
-                      ? Image.asset(
-                          cardArtPath!,
-                          fit: BoxFit.cover,
-                          alignment: Alignment.topCenter,
-                          errorBuilder: (_, __, ___) => Container(color: _cardBgColor(trait.typeName)),
-                        )
-                      : Container(color: _cardBgColor(trait.typeName)),
-                ),
-
-                // Gradient fade into info strip
-                Positioned(
-                  left: 0, right: 0, bottom: 0,
-                  child: Container(
-                    height: 72,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.72),
-                          Colors.black.withValues(alpha: 0.92),
-                        ],
-                        stops: const [0.0, 0.45, 1.0],
-                      ),
+                // ── Base layer ───────────────────────────────────────────────
+                if (hasTemplate)
+                  // Full Axie-style card template (includes baked-in cost, name, type)
+                  Positioned.fill(
+                    child: Image.asset(
+                      cardTemplatePath!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          _FallbackCardBody(trait: trait, cardArtPath: cardArtPath, petName: petName, tc: tc),
                     ),
-                  ),
-                ),
+                  )
+                else
+                  _FallbackCardBody(trait: trait, cardArtPath: cardArtPath, petName: petName, tc: tc),
 
-                // ── Info strip (bottom) ──────────────────────────────────────
-                Positioned(
-                  left: 6, right: 6, bottom: 5,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Skill name
-                      Text(
-                        trait.name,
-                        style: GoogleFonts.rajdhani(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          height: 1.1,
-                          shadows: const [Shadow(blurRadius: 4, color: Colors.black)],
-                        ),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      // Effect + cost row
-                      Row(
-                        children: [
-                          _EffectBadge(trait: trait),
-                          const SizedBox(width: 2),
-                          // Energy cost dots
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: List.generate(trait.energyCost, (_) => Container(
-                              width: 7, height: 7,
-                              margin: const EdgeInsets.only(left: 2),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: trait.canAfford
-                                    ? AppColors.energyBlue
-                                    : Colors.white.withValues(alpha: 0.15),
-                                boxShadow: trait.canAfford
-                                    ? [BoxShadow(color: AppColors.energyBlue.withValues(alpha: 0.6), blurRadius: 4)]
-                                    : null,
-                              ),
-                            )),
-                          ),
-                        ],
-                      ),
-                      // Cooldown warning
-                      if (!trait.isReady)
-                        Text('CD ${trait.cooldownRemaining}',
-                            style: TextStyle(color: AppColors.utility, fontSize: 7, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
+                // ── Dynamic overlays (same for both template and fallback) ───
 
-                // ── Top badges ───────────────────────────────────────────────
-                Positioned(
-                  top: 5, left: 5,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: tc.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      '${_typeIcon(trait.typeName)} ${_partIcon(trait.partName)}',
-                      style: const TextStyle(fontSize: 9),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 5, right: 5,
-                  child: _PetDot(name: petName),
-                ),
-
-                // Selected shimmer
-                if (isSelected)
+                // Selected: inner border + top shimmer
+                if (isSelected) ...[
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: tc.withValues(alpha: 0.9), width: 2.5),
                         gradient: LinearGradient(
-                          colors: [Colors.white.withValues(alpha: 0.18), Colors.transparent],
-                          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.14),
+                            Colors.transparent,
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.center,
                         ),
                       ),
                     ),
                   ),
+                ],
 
-                // Discard mode: red vignette edge + corner badge (art stays visible)
+                // Cooldown badge (bottom-left corner, above template's own text)
+                if (!trait.isReady)
+                  Positioned(
+                    bottom: 4,
+                    left: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppColors.utility.withValues(alpha: 0.6)),
+                      ),
+                      child: Text('CD ${trait.cooldownRemaining}',
+                          style: TextStyle(
+                              color: AppColors.utility,
+                              fontSize: 7,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+
+                // Combo-order badge (top-right, below template HP)
+                if (comboIndex != null)
+                  Positioned(
+                    top: hasTemplate ? 22 : 5,
+                    right: 4,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: tc,
+                        border: Border.all(color: Colors.white70, width: 1),
+                        boxShadow: [BoxShadow(color: tc.withValues(alpha: 0.6), blurRadius: 6)],
+                      ),
+                      child: Center(
+                        child: Text('$comboIndex',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                  ),
+
+                // Pity star
+                if (isPity && !discardMode && !hasTemplate)
+                  Positioned(
+                    bottom: 5,
+                    left: 5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
+                      ),
+                      child: const Text('★',
+                          style: TextStyle(color: Colors.amber, fontSize: 7)),
+                    ),
+                  ),
+
+                // Discard mode: red vignette + close badge
                 if (discardMode) ...[
                   Positioned.fill(
                     child: Container(
@@ -1836,31 +2298,35 @@ class _SkillCard extends StatelessWidget {
                     ),
                   ),
                   Positioned(
-                    bottom: 5, right: 5,
+                    bottom: 5,
+                    right: 5,
                     child: Container(
-                      width: 22, height: 22,
+                      width: 22,
+                      height: 22,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: const Color(0xFFCC2020).withValues(alpha: 0.9),
-                        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black54, blurRadius: 4),
+                        ],
                       ),
                       child: const Icon(Icons.close, size: 13, color: Colors.white),
                     ),
                   ),
                 ],
 
-                // Pity star
-                if (isPity && !discardMode)
-                  Positioned(
-                    bottom: 5, left: 5,
+                // Fizzled overlay (no target)
+                if (isFizzled)
+                  Positioned.fill(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
+                      color: Colors.black.withValues(alpha: 0.6),
+                      child: const Center(
+                        child: Text('✗',
+                            style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900)),
                       ),
-                      child: const Text('★', style: TextStyle(color: Colors.amber, fontSize: 7)),
                     ),
                   ),
               ],
@@ -1872,59 +2338,184 @@ class _SkillCard extends StatelessWidget {
   }
 
   static Color _typeColor(String t) => switch (t) {
-    'offensive' => AppColors.offensive, 'defensive' => AppColors.defensive,
-    'support'   => AppColors.support,   'utility'   => AppColors.utility,
-    _ => AppColors.primary,
-  };
-  static Color _cardBgColor(String t) => switch (t) {
-    'offensive' => const Color(0xFF5A0A0A), 'defensive' => const Color(0xFF0A1A5A),
-    'support'   => const Color(0xFF0A3A15), 'utility'   => const Color(0xFF4A2E05),
-    _ => const Color(0xFF1A0F3A),
-  };
-  static String _typeIcon(String t) => switch (t) {
-    'offensive' => '⚔', 'defensive' => '🛡', 'support' => '💚', 'utility' => '⚡', _ => '✦',
-  };
-  static String _partIcon(String p) => switch (p) {
-    'horn' => '🦏',
-    'back' => '🎒',
-    'tail' => '🦚',
-    'mouth' => '👄',
-    'body' => '🧬',
-    _ => '🧩',
-  };
+        'offensive' => AppColors.offensive,
+        'defensive' => AppColors.defensive,
+        'support'   => AppColors.support,
+        'utility'   => AppColors.utility,
+        _           => AppColors.primary,
+      };
 }
 
-class _PetDot extends StatelessWidget {
-  final String name;
-  const _PetDot({required this.name});
+// ── Fallback card body (no template PNG available) ────────────────────────────
+
+class _FallbackCardBody extends StatelessWidget {
+  final TraitViewModel trait;
+  final String? cardArtPath;
+  final String petName;
+  final Color tc;
+  const _FallbackCardBody({
+    required this.trait,
+    required this.cardArtPath,
+    required this.petName,
+    required this.tc,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: 18, height: 18,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle, color: Colors.black38,
-          border: Border.all(color: Colors.white30, width: 1),
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Art area
+        Positioned.fill(
+          child: cardArtPath != null
+              ? Image.asset(cardArtPath!,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
+                  errorBuilder: (_, __, ___) =>
+                      Container(color: _cardBgColor(trait.typeName)))
+              : Container(color: _cardBgColor(trait.typeName)),
         ),
-        child: Center(
-          child: Text(name[0], style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
+        // Gradient fade into info strip
+        Positioned(
+          left: 0, right: 0, bottom: 0,
+          child: Container(
+            height: 72,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.72),
+                  Colors.black.withValues(alpha: 0.92),
+                ],
+                stops: const [0.0, 0.45, 1.0],
+              ),
+            ),
+          ),
         ),
-      );
+        // Info strip
+        Positioned(
+          left: 6, right: 6, bottom: 5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(trait.name,
+                  style: GoogleFonts.rajdhani(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                    shadows: const [Shadow(blurRadius: 4, color: Colors.black)],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  _EffectBadge(trait: trait),
+                  const SizedBox(width: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      trait.energyCost,
+                      (_) => Container(
+                        width: 7, height: 7,
+                        margin: const EdgeInsets.only(left: 2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: trait.canAfford
+                              ? AppColors.energyBlue
+                              : Colors.white.withValues(alpha: 0.15),
+                          boxShadow: trait.canAfford
+                              ? [BoxShadow(color: AppColors.energyBlue.withValues(alpha: 0.6), blurRadius: 4)]
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Type badge
+        Positioned(
+          top: 5, left: 5,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: tc.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              '${_typeIcon(trait.typeName)} ${_partIcon(trait.partName)}',
+              style: const TextStyle(fontSize: 9),
+            ),
+          ),
+        ),
+        // Pet dot
+        Positioned(
+          top: 5, right: 5,
+          child: Container(
+            width: 18, height: 18,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black38,
+              border: Border.all(color: Colors.white30, width: 1),
+            ),
+            child: Center(
+              child: Text(petName[0],
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static Color _cardBgColor(String t) => switch (t) {
+    'offensive' => const Color(0xFF5A0A0A),
+    'defensive' => const Color(0xFF0A1A5A),
+    'support'   => const Color(0xFF0A3A15),
+    'utility'   => const Color(0xFF4A2E05),
+    _           => const Color(0xFF1A0F3A),
+  };
+
+  static String _typeIcon(String t) => switch (t) {
+    'offensive' => '⚔',
+    'defensive' => '🛡',
+    'support'   => '💚',
+    'utility'   => '⚡',
+    _           => '✦',
+  };
+
+  static String _partIcon(String p) => switch (p) {
+    'horn'  => '🦏',
+    'back'  => '🎒',
+    'tail'  => '🦚',
+    'mouth' => '👄',
+    'body'  => '🧬',
+    _       => '🧩',
+  };
 }
 
 // ── Character label (bottom of card panel) ────────────────────────────────────
 
 class _CharacterLabel extends StatelessWidget {
-  final PetViewModel       pet;
+  final PetViewModel pet;
   final PveBattleViewModel vm;
   const _CharacterLabel({required this.pet, required this.vm});
 
   @override
   Widget build(BuildContext context) {
     final assigned = vm.pendingSkills[pet.id] ?? [];
-    final isDone   = assigned.isNotEmpty;
+    final isDone = assigned.isNotEmpty;
     final isActive = vm.selectedPetId == pet.id;
     final cardCount = vm.hand.where((c) => c.ownerPetId == pet.id).length;
-    final color    = _petColor(pet.name);
+    final color = _petColor(pet.name);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
@@ -1953,21 +2544,28 @@ class _CharacterLabel extends StatelessWidget {
             child: Text(
               pet.name,
               style: TextStyle(
-                color: isDone ? AppColors.accent
-                     : isActive ? Colors.white
-                     : Colors.white38,
-                fontSize: 9, fontWeight: FontWeight.w700,
+                color: isDone
+                    ? AppColors.accent
+                    : isActive
+                        ? Colors.white
+                        : Colors.white38,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
               ),
-              maxLines: 1, overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
             isDone ? '✓${assigned.length}' : '$cardCount',
             style: TextStyle(
-              color: isDone ? AppColors.accent
-                   : isActive ? Colors.white54
-                   : Colors.white24,
-              fontSize: 9, fontWeight: FontWeight.w800,
+              color: isDone
+                  ? AppColors.accent
+                  : isActive
+                      ? Colors.white54
+                      : Colors.white24,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -1977,8 +2575,12 @@ class _CharacterLabel extends StatelessWidget {
 
   static Color _petColor(String name) {
     const c = [
-      Color(0xFF6C3FA1), Color(0xFF3FCFA1), Color(0xFFE8A838),
-      Color(0xFFE53935), Color(0xFF1E88E5), Color(0xFF43A047),
+      Color(0xFF6C3FA1),
+      Color(0xFF3FCFA1),
+      Color(0xFFE8A838),
+      Color(0xFFE53935),
+      Color(0xFF1E88E5),
+      Color(0xFF43A047),
     ];
     return c[name.codeUnits.first % c.length];
   }
@@ -1995,171 +2597,17 @@ class _CharacterLabel extends StatelessWidget {
 
 class _PetInfoSheet {
   static void show(BuildContext context, PetViewModel pet) {
-    showModalBottomSheet(
+    showDialog<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _PetInfoContent(pet: pet),
+      barrierColor: Colors.black.withValues(alpha: 0.75),
+      builder: (_) => _PetInfoDialog(pet: pet),
     );
   }
 }
 
-class _PetInfoContent extends StatelessWidget {
+class _PetInfoDialog extends StatelessWidget {
   final PetViewModel pet;
-  const _PetInfoContent({required this.pet});
-
-  @override
-  Widget build(BuildContext context) {
-    final def      = kCreatureRegistry[pet.id];
-    final cls      = def?.className ?? 'plant';
-    final clsColor = _clsColor(cls);
-    final traitMap = {for (final t in pet.traits) t.partName: t};
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.78,
-      minChildSize: 0.50,
-      maxChildSize: 0.96,
-      expand: false,
-      builder: (_, ctrl) => Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF2C1F14),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-          border: Border(top: BorderSide(color: clsColor, width: 2)),
-        ),
-        child: Column(children: [
-          // Drag handle
-          Container(
-            width: 40, height: 4,
-            margin: const EdgeInsets.only(top: 10, bottom: 6),
-            decoration: BoxDecoration(
-              color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-          ),
-          // Stats bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.black38,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _statCol(Icons.favorite,    '${pet.hp}/${pet.maxHp}', 'HEALTH', const Color(0xFF66FF88)),
-                  _statCol(Icons.bolt,        '${pet.speed}',           'SPEED',  const Color(0xFFFFCC44)),
-                  _statCol(Icons.auto_awesome,'${pet.skill}',           'SKILL',  const Color(0xFF88CCFF)),
-                  _statCol(Icons.local_fire_department, '${pet.morale}','MORALE', const Color(0xFFFF9944)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          // Main body
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Left: pet name + class icon + parts list ─────────────────
-                SizedBox(
-                  width: 138,
-                  child: ListView(
-                    controller: ctrl,
-                    padding: const EdgeInsets.fromLTRB(12, 2, 8, 16),
-                    children: [
-                      Row(children: [
-                        Expanded(
-                          child: Text(pet.name,
-                            style: GoogleFonts.rajdhani(
-                              color: Colors.white, fontSize: 20,
-                              fontWeight: FontWeight.w800),
-                            overflow: TextOverflow.ellipsis),
-                        ),
-                        Image.asset(
-                          'assets/images/icons/mini-$cls.png',
-                          width: 22, height: 22,
-                          errorBuilder: (_, __, ___) => const SizedBox(),
-                        ),
-                      ]),
-                      const SizedBox(height: 10),
-                      Text('PARTS',
-                        style: GoogleFonts.rajdhani(
-                          color: Colors.white38, fontSize: 10,
-                          fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-                      const SizedBox(height: 6),
-                      if (def != null)
-                        for (final part in def.parts)
-                          _PartRow(part: part,
-                              traitName: traitMap[part.partType]?.name ?? part.id),
-                    ],
-                  ),
-                ),
-                // Divider
-                Container(
-                  width: 1,
-                  color: Colors.white10,
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                ),
-                // ── Right: 2×2 card grid (LayoutBuilder for responsive sizing) ──
-                Expanded(
-                  child: def == null
-                      ? const SizedBox.shrink()
-                      : LayoutBuilder(
-                          builder: (ctx, constraints) {
-                            // Fit 2 cards per row; height fills available space
-                            // divided by 2 rows. Respect portrait aspect ratio (0.62)
-                            // but never overflow vertically.
-                            final availW = constraints.maxWidth - 28.0; // left+right padding + gap
-                            final availH = constraints.maxHeight - 22.0; // top+bottom padding + gap
-                            final cardWByRatio = availW / 2;
-                            final cardHByRatio = cardWByRatio / 0.62;
-                            final cardHBySpace = availH / 2;
-                            final cardH = math.min(cardHByRatio, cardHBySpace);
-                            final cardW = cardH * 0.62;
-
-                            Widget card(int i) => SizedBox(
-                              width: cardW, height: cardH,
-                              child: _InfoCard(
-                                part: def.parts[i],
-                                trait: traitMap[def.parts[i].partType],
-                              ),
-                            );
-
-                            return Padding(
-                              padding: const EdgeInsets.fromLTRB(6, 4, 10, 12),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                    card(0), const SizedBox(width: 6), card(1),
-                                  ]),
-                                  const SizedBox(height: 6),
-                                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                    card(2), const SizedBox(width: 6), card(3),
-                                  ]),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  static Widget _statCol(IconData icon, String val, String label, Color c) =>
-      Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: c),
-        const SizedBox(height: 2),
-        Text(val,  style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w900)),
-        Text(label, style: const TextStyle(
-            color: Colors.white38, fontSize: 7, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-      ]);
+  const _PetInfoDialog({required this.pet});
 
   static Color _clsColor(String cls) => switch (cls) {
     'plant'   => const Color(0xFF4CAF50),
@@ -2170,6 +2618,249 @@ class _PetInfoContent extends StatelessWidget {
     'bug'     => const Color(0xFFFF5252),
     _         => const Color(0xFF9C27B0),
   };
+
+  @override
+  Widget build(BuildContext context) {
+    final def      = kCreatureRegistry[pet.id];
+    final cls      = def?.className ?? 'plant';
+    final color    = _clsColor(cls);
+    final traitMap = {for (final t in pet.traits) t.partName: t};
+    final hpFrac   = pet.maxHp > 0
+        ? (pet.hp / pet.maxHp).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D1220),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Left: pet renderer + name + stats ────────────────────────
+            SizedBox(
+              width: 200,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.06),
+                  borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(15)),
+                  border: Border(
+                      right: BorderSide(color: color.withValues(alpha: 0.2))),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Pet renderer
+                    if (pet.creatureDef != null)
+                      SizedBox(
+                        width: 160, height: 160,
+                        child: PetRendererWidget(
+                          def: pet.creatureDef!,
+                          size: 160,
+                        ),
+                      )
+                    else
+                      const Icon(Icons.pets, size: 80, color: Colors.white24),
+
+                    const SizedBox(height: 8),
+
+                    // Class badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: color.withValues(alpha: 0.6)),
+                      ),
+                      child: Text(
+                        cls.isEmpty
+                            ? 'Unknown'
+                            : cls[0].toUpperCase() + cls.substring(1),
+                        style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800),
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // HP bar
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Icon(Icons.favorite, size: 10,
+                                  color: Color(0xFF66FF88)),
+                              Text('${pet.hp} / ${pet.maxHp}',
+                                  style: const TextStyle(
+                                      color: Color(0xFF66FF88),
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: SizedBox(
+                              height: 5, width: double.infinity,
+                              child: LinearProgressIndicator(
+                                value: hpFrac,
+                                backgroundColor: Colors.white10,
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF66FF88)),
+                                minHeight: 5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Stats row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _stat('⚡', '${pet.speed}',  'SPD', const Color(0xFFFFCC44)),
+                        _stat('🏅', '${pet.skill}',  'SKL', const Color(0xFF88CCFF)),
+                        _stat('🔥', '${pet.morale}', 'MOR', const Color(0xFFFF9944)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Right: 4 skill cards in a row ────────────────────────────
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Text('SKILLS',
+                            style: GoogleFonts.rajdhani(
+                                color: Colors.white54,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 2)),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            width: 26, height: 26,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.08),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: const Icon(Icons.close, size: 14,
+                                color: Colors.white54),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 4 cards in a row
+                    Expanded(
+                      child: def == null
+                          ? const Center(
+                              child: Text('No skill data',
+                                  style: TextStyle(
+                                      color: Colors.white38, fontSize: 12)))
+                          : LayoutBuilder(
+                              builder: (_, constraints) {
+                                final availW = constraints.maxWidth;
+                                final availH = constraints.maxHeight;
+                                // 4 cards in a row, gap 8px between
+                                final cardW = (availW - 24) / 4;
+                                final cardH = math.min(cardW / 0.66, availH);
+                                final cW    = cardH * 0.66;
+
+                                return Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.center,
+                                  children: [
+                                    for (final part in def.parts)
+                                      SizedBox(
+                                        width:  cW,
+                                        height: cardH,
+                                        child: _InfoCard(
+                                          part:  part,
+                                          trait: traitMap[part.partType],
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+
+                    // Part names row under cards
+                    if (def != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          for (final part in def.parts)
+                            Expanded(
+                              child: Center(
+                                child: Text(
+                                  traitMap[part.partType]?.name ??
+                                      part.partType,
+                                  style: GoogleFonts.rajdhani(
+                                    color: Colors.white60,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _stat(String icon, String val, String label, Color c) =>
+      Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(icon, style: const TextStyle(fontSize: 12)),
+        Text(val,
+            style: TextStyle(
+                color: c, fontSize: 13, fontWeight: FontWeight.w900)),
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 7,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5)),
+      ]);
 }
 
 // ── Parts list row ────────────────────────────────────────────────────────────
@@ -2180,22 +2871,24 @@ class _PartRow extends StatelessWidget {
   const _PartRow({required this.part, required this.traitName});
 
   static const _kPartColor = {
-    'horn':  Color(0xFFFF5533),
-    'back':  Color(0xFF4488CC),
-    'tail':  Color(0xFF44BB88),
+    'horn': Color(0xFFFF5533),
+    'back': Color(0xFF4488CC),
+    'tail': Color(0xFF44BB88),
     'mouth': Color(0xFFCC8844),
   };
 
   @override
   Widget build(BuildContext context) {
-    final color    = _kPartColor[part.partType] ?? Colors.white54;
-    final iconPath = 'assets/images/part-icons/${part.className}-${part.partType}.png';
+    final color = _kPartColor[part.partType] ?? Colors.white54;
+    final iconPath =
+        'assets/images/part-icons/${part.className}-${part.partType}.png';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Row(children: [
         Container(
-          width: 30, height: 30,
+          width: 30,
+          height: 30,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.15),
             shape: BoxShape.circle,
@@ -2203,17 +2896,21 @@ class _PartRow extends StatelessWidget {
           ),
           child: ClipOval(
             child: Image.asset(
-              iconPath, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Icon(Icons.category, size: 14, color: color),
+              iconPath,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  Icon(Icons.category, size: 14, color: color),
             ),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(traitName,
-            style: GoogleFonts.rajdhani(
-              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
-            overflow: TextOverflow.ellipsis),
+              style: GoogleFonts.rajdhani(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700),
+              overflow: TextOverflow.ellipsis),
         ),
       ]),
     );
@@ -2223,22 +2920,22 @@ class _PartRow extends StatelessWidget {
 // ── Skill card (Axie card style) ──────────────────────────────────────────────
 
 class _InfoCard extends StatelessWidget {
-  final PartDefinition  part;
+  final PartDefinition part;
   final TraitViewModel? trait;
   const _InfoCard({required this.part, this.trait});
 
   static Color _borderColor(String? typeName) => switch (typeName) {
-    'offensive' => const Color(0xFFCC4433),
-    'defensive' => const Color(0xFF3388CC),
-    'support'   => const Color(0xFF33AA66),
-    'utility'   => const Color(0xFF8833CC),
-    _           => const Color(0xFF555555),
-  };
+        'offensive' => const Color(0xFFCC4433),
+        'defensive' => const Color(0xFF3388CC),
+        'support' => const Color(0xFF33AA66),
+        'utility' => const Color(0xFF8833CC),
+        _ => const Color(0xFF555555),
+      };
 
   @override
   Widget build(BuildContext context) {
     final border = _borderColor(trait?.typeName);
-    final cost   = trait?.energyCost ?? 0;
+    final cost = trait?.energyCost ?? 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -2248,18 +2945,22 @@ class _InfoCard extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(fit: StackFit.expand, children: [
-
         // ── Card art background ─────────────────────────────────────
-        Image.asset(part.cardArtPath, fit: BoxFit.cover,
+        Image.asset(part.cardArtPath,
+            fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(color: Colors.black38)),
 
         // ── Top gradient (name visibility) ────────────────────────
         Positioned(
-          top: 0, left: 0, right: 0, height: 36,
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 36,
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
                 colors: [Colors.black87, Colors.transparent],
               ),
             ),
@@ -2268,11 +2969,15 @@ class _InfoCard extends StatelessWidget {
 
         // ── Bottom gradient (description visibility) ───────────────
         Positioned(
-          bottom: 0, left: 0, right: 0, height: 64,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 64,
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
                 colors: [Colors.black, Colors.black54, Colors.transparent],
                 stops: [0.0, 0.6, 1.0],
               ),
@@ -2282,37 +2987,49 @@ class _InfoCard extends StatelessWidget {
 
         // ── Energy cost badge ─────────────────────────────────────
         Positioned(
-          top: 5, left: 5,
+          top: 5,
+          left: 5,
           child: Container(
-            width: 22, height: 22,
+            width: 22,
+            height: 22,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: const Color(0xFFFF9800),
               border: Border.all(color: Colors.white70, width: 1),
-              boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 3)],
+              boxShadow: const [
+                BoxShadow(color: Colors.black54, blurRadius: 3)
+              ],
             ),
             child: Center(
               child: Text('$cost',
-                style: const TextStyle(
-                  color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900)),
             ),
           ),
         ),
 
         // ── Skill name (top, after energy badge) ─────────────────
         Positioned(
-          top: 6, left: 30, right: 5,
+          top: 6,
+          left: 30,
+          right: 5,
           child: Text(trait?.name ?? '',
-            style: GoogleFonts.rajdhani(
-              color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w800,
-              shadows: const [Shadow(blurRadius: 3, color: Colors.black)]),
-            maxLines: 1, overflow: TextOverflow.ellipsis),
+              style: GoogleFonts.rajdhani(
+                  color: Colors.white,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  shadows: const [Shadow(blurRadius: 3, color: Colors.black)]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
         ),
 
         // ── Effect badge (damage / shield / heal value) ───────────
         if (trait != null && trait!.effectIconValue > 0)
           Positioned(
-            bottom: 24, left: 5,
+            bottom: 24,
+            left: 5,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(
@@ -2326,11 +3043,14 @@ class _InfoCard extends StatelessWidget {
         // ── Description ───────────────────────────────────────────
         if (trait != null)
           Positioned(
-            bottom: 4, left: 5, right: 5,
+            bottom: 4,
+            left: 5,
+            right: 5,
             child: Text(trait!.description,
-              style: const TextStyle(
-                color: Colors.white70, fontSize: 6.5, height: 1.25),
-              maxLines: 3, overflow: TextOverflow.ellipsis),
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 6.5, height: 1.25),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis),
           ),
       ]),
     );
@@ -2351,16 +3071,17 @@ class _EndTurnButton extends StatelessWidget {
         label: 'Results',
         active: true,
         gold: false,
-        onTap: () => context.go(Routes.battleResult, extra: BattleResultArgs(
-          outcome: vm.outcome ?? 'draw',
-          totalRounds: vm.currentRound,
-          playerTeamName: vm.playerTeamName,
-          enemyTeamName: vm.enemyTeamName,
-        )),
+        onTap: () => context.go(Routes.battleResult,
+            extra: BattleResultArgs(
+              outcome: vm.outcome ?? 'draw',
+              totalRounds: vm.currentRound,
+              playerTeamName: vm.playerTeamName,
+              enemyTeamName: vm.enemyTeamName,
+            )),
       );
     }
 
-    final allDone   = vm.allSkillsAssigned;
+    final allDone = vm.allSkillsAssigned;
     final resolving = vm.isResolving;
 
     return _btn(
@@ -2381,44 +3102,59 @@ class _EndTurnButton extends StatelessWidget {
     VoidCallback? onTap,
     bool loading = false,
   }) {
-    final bg = gold
-        ? const Color(0xFFD4A020)
+    final bgColor = gold
+        ? const Color(0xFFE03030)   // red circle like reference
         : active
-            ? const Color(0xFF5A4510)
-            : const Color(0xFF2E2008);
+            ? const Color(0xFF2A3A5A)
+            : const Color(0xFF1A1F2E);
 
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 94,
-        height: 46,
+        width: 72,
+        height: 72,
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
+          shape: BoxShape.circle,
+          color: bgColor,
           border: Border.all(
             color: gold
-                ? Colors.white.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.15),
-            width: 1.5,
+                ? const Color(0xFFFF6060).withValues(alpha: 0.6)
+                : active
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.white.withValues(alpha: 0.05),
+            width: 2.5,
           ),
           boxShadow: gold
-              ? [BoxShadow(color: const Color(0xFFD4A020).withValues(alpha: 0.5),
-                  blurRadius: 10, spreadRadius: 1, offset: const Offset(0, 2))]
+              ? [
+                  BoxShadow(
+                      color: const Color(0xFFE03030).withValues(alpha: 0.6),
+                      blurRadius: 20,
+                      spreadRadius: 3)
+                ]
               : null,
         ),
         child: Center(
           child: loading
               ? const SizedBox(
-                  width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white60),
+                  width: 22, height: 22,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: Colors.white70),
                 )
               : Text(
-                  label,
+                  label.replaceAll(' ', '\n'),
                   style: GoogleFonts.rajdhani(
-                    color: active ? Colors.white : Colors.white30,
-                    fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5,
+                    color: gold
+                        ? Colors.white
+                        : active
+                            ? Colors.white70
+                            : Colors.white24,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.3,
+                    height: 1.2,
                   ),
+                  textAlign: TextAlign.center,
                 ),
         ),
       ),
@@ -2432,13 +3168,13 @@ class _EffectBadge extends StatelessWidget {
   final TraitViewModel trait;
   const _EffectBadge({required this.trait});
 
-  static const _kS = 'assets/images/status/';
+  static const _kS = 'assets/images/status/classic/';
 
   @override
   Widget build(BuildContext context) {
-    final key   = trait.effectIconKey;
-    final val   = trait.effectIconValue;
-    final icon  = _icon(key);
+    final key = trait.effectIconKey;
+    final val = trait.effectIconValue;
+    final icon = _icon(key);
     final color = _color(key);
 
     return Row(
@@ -2447,29 +3183,32 @@ class _EffectBadge extends StatelessWidget {
         icon,
         if (val > 0) ...[
           const SizedBox(width: 2),
-          Text('$val', style: TextStyle(
-            color: color, fontSize: 11, fontWeight: FontWeight.w900,
-            shadows: const [Shadow(blurRadius: 3, color: Colors.black)],
-          )),
+          Text('$val',
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                shadows: const [Shadow(blurRadius: 3, color: Colors.black)],
+              )),
         ],
       ],
     );
   }
 
   static Color _color(String key) => switch (key) {
-    'damage' || 'aoe'            => const Color(0xFFFF5533),
-    'heal'   || 'regen'          => const Color(0xFF44FF88),
-    'shield' || 'def_up'         => const Color(0xFFFFD700),
-    'shield_break'               => const Color(0xFFFFAA00),
-    'poison'                     => const Color(0xFF66DD44),
-    'burn'                       => const Color(0xFFFF6600),
-    'stun'                       => const Color(0xFFBBDDFF),
-    'atk_up'                     => const Color(0xFFFF8844),
-    'atk_down' || 'def_down'     => const Color(0xFFFF4444),
-    'spd_up'   || 'spd_down'     => const Color(0xFF88DDFF),
-    'energized'                  => const Color(0xFF88CCFF),
-    _                            => Colors.white70,
-  };
+        'damage' || 'aoe' => const Color(0xFFFF5533),
+        'heal' || 'regen' => const Color(0xFF44FF88),
+        'shield' || 'def_up' => const Color(0xFFFFD700),
+        'shield_break' => const Color(0xFFFFAA00),
+        'poison' => const Color(0xFF66DD44),
+        'burn' => const Color(0xFFFF6600),
+        'stun' => const Color(0xFFBBDDFF),
+        'atk_up' => const Color(0xFFFF8844),
+        'atk_down' || 'def_down' => const Color(0xFFFF4444),
+        'spd_up' || 'spd_down' => const Color(0xFF88DDFF),
+        'energized' => const Color(0xFF88CCFF),
+        _ => Colors.white70,
+      };
 
   static Widget _icon(String key) {
     const s = 12.0;
@@ -2481,25 +3220,40 @@ class _EffectBadge extends StatelessWidget {
     // def_down.png = cracked creature →  def_down / atk_down
     // energy.png = blue flask         →  energized
     return switch (key) {
-      'damage'       => const Icon(Icons.flash_on,        size: s, color: Color(0xFFFF5533)),
-      'aoe'          => const Icon(Icons.all_out,         size: s, color: Color(0xFFFF5533)),
-      'heal'         => Image.asset('${_kS}regen.png',    width: s, height: s),
-      'shield'       => Image.asset('${_kS}burn.png',     width: s, height: s),
-      'shield_break' => Image.asset('${_kS}burn.png',     width: s, height: s,
-                          color: const Color(0xFFFFAA00), colorBlendMode: BlendMode.modulate),
-      'poison'       => Image.asset('${_kS}shield.png',   width: s, height: s),
-      'burn'         => const Icon(Icons.local_fire_department, size: s, color: Color(0xFFFF6600)),
-      'stun'         => Image.asset('${_kS}stun.png',     width: s, height: s),
-      'regen'        => Image.asset('${_kS}regen.png',    width: s, height: s),
-      'atk_up'       => const Icon(Icons.trending_up,    size: s, color: Color(0xFFFF8844)),
-      'atk_down'     => Image.asset('${_kS}def_down.png', width: s, height: s),
-      'def_up'       => Image.asset('${_kS}burn.png',     width: s, height: s,
-                          color: const Color(0xFF88CCFF), colorBlendMode: BlendMode.modulate),
-      'def_down'     => Image.asset('${_kS}def_down.png', width: s, height: s),
-      'spd_up'       => const Icon(Icons.electric_bolt,  size: s, color: Color(0xFF88DDFF)),
-      'spd_down'     => Image.asset('${_kS}slow.png',     width: s, height: s),
-      'energized'    => Image.asset('${_kS}energy.png',   width: s, height: s),
-      _              => const SizedBox(width: s),
+      'damage' => const Icon(Icons.flash_on, size: s, color: Color(0xFFFF5533)),
+      'aoe' => const Icon(Icons.all_out, size: s, color: Color(0xFFFF5533)),
+      'heal' => Image.asset('${_kS}self-heal.png', width: s, height: s),
+      'shield' => Image.asset('${_kS}raise-shield.png', width: s, height: s),
+      'shield_break' =>
+        Image.asset('${_kS}disable-ability.png', width: s, height: s),
+      'poison' => Image.asset('${_kS}poison.png', width: s, height: s),
+      'burn' => Image.asset('${_kS}critical.png', width: s, height: s),
+      'stun' => Image.asset('${_kS}stun.png', width: s, height: s),
+      'regen' => Image.asset('${_kS}self-heal.png', width: s, height: s),
+      'atk_up' => Image.asset('${_kS}attack-up.png', width: s, height: s),
+      'atk_down' => Image.asset('${_kS}attack-down.png', width: s, height: s),
+      'def_up' => Image.asset('${_kS}raise-shield.png', width: s, height: s),
+      'def_down' => Image.asset('${_kS}fragile.png', width: s, height: s),
+      'spd_up' => Image.asset('${_kS}speed-up.png', width: s, height: s),
+      'spd_down' => Image.asset('${_kS}speed-down.png', width: s, height: s),
+      'energized' => Image.asset('${_kS}gain-energy.png', width: s, height: s),
+      _ => const SizedBox(width: s),
     };
   }
 }
+
+// ── Animation name mapper ─────────────────────────────────────────────────────
+
+String _animFor(PetCharacterAnimState? state) => switch (state) {
+  PetCharacterAnimState.move         => 'action/move-forward',
+  PetCharacterAnimState.attack       => 'attack/melee/normal-attack',
+  PetCharacterAnimState.attackMelee  => 'attack/melee/normal-attack',
+  PetCharacterAnimState.attackRanged => 'attack/ranged/cast-fly',
+  PetCharacterAnimState.hit          => 'defense/hit-by-normal',
+  PetCharacterAnimState.buff         => 'battle/get-buff',
+  PetCharacterAnimState.debuff       => 'battle/get-debuff',
+  PetCharacterAnimState.heal         => 'battle/get-buff',
+  PetCharacterAnimState.shield       => 'defense/hit-with-shield',
+  PetCharacterAnimState.faint        => 'action/move-back',
+  _                                  => 'action/idle/normal',
+};
