@@ -122,7 +122,6 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       _removePreAppliedShield(cardInstanceId);
       state = state.copyWith(
         pendingSkills: newPending,
-        selectedPetId: petId,
         playerTeam: _livePlayerTeamVMs(),
         hand: _buildHandVMs(_engine.currentPlayerHand, newPending),
       );
@@ -136,18 +135,8 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     // Apply shield immediately so the HP bar reflects it during planning.
     _applyPreShield(card);
 
-    // Auto-advance to next pet that has no cards assigned yet.
-    final handPetIds = _engine.currentPlayerHand.map((c) => c.ownerPetId).toSet();
-    final next = _playerPets
-        .where((p) =>
-            !p.isFainted &&
-            handPetIds.contains(p.id) &&
-            !newPending.containsKey(p.id))
-        .firstOrNull;
-
     state = state.copyWith(
       pendingSkills: newPending,
-      selectedPetId: next?.id ?? petId,
       playerTeam: _livePlayerTeamVMs(),
       hand: _buildHandVMs(_engine.currentPlayerHand, newPending),
     );
@@ -561,6 +550,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       spriteConfig:    def?.spriteConfig,
       characterConfig: characterConfig,
       partCardArt:     def?.partCardArt ?? const {},
+      creatureDef:     def,
     );
   }
 
@@ -573,6 +563,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       spriteConfig:    def?.spriteConfig,
       characterConfig: characterConfig,
       partCardArt:     def?.partCardArt ?? const {},
+      creatureDef:     def,
     );
   }
 

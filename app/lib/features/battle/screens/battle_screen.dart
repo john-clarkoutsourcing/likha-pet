@@ -1319,14 +1319,8 @@ class _BottomPanelContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final living = vm.playerTeam.where((p) => !p.isFainted).toList();
 
-    // When a player pet is tapped, filter hand to only that pet's cards.
-    final filterPet = vm.selectedPetId != null
-        ? living.where((p) => p.id == vm.selectedPetId).firstOrNull
-        : null;
-    final visiblePets = filterPet != null ? [filterPet] : living;
-
     final entries = <(PetViewModel, CardViewModel)>[];
-    for (final pet in visiblePets) {
+    for (final pet in living) {
       for (final card in vm.hand.where((c) => c.ownerPetId == pet.id)) {
         entries.add((pet, card));
       }
@@ -1347,12 +1341,7 @@ class _BottomPanelContent extends StatelessWidget {
         // ── Flat card row ────────────────────────────────────────────────
         if (!vm.isBattleOver)
           Expanded(
-            child: filterPet != null && entries.isEmpty
-                ? Center(
-                    child: Text('No cards for ${filterPet.name}',
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 11)))
-                : entries.isEmpty
+            child: entries.isEmpty
                 ? const Center(
                     child: Text('No cards',
                         style: TextStyle(color: Colors.white38, fontSize: 12)))
