@@ -1,3 +1,4 @@
+import 'dart:ui' show Offset;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:likha_pet_battle_engine/battle_state.dart';
 import 'package:likha_pet_battle_engine/pet.dart';
@@ -204,10 +205,50 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
           : action.trait.effect.type.name;
       final partSlot   = action.trait.part.name; // 'horn'|'back'|'tail'|'mouth'|'body'
       if (!action.actor.isFainted) {
+        // Melee cards (single-target damage) dash toward the front living enemy.
+        final isPlayerActor = _playerPets.any((p) => p.id == actorId);
+        final opposingTeam = isPlayerActor ? _enemyPets : _playerPets;
+        final isMeleeDash = action.trait.effect.type == EffectType.damage;
+        Offset dashDir = Offset.zero;
+        if (isMeleeDash) {
+          const pBaseX = [0.17, 0.03, 0.00]; // FRONT, MID, BACK
+          const eBaseX = [0.55, 0.77, 0.88];
+          const pBaseY = [0.22, 0.03, 0.48];
+          const eBaseY = [0.22, 0.03, 0.48];
+
+          final actorIdx = (isPlayerActor
+                  ? _playerPets.indexWhere((p) => p.id == actorId)
+                  : _enemyPets.indexWhere((p) => p.id == actorId))
+              .clamp(0, 2);
+          final targetIdx = opposingTeam.indexWhere((p) => !p.isFainted);
+          if (targetIdx >= 0) {
+            final actorBaseX = isPlayerActor ? pBaseX[actorIdx] : eBaseX[actorIdx];
+            final actorBaseY = isPlayerActor ? pBaseY[actorIdx] : eBaseY[actorIdx];
+            final targetBaseX = isPlayerActor ? eBaseX[targetIdx] : pBaseX[targetIdx];
+            final targetBaseY = isPlayerActor ? eBaseY[targetIdx] : pBaseY[targetIdx];
+            final margin = isPlayerActor ? -0.04 : 0.04;
+            dashDir = Offset(
+              targetBaseX - actorBaseX + margin,
+              targetBaseY - actorBaseY,
+            );
+
+            state = state.copyWith(
+              petAnimStates: {actorId: PetCharacterAnimState.move},
+              petAttackSlots: {actorId: partSlot},
+              petDashOffsets: {actorId: dashDir},
+            );
+            await Future.delayed(const Duration(milliseconds: 300));
+            if (!mounted) return;
+          }
+        }
+
         state = state.copyWith(
           petAnimStates:  {actorId: _animStateForEffect(effectType)},
           petEffectVfx:   {actorId: effectType},
           petAttackSlots: {actorId: partSlot},
+          petDashOffsets: isMeleeDash && dashDir != Offset.zero
+              ? {actorId: dashDir}
+              : const {},
         );
         await Future.delayed(const Duration(milliseconds: 300));
         if (!mounted) return;
@@ -236,7 +277,12 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         if (!mounted) return;
       }
 
-      state = state.copyWith(petAnimStates: const {}, petEffectVfx: const {}, petAttackSlots: const {});
+      state = state.copyWith(
+        petAnimStates: const {},
+        petEffectVfx: const {},
+        petAttackSlots: const {},
+        petDashOffsets: const {},
+      );
       await Future.delayed(const Duration(milliseconds: 120));
       if (!mounted) return;
     }

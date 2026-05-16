@@ -669,7 +669,9 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
 
       for (final petId in vm.petAnimStates.keys) {
         final effectType = vm.petEffectVfx[petId];
-        final cfg = resolveProjectileConfig(petId, effectType: effectType);
+        if (effectType == null) continue;
+        final cfg = resolveProjectileConfig(effectType: effectType);
+        if (cfg == null) continue;
 
         // Determine start (actor center).
         final isPlayer = petId.startsWith('bayani');
