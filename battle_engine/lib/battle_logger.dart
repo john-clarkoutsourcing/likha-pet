@@ -132,6 +132,16 @@ class BattleLogger {
     events.add(ShieldBreakEvent(targetName: targetName));
   }
 
+  void energySteal(String actorName, String targetName, int amount) {
+    _line('     → $actorName steals $amount energy from $targetName!');
+    events.add(EnergyStealEvent(actorName: actorName, targetName: targetName, amount: amount, stolen: true));
+  }
+
+  void energyDrain(String actorName, String targetName, int amount) {
+    _line('     → $actorName destroys $amount energy from $targetName!');
+    events.add(EnergyStealEvent(actorName: actorName, targetName: targetName, amount: amount, stolen: false));
+  }
+
   void stunSkip(String petName) {
     _line('  ⚡ $petName is STUNNED — skips their turn.');
     events.add(StunSkipEvent(petName: petName));
@@ -287,4 +297,18 @@ class BattleEndEvent extends BattleEvent {
 class ShieldBreakEvent extends BattleEvent {
   final String targetName;
   const ShieldBreakEvent({required this.targetName});
+}
+
+/// [stolen] true = energy was transferred to attacker; false = destroyed only.
+class EnergyStealEvent extends BattleEvent {
+  final String actorName;
+  final String targetName;
+  final int amount;
+  final bool stolen;
+  const EnergyStealEvent({
+    required this.actorName,
+    required this.targetName,
+    required this.amount,
+    required this.stolen,
+  });
 }

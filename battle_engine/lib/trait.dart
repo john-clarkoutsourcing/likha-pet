@@ -108,6 +108,9 @@ class TraitEffect {
   final String target; // 'enemy', 'ally', 'self', 'all_enemies', 'all_allies'
   final int
       selfShield; // shield applied to the attacker immediately when this resolves (0 = none)
+  final bool lifeSteal;   // heal attacker by actual HP damage dealt
+  final bool energySteal; // remove 1 enemy energy AND give 1 to attacker's team
+  final bool energyDrain; // remove 1 enemy energy only (no gain to attacker)
 
   const TraitEffect({
     required this.type,
@@ -117,6 +120,9 @@ class TraitEffect {
     this.duration = 0,
     required this.target,
     this.selfShield = 0,
+    this.lifeSteal = false,
+    this.energySteal = false,
+    this.energyDrain = false,
   });
 }
 
@@ -208,38 +214,25 @@ class Trait {
 // ── Pre-built trait library ──────────────────────────────────────────────────
 
 class TraitLibrary {
+  /// Builds a Trait whose numeric values (attack, defense, energy) come from
+  /// [kClassicCardSpecs]. The base trait supplies everything semantic:
+  /// effect type, target, buff/debuff kind, part, cooldown, rarity.
   static Trait withClassicCardStats({
     required Trait baseTrait,
     required String traitId,
     required String cardId,
   }) {
     final spec = kClassicCardSpecs[cardId];
-    if (spec == null) {
-      return Trait(
-        id: traitId,
-        name: baseTrait.name,
-        type: baseTrait.type,
-        part: baseTrait.part,
-        energyCost: baseTrait.energyCost,
-        cooldownMax: baseTrait.cooldownMax,
-        effect: baseTrait.effect,
-        description: baseTrait.description,
-        rarity: baseTrait.rarity,
-        comboTag: baseTrait.comboTag,
-        tags: baseTrait.tags,
-        partClass: baseTrait.partClass,
-      );
-    }
+    if (spec == null) return baseTrait;
 
-    final effect = _effectFromClassic(baseTrait.effect, spec);
     return Trait(
       id: traitId,
       name: spec.name,
-      type: spec.attack > 0 ? TraitType.offensive : TraitType.support,
+      type: baseTrait.type,
       part: baseTrait.part,
       energyCost: spec.energy,
       cooldownMax: baseTrait.cooldownMax,
-      effect: effect,
+      effect: _effectFromClassic(baseTrait.effect, spec),
       description: spec.description,
       rarity: baseTrait.rarity,
       comboTag: baseTrait.comboTag,
@@ -248,641 +241,235 @@ class TraitLibrary {
     );
   }
 
-  static TraitEffect _effectFromClassic(
-      TraitEffect base, ClassicCardSpec spec) {
-    if (spec.attack > 0) {
+  /// Fills numeric values from [spec] while preserving the semantic effect
+  /// type defined in [base]:
+  ///   damage  → value = spec.attack, selfShield = spec.defense
+  ///   shield  → value = spec.defense
+  ///   buff/debuff/etc → selfShield = spec.defense, all other fields preserved
+  static TraitEffect _effectFromClassic(TraitEffect base, ClassicCardSpec spec) {
+    if (base.type == EffectType.damage) {
       return TraitEffect(
         type: EffectType.damage,
         value: spec.attack,
         target: base.target,
         selfShield: spec.defense,
+        lifeSteal: base.lifeSteal,
+        energySteal: base.energySteal,
+        energyDrain: base.energyDrain,
       );
     }
-    if (spec.defense > 0) {
+    if (base.type == EffectType.shield) {
       return TraitEffect(
         type: EffectType.shield,
         value: spec.defense,
-        target: 'self',
+        target: base.target,
       );
     }
     return TraitEffect(
-      type: EffectType.damage,
-      value: 0,
+      type: base.type,
+      value: base.value,
+      buffType: base.buffType,
+      debuffType: base.debuffType,
+      duration: base.duration,
       target: base.target,
+      selfShield: spec.defense,
     );
   }
 
-  // ── Axie class traits ─────────────────────────────────────────────────────
-  // Beast class: burst damage + morale-based. Cards deal high ATK, gain
-  // shield as a side-effect of aggression. Mirrors Axie Classic Beast cards.
-
-  static Trait get beastHorn => Trait(
-        id: 'beast_horn',
-        name: 'Ivory Stab', // beast-horn-04
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description:
-            'Gain 1 energy per critical strike dealt by your team this round.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 90,
-            target: 'enemy',
-            selfShield: 30),
-      );
-
-  static Trait get beastBack => Trait(
-        id: 'beast_back',
-        name: 'Heroic Reward', // beast-back-04
-        type: TraitType.offensive,
-        part: TraitPart.back,
+  /// Minimal skeleton trait — name/description/energyCost are placeholders
+  /// that [withClassicCardStats] overwrites from the spec.
+  static Trait _base({
+    required String id,
+    required TraitType type,
+    required TraitPart part,
+    required TraitEffect effect,
+    int cooldownMax = 0,
+    SkillRarity rarity = SkillRarity.common,
+    String? comboTag,
+    List<String> tags = const [],
+    CreatureClass? partClass,
+  }) =>
+      Trait(
+        id: id,
+        name: '',
+        type: type,
+        part: part,
         energyCost: 0,
-        cooldownMax: 0,
-        description:
-            'Draw a card when attacking an Aquatic, Bird, or Dawn target.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage, value: 55, target: 'enemy'),
+        cooldownMax: cooldownMax,
+        description: '',
+        rarity: rarity,
+        comboTag: comboTag,
+        tags: tags,
+        partClass: partClass,
+        effect: effect,
       );
 
-  static Trait get beastTail => Trait(
-        id: 'beast_tail',
-        name: 'Night Steal', // beast-tail-04
-        type: TraitType.offensive,
-        part: TraitPart.tail,
-        energyCost: 1,
-        cooldownMax: 0,
-        description:
-            'Steal 1 energy from your opponent when comboed with another card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 90,
-            target: 'enemy',
-            selfShield: 20),
-      );
+  // ── Beast ─────────────────────────────────────────────────────────────────
+  static Trait get beastHorn => withClassicCardStats(
+        baseTrait: _base(id: 'beast_horn', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'beast_horn', cardId: 'beast-horn-04');
 
-  static Trait get beastMouth => Trait(
-        id: 'beast_mouth',
-        name: 'Piercing Sound', // beast-mouth-04
-        type: TraitType.offensive,
-        part: TraitPart.mouth,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Destroy 1 of your opponent\'s energy.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 85,
-            target: 'enemy',
-            selfShield: 30),
-      );
+  static Trait get beastBack => withClassicCardStats(
+        baseTrait: _base(id: 'beast_back', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'beast_back', cardId: 'beast-back-04');
+
+  static Trait get beastTail => withClassicCardStats(
+        baseTrait: _base(id: 'beast_tail', type: TraitType.offensive, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy', energySteal: true)),
+        traitId: 'beast_tail', cardId: 'beast-tail-04');
+
+  static Trait get beastMouth => withClassicCardStats(
+        baseTrait: _base(id: 'beast_mouth', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy', energyDrain: true)),
+        traitId: 'beast_mouth', cardId: 'beast-mouth-04');
 
   // ── Plant ─────────────────────────────────────────────────────────────────
-  // Plant class: tank + sustain. Cards prioritise shield and healing.
-  // "Serious" is a legendary 0-energy mouth card in Axie Classic.
+  static Trait get plantHorn => withClassicCardStats(
+        baseTrait: _base(id: 'plant_horn', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'plant_horn', cardId: 'plant-horn-04');
 
-  static Trait get plantHorn => Trait(
-        id: 'plant_horn',
-        name: 'Wooden Stab', // plant-horn-04
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Deal 120% damage if this Axie\'s shield breaks.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 105,
-            target: 'enemy',
-            selfShield: 40),
-      );
+  static Trait get plantBack => withClassicCardStats(
+        baseTrait: _base(id: 'plant_back', type: TraitType.support, part: TraitPart.back, effect: const TraitEffect(type: EffectType.shield, value: 0, target: 'self')),
+        traitId: 'plant_back', cardId: 'plant-back-04');
 
-  static Trait get plantBack => Trait(
-        id: 'plant_back',
-        name: 'Shroom\'s Grace', // plant-back-04
-        type: TraitType.support,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Heal this Axie for 120 HP.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.shield, value: 50, target: 'self'),
-      );
+  static Trait get plantTail => withClassicCardStats(
+        baseTrait: _base(id: 'plant_tail', type: TraitType.offensive, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'plant_tail', cardId: 'plant-tail-04');
 
-  static Trait get plantTail => Trait(
-        id: 'plant_tail',
-        name: 'Cattail Slap', // plant-tail-04
-        type: TraitType.offensive,
-        part: TraitPart.tail,
-        energyCost: 0,
-        cooldownMax: 0,
-        description: 'Draw a card if struck by a Beast, Bug, or Mech card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 10,
-            target: 'enemy',
-            selfShield: 30),
-      );
+  static Trait get plantMouth => withClassicCardStats(
+        baseTrait: _base(id: 'plant_mouth', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy', lifeSteal: true)),
+        traitId: 'plant_mouth', cardId: 'plant-mouth-04');
 
-  static Trait get plantMouth => Trait(
-        id: 'plant_mouth',
-        name: 'Drain Bite', // plant-mouth-04
-        type: TraitType.offensive,
-        part: TraitPart.mouth,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Heal this Axie by the damage this card inflicts.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 60,
-            target: 'enemy',
-            selfShield: 60),
-      );
+  // Vegetal Bite — steals 1 energy from enemy team when played
+  static Trait get plantMouthVegetalBite => withClassicCardStats(
+        baseTrait: _base(id: 'plant_mouth_vegetal_bite', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy', energySteal: true)),
+        traitId: 'plant_mouth_vegetal_bite', cardId: 'plant-mouth-02');
 
   // ── Aquatic ───────────────────────────────────────────────────────────────
-  // Aquatic class: speed + utility. Fast attacks, evasion, and control.
+  static Trait get aquaticHorn => withClassicCardStats(
+        baseTrait: _base(id: 'aquatic_horn', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'aquatic_horn', cardId: 'aquatic-horn-04');
 
-  static Trait get aquaticHorn => Trait(
-        id: 'aquatic_horn',
-        name: 'Deep Sea Gore', // aquatic-horn-04
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description:
-            'Deal 30% of shield gained when the round started as bonus damage.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 80,
-            target: 'enemy',
-            selfShield: 50),
-      );
+  static Trait get aquaticBack => withClassicCardStats(
+        baseTrait: _base(id: 'aquatic_back', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'aquatic_back', cardId: 'aquatic-back-04');
 
-  static Trait get aquaticBack => Trait(
-        id: 'aquatic_back',
-        name: 'Scale Dart', // aquatic-back-04
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Draw a card when attacking an idle target.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 100,
-            target: 'back_enemy',
-            selfShield: 35),
-      );
+  static Trait get aquaticTail => withClassicCardStats(
+        baseTrait: _base(id: 'aquatic_tail', type: TraitType.offensive, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'aquatic_tail', cardId: 'aquatic-tail-04');
 
-  static Trait get aquaticTail => Trait(
-        id: 'aquatic_tail',
-        name: 'Tail Slap', // aquatic-tail-04
-        type: TraitType.offensive,
-        part: TraitPart.tail,
-        energyCost: 0,
-        cooldownMax: 0,
-        description: 'Gain 1 energy when comboed with another card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage, value: 20, target: 'enemy'),
-      );
-
-  static Trait get aquaticMouth => Trait(
-        id: 'aquatic_mouth',
-        name: 'Swallow', // aquatic-mouth-04
-        type: TraitType.offensive,
-        part: TraitPart.mouth,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Heal this Axie by the damage inflicted with this card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 90,
-            target: 'enemy',
-            selfShield: 25),
-      );
+  static Trait get aquaticMouth => withClassicCardStats(
+        baseTrait: _base(id: 'aquatic_mouth', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy', lifeSteal: true)),
+        traitId: 'aquatic_mouth', cardId: 'aquatic-mouth-04');
 
   // ── Bird ──────────────────────────────────────────────────────────────────
-  // Bird class: glass cannon + speed. Feather Lunge is the highest-damage
-  // single card in the game. Peace Treaty disrupts enemy defences.
+  static Trait get birdHorn => withClassicCardStats(
+        baseTrait: _base(id: 'bird_horn', type: TraitType.support, part: TraitPart.horn,
+            effect: const TraitEffect(type: EffectType.buff, value: 20, buffType: BuffType.attackUp, duration: 1, target: 'self')),
+        traitId: 'bird_horn', cardId: 'bird-horn-04');
 
-  static Trait get birdHorn => Trait(
-        id: 'bird_horn',
-        name: 'Cockadoodledoo', // bird-horn-04
-        type: TraitType.support,
-        part: TraitPart.horn,
-        energyCost: 0,
-        cooldownMax: 0,
-        description: 'Apply attack+ to the whole team',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.buff,
-            value: 20,
-            buffType: BuffType.attackUp,
-            duration: 1,
-            target: 'self',
-            selfShield: 20),
-      );
+  static Trait get birdBack => withClassicCardStats(
+        baseTrait: _base(id: 'bird_back', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'bird_back', cardId: 'bird-back-04');
 
-  static Trait get birdBack => Trait(
-        id: 'bird_back',
-        name: 'Heart Break', // bird-back-04
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Apply Chill for 4 rounds.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 120,
-            target: 'back_enemy',
-            selfShield: 30),
-      );
+  static Trait get birdTail => withClassicCardStats(
+        baseTrait: _base(id: 'bird_tail', type: TraitType.utility, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'bird_tail', cardId: 'bird-tail-04');
 
-  static Trait get birdTail => Trait(
-        id: 'bird_tail',
-        name: 'Sunder Armor', // bird-tail-04
-        type: TraitType.utility,
-        part: TraitPart.tail,
-        energyCost: 1,
-        cooldownMax: 0,
-        description:
-            'Add 20% shield to this Axie for each debuff it possesses.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 105,
-            target: 'enemy',
-            selfShield: 30),
-      );
-
-  static Trait get birdMouth => Trait(
-        id: 'bird_mouth',
-        name: 'Peace Treaty', // bird-mouth-04
-        type: TraitType.offensive,
-        part: TraitPart.mouth,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Apply Attack- on target.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 120,
-            target: 'enemy',
-            selfShield: 25),
-      );
+  static Trait get birdMouth => withClassicCardStats(
+        baseTrait: _base(id: 'bird_mouth', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'bird_mouth', cardId: 'bird-mouth-04');
 
   // ── Bug ───────────────────────────────────────────────────────────────────
-  // Bug class: burst + debuffs. Mandible Strike is the highest-value 1-energy
-  // attack. Numbing Lecretion applies stun to lock down enemies.
+  static Trait get bugHorn => withClassicCardStats(
+        baseTrait: _base(id: 'bug_horn', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy', energySteal: true)),
+        traitId: 'bug_horn', cardId: 'bug-horn-04');
 
-  static Trait get bugHorn => Trait(
-        id: 'bug_horn',
-        name: 'Bug Signal', // bug-horn-04
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description:
-            'Steal energy from your opponent when chained with another "Bug Signal" card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 90,
-            target: 'back_enemy',
-            selfShield: 35),
-      );
+  static Trait get bugBack => withClassicCardStats(
+        baseTrait: _base(id: 'bug_back', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'bug_back', cardId: 'bug-back-04');
 
-  static Trait get bugBack => Trait(
-        id: 'bug_back',
-        name: 'Barb Strike', // bug-back-04
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Apply 2 poison to target when played in a chain.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 90,
-            target: 'back_enemy',
-            selfShield: 40),
-      );
+  static Trait get bugTail => withClassicCardStats(
+        baseTrait: _base(id: 'bug_tail', type: TraitType.offensive, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'bug_tail', cardId: 'bug-tail-04');
 
-  static Trait get bugTail => Trait(
-        id: 'bug_tail',
-        name: 'Twin Needle', // bug-tail-04
-        type: TraitType.offensive,
-        part: TraitPart.tail,
-        energyCost: 0,
-        cooldownMax: 0,
-        description: 'Attack twice when comboed with another card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage, value: 35, target: 'back_enemy'),
-      );
+  static Trait get bugMouth => withClassicCardStats(
+        baseTrait: _base(id: 'bug_mouth', type: TraitType.utility, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'bug_mouth', cardId: 'bug-mouth-04');
 
-  static Trait get bugMouth => Trait(
-        id: 'bug_mouth',
-        name: 'Sunder Claw', // bug-mouth-04
-        type: TraitType.utility,
-        part: TraitPart.mouth,
-        energyCost: 0,
-        cooldownMax: 0,
-        description:
-            'Randomly discard 1 card from your enemy\'s hand when comboed with another card',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage, value: 20, target: 'enemy'),
-      );
+  // Blood Taste — heals attacker by actual damage dealt (lifesteal)
+  static Trait get bugMouthBloodTaste => withClassicCardStats(
+        baseTrait: _base(id: 'bug_mouth_blood_taste', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy', lifeSteal: true)),
+        traitId: 'bug_mouth_blood_taste', cardId: 'bug-mouth-02');
 
   // ── Reptile ───────────────────────────────────────────────────────────────
+  static Trait get reptileHorn => withClassicCardStats(
+        baseTrait: _base(id: 'reptile_horn', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'reptile_horn', cardId: 'reptile-horn-04');
+
+  static Trait get reptileBack => withClassicCardStats(
+        baseTrait: _base(id: 'reptile_back', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'reptile_back', cardId: 'reptile-back-04');
+
+  static Trait get reptileTail => withClassicCardStats(
+        baseTrait: _base(id: 'reptile_tail', type: TraitType.offensive, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'reptile_tail', cardId: 'reptile-tail-04');
+
+  static Trait get reptileMouth => withClassicCardStats(
+        baseTrait: _base(id: 'reptile_mouth', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'reptile_mouth', cardId: 'reptile-mouth-04');
+
   // ── Beast variant skills ──────────────────────────────────────────────────
+  static Trait get beastHorn2 => withClassicCardStats(
+        baseTrait: _base(id: 'beast_horn_2', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'beast_horn_2', cardId: 'beast-horn-06');
 
-  static Trait get beastHorn2 => Trait(
-        id: 'beast_horn_2',
-        name: 'Merry Legion',
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Bonus 20% shield when comboed.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 90,
-            target: 'enemy',
-            selfShield: 40),
-      );
-
-  static Trait get beastBack2 => Trait(
-        id: 'beast_back_2',
-        name: 'Nitro Leap',
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Attack first if any Axie is in Last Stand.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 120,
-            target: 'enemy',
-            selfShield: 35),
-      );
+  static Trait get beastBack2 => withClassicCardStats(
+        baseTrait: _base(id: 'beast_back_2', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'beast_back_2', cardId: 'beast-back-06');
 
   // ── Plant variant skills ──────────────────────────────────────────────────
+  static Trait get plantHorn2 => withClassicCardStats(
+        baseTrait: _base(id: 'plant_horn_2', type: TraitType.defensive, part: TraitPart.horn,
+            effect: const TraitEffect(type: EffectType.buff, value: 0, buffType: BuffType.defenseUp, duration: 1, target: 'self')),
+        traitId: 'plant_horn_2', cardId: 'plant-horn-06');
 
-  static Trait get plantHorn2 => Trait(
-        id: 'plant_horn_2',
-        name: 'Healing Aroma',
-        type: TraitType.defensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Heal this Axie for120 HP.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-          type: EffectType.buff,
-          value: 0,
-          buffType: BuffType.defenseUp,
-          duration: 1,
-          target: 'self',
-          selfShield: 50,
-        ),
-      );
-
-  static Trait get plantBack2 => Trait(
-        id: 'plant_back_2',
-        name: 'Cleanse Scent',
-        type: TraitType.utility,
-        part: TraitPart.back,
-        energyCost: 0,
-        cooldownMax: 0,
-        description:
-            'Remove all debuffs from self. Can activate while stunned or feared.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-          type: EffectType.debuff,
-          value: 0,
-          debuffType: DebuffType.poisoned,
-          duration: 1,
-          target: 'self',
-          selfShield: 30,
-        ),
-      );
+  static Trait get plantBack2 => withClassicCardStats(
+        baseTrait: _base(id: 'plant_back_2', type: TraitType.utility, part: TraitPart.back,
+            effect: const TraitEffect(type: EffectType.debuff, value: 0, debuffType: DebuffType.poisoned, duration: 1, target: 'self')),
+        traitId: 'plant_back_2', cardId: 'plant-back-06');
 
   // ── Aquatic variant skills ────────────────────────────────────────────────
+  static Trait get aquaticHorn2 => withClassicCardStats(
+        baseTrait: _base(id: 'aquatic_horn_2', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'aquatic_horn_2', cardId: 'aquatic-horn-06');
 
-  static Trait get aquaticHorn2 => Trait(
-        id: 'aquatic_horn_2',
-        name: 'Clam Slash',
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description:
-            'Apply Attack+ to this Axie when attacking Beast, Bug, or Mech targets.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 115,
-            target: 'enemy',
-            selfShield: 35),
-      );
-
-  static Trait get aquaticBack2 => Trait(
-        id: 'aquatic_back_2',
-        name: 'Swift Escape',
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Apply Speed+ to this Axie for 2 rounds when attacked.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 100,
-            target: 'back_enemy',
-            selfShield: 35),
-      );
+  static Trait get aquaticBack2 => withClassicCardStats(
+        baseTrait: _base(id: 'aquatic_back_2', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'aquatic_back_2', cardId: 'aquatic-back-06');
 
   // ── Bird variant skills ───────────────────────────────────────────────────
+  static Trait get birdHorn2 => withClassicCardStats(
+        baseTrait: _base(id: 'bird_horn_2', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'bird_horn_2', cardId: 'bird-horn-06');
 
-  static Trait get birdHorn2 => Trait(
-        id: 'bird_horn_2',
-        name: 'Air Force One',
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Deal 120% damage when chained with another "Trump" card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 125,
-            target: 'back_enemy',
-            selfShield: 30),
-      );
-
-  static Trait get birdBack2 => Trait(
-        id: 'bird_back_2',
-        name: 'Ill-omened',
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Apply Jinx for 4 rounds.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 120,
-            target: 'back_enemy',
-            selfShield: 30),
-      );
+  static Trait get birdBack2 => withClassicCardStats(
+        baseTrait: _base(id: 'bird_back_2', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'back_enemy')),
+        traitId: 'bird_back_2', cardId: 'bird-back-06');
 
   // ── Bug variant skills ────────────────────────────────────────────────────
+  static Trait get bugHorn2 => withClassicCardStats(
+        baseTrait: _base(id: 'bug_horn_2', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'bug_horn_2', cardId: 'bug-horn-06');
 
-  static Trait get bugHorn2 => Trait(
-        id: 'bug_horn_2',
-        name: 'Grub Surprise',
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Apply Fear to shielded targets.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 120,
-            target: 'enemy',
-            selfShield: 20),
-      );
-
-  static Trait get bugBack2 => Trait(
-        id: 'bug_back_2',
-        name: 'Bug Noise',
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Apply Attack- to target.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 100,
-            target: 'enemy',
-            selfShield: 45),
-      );
+  static Trait get bugBack2 => withClassicCardStats(
+        baseTrait: _base(id: 'bug_back_2', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'bug_back_2', cardId: 'bug-back-06');
 
   // ── Reptile variant skills ────────────────────────────────────────────────
+  static Trait get reptileHorn2 => withClassicCardStats(
+        baseTrait: _base(id: 'reptile_horn_2', type: TraitType.offensive, part: TraitPart.horn, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'reptile_horn_2', cardId: 'reptile-horn-06');
 
-  static Trait get reptileHorn2 => Trait(
-        id: 'reptile_horn_2',
-        name: 'Surprise Invasion',
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Deal 130% damage if target is faster than this Axie.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 100,
-            target: 'enemy',
-            selfShield: 40),
-      );
-
-  static Trait get reptileBack2 => Trait(
-        id: 'reptile_back_2',
-        name: 'Vine Dagger',
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 0,
-        cooldownMax: 0,
-        description:
-            'Double shield from this card when comboed with a plant card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 25,
-            target: 'enemy',
-            selfShield: 30),
-      );
-
-  // ── Reptile class: tank + sustain ─────────────────────────────────────────
-
-  static Trait get reptileHorn => Trait(
-        id: 'reptile_horn',
-        name: 'Scaly Lunge', // reptile-horn-04
-        type: TraitType.offensive,
-        part: TraitPart.horn,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Deal 120% damage when chained with another "lunge" card.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 120,
-            target: 'enemy',
-            selfShield: 30),
-      );
-
-  static Trait get reptileBack => Trait(
-        id: 'reptile_back',
-        name: 'Spike Throw', // reptile-back-04
-        type: TraitType.offensive,
-        part: TraitPart.back,
-        energyCost: 1,
-        cooldownMax: 0,
-        description:
-            'Target enemy with lowest shield when comboed with 2 or more cards.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 80,
-            target: 'back_enemy',
-            selfShield: 50),
-      );
-
-  static Trait get reptileTail => Trait(
-        id: 'reptile_tail',
-        name: 'Scale Dart', // reptile-tail-04
-        type: TraitType.offensive,
-        part: TraitPart.tail,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Generate 1 energy when attacking a buffed target.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 75,
-            target: 'back_enemy',
-            selfShield: 60),
-      );
-
-  static Trait get reptileMouth => Trait(
-        id: 'reptile_mouth',
-        name: 'Kotaro bite', // reptile-mouth-04
-        type: TraitType.offensive,
-        part: TraitPart.mouth,
-        energyCost: 1,
-        cooldownMax: 0,
-        description: 'Gain 1 energy if target is faster than this Axie.',
-        rarity: SkillRarity.common,
-        effect: const TraitEffect(
-            type: EffectType.damage,
-            value: 85,
-            target: 'enemy',
-            selfShield: 30),
-      );
+  static Trait get reptileBack2 => withClassicCardStats(
+        baseTrait: _base(id: 'reptile_back_2', type: TraitType.offensive, part: TraitPart.back, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
+        traitId: 'reptile_back_2', cardId: 'reptile-back-06');
 }

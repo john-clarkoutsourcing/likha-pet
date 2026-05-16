@@ -26,4 +26,8 @@ class EnergyPool {
   void regen() {
     _energy = (_energy + kTeamEnergyRegen).clamp(0, kTeamEnergyCap);
   }
+
+  void add(int amount) {
+    _energy = (_energy + amount).clamp(0, kTeamEnergyCap);
+  }
 }

@@ -135,6 +135,24 @@ class Pet {
     }
   }
 
+  /// Adds [amount] energy to this pet's pool (or own energy if solo).
+  void receiveEnergy(int amount) {
+    if (_pool != null) {
+      _pool!.add(amount);
+    } else {
+      _ownEnergy = (_ownEnergy + amount).clamp(0, kEnergyCap);
+    }
+  }
+
+  /// Removes up to [amount] energy from this pet's pool.
+  /// Returns the amount actually removed (capped by available energy).
+  int drainEnergy(int amount) {
+    final available = energy;
+    final actual = amount.clamp(0, available);
+    spendEnergy(actual);
+    return actual;
+  }
+
   // ── Status processing (called at START of each round) ─────────────────────
 
   void processStatusEffects(BattleLogger log) {

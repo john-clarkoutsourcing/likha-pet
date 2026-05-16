@@ -82,6 +82,28 @@ class ActionResolver {
         final actual = target.takeDamage(dmg);
         log.damage(target.name, actual, target.hp, isCrit: isCrit);
         if (target.isFainted) log.fainted(target.name);
+        // Lifesteal — heal attacker by however much HP the enemy actually lost.
+        // Uses kMaxFlatHealing cap so drain cards can't trivialise sustain.
+        if (effect.lifeSteal && actual > 0) {
+          final heal = actual.clamp(0, kMaxFlatHealing);
+          actor.receiveHealing(heal);
+          log.heal(actor.name, heal, actor.hp);
+        }
+        // Energy steal/drain — runs even if the hit kills the target.
+        // steal: enemy loses 1 energy, attacker's team gains 1 energy.
+        // drain: enemy loses 1 energy, attacker gains nothing.
+        if (effect.energySteal || effect.energyDrain) {
+          final enemy = _firstAlive(enemyTeam) ?? target;
+          final drained = enemy.drainEnergy(1);
+          if (drained > 0) {
+            if (effect.energySteal) {
+              actor.receiveEnergy(drained);
+              log.energySteal(actor.name, enemy.name, drained);
+            } else {
+              log.energyDrain(actor.name, enemy.name, drained);
+            }
+          }
+        }
 
       // ── AoE damage ────────────────────────────────────────────────────────
       case EffectType.aoe:
