@@ -50,22 +50,13 @@ flutter:
     - assets/images/
     - assets/images/bg2/
     - assets/images/cards/
+    - assets/images/part-cards/
     - assets/images/ui/
     - assets/images/icons/
     - assets/images/part-icons/
     - assets/images/status/
     - assets/images/reference/
     # Axie-style card frame templates
-    - assets/images/card-templates/en/cards/
-    - assets/images/card-templates/en/cards/beast/
-    - assets/images/card-templates/en/cards/plant/
-    - assets/images/card-templates/en/cards/aquatic/
-    - assets/images/card-templates/en/cards/bird/
-    - assets/images/card-templates/en/cards/bug/
-    - assets/images/card-templates/en/cards/reptile/
-    - assets/images/card-templates/en/cards/curse/
-    - assets/images/card-templates/en/cards/others/
-    - assets/images/card-templates/en/cards/tool/
     # Creature sprite fallbacks
     - assets/sprites/
     # Spine skeletal animations — all 15 starter creatures + dusk

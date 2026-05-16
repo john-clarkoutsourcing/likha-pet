@@ -78,10 +78,10 @@ class MixedSkeletonService {
   /// Useful for testing or one-off custom pets:
   ///   final mixed = await service.buildCustomMixed(
   ///     bodyClass: 'beast',
-  ///     hornCardArt: 'assets/images/cards/beast-horn-04.png',
-  ///     backCardArt: 'assets/images/cards/plant-back-06.png',  // hybrid
-  ///     tailCardArt: 'assets/images/cards/aquatic-tail-08.png', // hybrid
-  ///     mouthCardArt: 'assets/images/cards/beast-mouth-04.png',
+  ///     hornCardArt: 'assets/images/part-cards/beast-horn-04.png',
+  ///     backCardArt: 'assets/images/part-cards/plant-back-06.png',  // hybrid
+  ///     tailCardArt: 'assets/images/part-cards/aquatic-tail-08.png', // hybrid
+  ///     mouthCardArt: 'assets/images/part-cards/beast-mouth-04.png',
   ///     animSourcePath: 'assets/spines/beast/buba.json',
   ///   );
   Future<Map<String, dynamic>> buildCustomMixed({

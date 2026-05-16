@@ -197,7 +197,7 @@ class CardViewModel {
   final String? cardArtPath;
 
   /// Full Axie-style card-frame PNG for this skill.
-  /// Path: `assets/images/card-templates/en/cards/{class}/{name}.png`
+  /// Path: `assets/images/cards/{class}/{name}.png`
   final String? cardTemplatePath;
 
   const CardViewModel({
@@ -221,7 +221,7 @@ class CardViewModel {
     // Use the creature-specific card variant so art matches the Spine character.
     final variant = _kPetVariant[ownerPetId] ?? '04';
     if (cls == null || part == null) return null;
-    return 'assets/images/cards/$cls-$part-$variant.png';
+    return 'assets/images/part-cards/$cls-$part-$variant.png';
   }
 
   factory CardViewModel.fromCard(
@@ -232,6 +232,13 @@ class CardViewModel {
   }) {
     final trait = TraitViewModel.fromTrait(card.trait, owner,
         availableEnergy: availableEnergy);
+    final resolvedArtPath = cardArtPathOverride ??
+        _resolveArt(
+          card.ownerPetId,
+          trait.typeName,
+          trait.partName,
+          card.trait.rarity.name,
+        );
     return CardViewModel(
       instanceId: card.instanceId,
       ownerPetId: card.ownerPetId,
@@ -240,20 +247,31 @@ class CardViewModel {
       trait: trait,
       // Player pets supply exact art from their part definition;
       // fall back to the class-based lookup for registry (enemy) pets.
-      cardArtPath: cardArtPathOverride ??
-          _resolveArt(
-            card.ownerPetId,
-            trait.typeName,
-            trait.partName,
-            card.trait.rarity.name,
-          ),
-      cardTemplatePath: _resolveTemplate(card.trait),
+      cardArtPath: resolvedArtPath,
+      cardTemplatePath:
+          _resolveClassicTemplateFromCardArt(resolvedArtPath) ??
+          _resolveTemplate(card.trait),
     );
   }
 
-  /// Maps a Trait to its Axie-style card-template PNG: {class}/{lowercased name}.png
+  /// Fallback template lookup by trait ID (used when no part-card mapping exists).
   static String? _resolveTemplate(Trait trait) =>
       TraitCardCatalog.templatePathForTrait(trait);
+
+  /// Converts part-card art path to matching Axie Classic card template path.
+  /// Example:
+  ///   assets/images/part-cards/beast-horn-04.png
+  ///   -> assets/images/classic-cards/beast-horn-04.png
+  static String? _resolveClassicTemplateFromCardArt(String? cardArtPath) {
+    if (cardArtPath == null || cardArtPath.isEmpty) return null;
+    final file = cardArtPath.split('/').last;
+    final m = RegExp(
+      r'^(beast|bug|bird|plant|aquatic|reptile)-(horn|back|tail|mouth)-(\d{2})\.png$',
+    ).firstMatch(file);
+    if (m == null) return null;
+    final id = '${m.group(1)}-${m.group(2)}-${m.group(3)}';
+    return 'assets/images/classic-cards/$id.png';
+  }
 }
 
 // ── TurnOrderEntry ────────────────────────────────────────────────────────────

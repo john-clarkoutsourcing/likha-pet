@@ -1,4 +1,8 @@
 import 'dart:math' as math;
+import 'package:flame/cache.dart';
+import 'package:flame/components.dart' hide Matrix4;
+import 'package:flame/widgets.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,12 +39,14 @@ class BattleScreenArgs {
 
 const _kRoundSeconds = 30;
 const _kPanelH = 182.0; // card panel height
+const _kPanelPeekH = 32.0; // visible height when panel is collapsed
+final _deadPetImages = Images(prefix: 'assets/images/pet-sub-effect/');
 
 /// Base sprite size — scales multiply this for depth effect.
 const _kSpriteBase = 130.0;
 
 /// Depth: front largest/brightest, back smallest/dimmer.
-const _kScaleByPos   = [1.40, 1.40, 1.40];
+const _kScaleByPos   = [1.50, 1.50, 1.50];
 const _kOpacityByPos = [1.00, 1.00, 1.00];
 
 /// Battlefield positions as (left%, top%) fractions.
@@ -49,14 +55,14 @@ const _kOpacityByPos = [1.00, 1.00, 1.00];
 // Positions = fractions of FULL screen (no SafeArea inset).
 // Full screen ~375px tall, card panel 168px → y < 0.45 visible above panel.
 const _kPlayerPos = [
-  Offset(0.17, 0.22), // FRONT
-  Offset(0.03, 0.03), // MID
-  Offset(0.00, 0.48), // BACK
+  Offset(0.30, 0.22), // FRONT
+  Offset(0.15, 0.03), // MID
+  Offset(0.10, 0.35), // BACK
 ];
 const _kEnemyPos = [
-  Offset(0.55, 0.22), // FRONT
-  Offset(0.77, 0.03), // MID
-  Offset(0.88, 0.48), // BACK
+  Offset(0.50, 0.22), // FRONT
+  Offset(0.65, 0.03), // MID
+  Offset(0.75, 0.35), // BACK
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -72,13 +78,24 @@ class BattleScreen extends ConsumerStatefulWidget {
 class _BattleScreenState extends ConsumerState<BattleScreen>
     with TickerProviderStateMixin {
   late final AnimationController _timer;
+  late List<Offset> _playerPos;
+  late List<Offset> _enemyPos;
+  bool _showPositionTuner = false;
+  bool _isDeckCollapsed = false;
 
   @override
   void initState() {
     super.initState();
+    _playerPos = List<Offset>.from(_kPlayerPos);
+    _enemyPos = List<Offset>.from(_kEnemyPos);
     // Publish args so pveBattleProvider can read stageId before building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(battleArgsProvider.notifier).state = widget.args;
+      if (!mounted) return;
+      ref.read(battleArgsProvider.notifier).state = widget.args;
+      ref.read(pveBattleProvider.notifier).setBattlePositions(
+        playerPos: _playerPos,
+        enemyPos: _enemyPos,
+      );
     });
 
     SystemChrome.setPreferredOrientations([
@@ -120,6 +137,34 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
     _timer
       ..reset()
       ..forward();
+  }
+
+  void _setPos({
+    required bool isPlayer,
+    required int index,
+    double? dx,
+    double? dy,
+  }) {
+    setState(() {
+      final list = isPlayer ? _playerPos : _enemyPos;
+      final cur = list[index];
+      list[index] = Offset(dx ?? cur.dx, dy ?? cur.dy);
+    });
+    ref.read(pveBattleProvider.notifier).setBattlePositions(
+      playerPos: _playerPos,
+      enemyPos: _enemyPos,
+    );
+  }
+
+  void _resetPositions() {
+    setState(() {
+      _playerPos = List<Offset>.from(_kPlayerPos);
+      _enemyPos = List<Offset>.from(_kEnemyPos);
+    });
+    ref.read(pveBattleProvider.notifier).setBattlePositions(
+      playerPos: _playerPos,
+      enemyPos: _enemyPos,
+    );
   }
 
   @override
@@ -185,6 +230,7 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
     }
 
     const double panelH = _kPanelH;
+    final panelVisibleH = _isDeckCollapsed ? _kPanelPeekH : panelH;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -197,7 +243,11 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
           // ── Battlefield fills full safe area ────────────────────────────
           // Battlefield — truly full screen, no SafeArea
           Positioned.fill(
-            child: _Battlefield(vm: vm),
+            child: _Battlefield(
+              vm: vm,
+              playerPos: _playerPos,
+              enemyPos: _enemyPos,
+            ),
           ),
 
           // ── HUD overlays the top ─────────────────────────────────────────
@@ -216,17 +266,43 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
             Positioned(
               left: 0,
               right: 0,
-              bottom: panelH,
+              bottom: panelVisibleH,
               child: _BattleFeed(log: vm.roundLog),
             ),
 
           // ── Card panel at bottom ─────────────────────────────────────────
-          Positioned(
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
             left: 0,
             right: 0,
-            bottom: 0,
-            child: _BottomPanel(vm: vm, ref: ref, timer: _timer),
+            bottom: _isDeckCollapsed ? -(_kPanelH - _kPanelPeekH) : 0,
+            child: _BottomPanel(
+              vm: vm,
+              ref: ref,
+              timer: _timer,
+              isCollapsed: _isDeckCollapsed,
+              onToggleCollapse: () => setState(() {
+                _isDeckCollapsed = !_isDeckCollapsed;
+              }),
+            ),
           ),
+
+          if (kDebugMode)
+            Positioned(
+              top: 56,
+              left: 8,
+              child: _PositionTuner(
+                visible: _showPositionTuner,
+                onToggle: () => setState(
+                  () => _showPositionTuner = !_showPositionTuner,
+                ),
+                onReset: _resetPositions,
+                playerPos: _playerPos,
+                enemyPos: _enemyPos,
+                onChange: _setPos,
+              ),
+            ),
 
           // ── Discard popup ────────────────────────────────────────────────
           if (vm.needsDiscard) _DiscardPopup(vm: vm, ref: ref),
@@ -246,7 +322,7 @@ class _TopHUD extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 48,
+      height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -266,30 +342,35 @@ class _TopHUD extends StatelessWidget {
 
           // ── Centre block ───────────────────────────────────────────────
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Round + timer row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'ROUND ${vm.currentRound}',
-                      style: GoogleFonts.rajdhani(
-                        color: Colors.white70,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2,
-                      ),
+                    // Round + timer row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'ROUND ${vm.currentRound}',
+                          style: GoogleFonts.rajdhani(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _RoundTimer(timer: timer),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    _RoundTimer(timer: timer),
+                    const SizedBox(height: 3),
+                    // Attack order — compact
+                    _AttackOrderStrip(vm: vm),
                   ],
                 ),
-                const SizedBox(height: 3),
-                // Attack order — compact
-                _AttackOrderStrip(vm: vm),
-              ],
+              ),
             ),
           ),
 
@@ -297,6 +378,121 @@ class _TopHUD extends StatelessWidget {
           _PlayerTag(name: vm.enemyTeamName, isPlayer: false),
         ],
       ),
+    );
+  }
+}
+
+// ── Debug battlefield position tuner ──────────────────────────────────────────
+
+class _PositionTuner extends StatelessWidget {
+  final bool visible;
+  final VoidCallback onToggle;
+  final VoidCallback onReset;
+  final List<Offset> playerPos;
+  final List<Offset> enemyPos;
+  final void Function({
+    required bool isPlayer,
+    required int index,
+    double? dx,
+    double? dy,
+  }) onChange;
+
+  const _PositionTuner({
+    required this.visible,
+    required this.onToggle,
+    required this.onReset,
+    required this.playerPos,
+    required this.enemyPos,
+    required this.onChange,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!visible) {
+      return FilledButton.tonal(
+        onPressed: onToggle,
+        child: const Text('Tune Pos'),
+      );
+    }
+
+    return Container(
+      width: 360,
+      constraints: const BoxConstraints(maxHeight: 320),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Battlefield Position Tuner',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              TextButton(onPressed: onReset, child: const Text('Reset')),
+              IconButton(
+                onPressed: onToggle,
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ],
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildTeam('Player', true, playerPos),
+                  const SizedBox(height: 10),
+                  _buildTeam('Enemy', false, enemyPos),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeam(String label, bool isPlayer, List<Offset> pos) {
+    const slotNames = ['Front', 'Mid', 'Back'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70)),
+        for (var i = 0; i < pos.length && i < 3; i++)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${slotNames[i]}  x:${pos[i].dx.toStringAsFixed(2)} y:${pos[i].dy.toStringAsFixed(2)}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              Slider(
+                value: pos[i].dx.clamp(0.0, 1.0),
+                min: 0,
+                max: 1,
+                divisions: 100,
+                label: 'x',
+                onChanged: (v) => onChange(isPlayer: isPlayer, index: i, dx: v),
+              ),
+              Slider(
+                value: pos[i].dy.clamp(0.0, 1.0),
+                min: 0,
+                max: 1,
+                divisions: 100,
+                label: 'y',
+                onChanged: (v) => onChange(isPlayer: isPlayer, index: i, dy: v),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }
@@ -416,6 +612,8 @@ class _PlayerTag extends StatelessWidget {
     );
     final label = Text(
       name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: GoogleFonts.rajdhani(
         color: Colors.white70,
         fontSize: 11,
@@ -425,10 +623,18 @@ class _PlayerTag extends StatelessWidget {
     return isPlayer
         ? Row(
             mainAxisSize: MainAxisSize.min,
-            children: [label, const SizedBox(width: 5), avatar])
+            children: [
+              SizedBox(width: 72, child: label),
+              const SizedBox(width: 5),
+              avatar,
+            ])
         : Row(
             mainAxisSize: MainAxisSize.min,
-            children: [avatar, const SizedBox(width: 5), label]);
+            children: [
+              avatar,
+              const SizedBox(width: 5),
+              SizedBox(width: 72, child: label),
+            ]);
   }
 }
 
@@ -548,7 +754,13 @@ class _OrderBadge extends StatelessWidget {
 
 class _Battlefield extends ConsumerStatefulWidget {
   final PveBattleViewModel vm;
-  const _Battlefield({required this.vm});
+  final List<Offset> playerPos;
+  final List<Offset> enemyPos;
+  const _Battlefield({
+    required this.vm,
+    required this.playerPos,
+    required this.enemyPos,
+  });
 
   @override
   ConsumerState<_Battlefield> createState() => _BattlefieldState();
@@ -599,14 +811,20 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
 
       final nums = <_FloatNum>[];
 
-      void check(List<PetViewModel> oldTeam, List<PetViewModel> newTeam,
-          List<Offset> positions) {
+      void check(
+        List<PetViewModel> oldTeam,
+        List<PetViewModel> newTeam,
+        List<Offset> positions,
+        Map<String, Offset> dashOffsets,
+      ) {
         for (var i = 0; i < newTeam.length && i < oldTeam.length; i++) {
           final delta = newTeam[i].hp - oldTeam[i].hp;
           if (delta == 0) continue;
+          final petId = newTeam[i].id;
           final frac = positions[i.clamp(0, 2)];
-          final x = w * frac.dx + 30;
-          final y = h * frac.dy - 10;
+          final dash = dashOffsets[petId] ?? Offset.zero;
+          final x = w * (frac.dx + dash.dx) + 30;
+          final y = h * (frac.dy + dash.dy) - 10;
 
           if (delta < 0) {
             final wasPoisoned = oldTeam[i].activeDebuffs.contains('poisoned');
@@ -640,8 +858,18 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
         }
       }
 
-      check(oldVm.playerTeam, newVm.playerTeam, _kPlayerPos.toList());
-      check(oldVm.enemyTeam, newVm.enemyTeam, _kEnemyPos.toList());
+      check(
+        oldVm.playerTeam,
+        newVm.playerTeam,
+        widget.playerPos.toList(),
+        newVm.petDashOffsets,
+      );
+      check(
+        oldVm.enemyTeam,
+        newVm.enemyTeam,
+        widget.enemyPos.toList(),
+        newVm.petDashOffsets,
+      );
 
       if (nums.isNotEmpty) setState(() => _floatNums.addAll(nums));
     });
@@ -675,7 +903,7 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
 
         // Determine start (actor center).
         final isPlayer = petId.startsWith('bayani');
-        final attackerPositions = isPlayer ? _kPlayerPos : _kEnemyPos;
+        final attackerPositions = isPlayer ? widget.playerPos : widget.enemyPos;
 
         // Find which slot the attacker is in
         final team = isPlayer ? vm.playerTeam : vm.enemyTeam;
@@ -691,7 +919,7 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
         // Support effects should feel self/ally-centered instead of attack-like.
         Offset end = start;
         if (!_isSelfCenteredEffect(effectType)) {
-          final targetPositions = isPlayer ? _kEnemyPos : _kPlayerPos;
+          final targetPositions = isPlayer ? widget.enemyPos : widget.playerPos;
           final targetTeam = isPlayer ? vm.enemyTeam : vm.playerTeam;
           final targetIdx = targetTeam.indexWhere((p) => !p.isFainted);
           if (targetIdx < 0) continue;
@@ -765,7 +993,7 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
             // Enemy pets
             for (var i = 0; i < vm.enemyTeam.length; i++)
               _placed(
-                  w, h, _kEnemyPos[i],
+                  w, h, widget.enemyPos[i],
                   _BattlePet(
                     pet:          vm.enemyTeam[i],
                     isPlayer:     false,
@@ -781,7 +1009,7 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
             // Player pets
             for (var i = 0; i < vm.playerTeam.length; i++)
               _placed(
-                  w, h, _kPlayerPos[i],
+                  w, h, widget.playerPos[i],
                   _BattlePet(
                     pet:          vm.playerTeam[i],
                     isPlayer:     true,
@@ -1127,11 +1355,10 @@ class _Sprite extends StatelessWidget {
         // Pet body — PetRendererWidget when definition available, else placeholder.
         // Fainted → floating soul placeholder circle.
         if (pet.isFainted)
-          PetSpriteWidget(
-            size: size,
-            flipHorizontal: isPlayer,
-            petName: '✦',
-            petColor: Colors.white24,
+          SizedBox(
+            width: size,
+            height: size,
+            child: _DeadPetEffect(flipHorizontal: isPlayer),
           )
         else if (pet.creatureDef != null)
           SizedBox(
@@ -1181,6 +1408,36 @@ class _Sprite extends StatelessWidget {
       Color(0xFF43A047),
     ];
     return c[name.codeUnits.first % c.length];
+  }
+}
+
+class _DeadPetEffect extends StatelessWidget {
+  final bool flipHorizontal;
+  const _DeadPetEffect({required this.flipHorizontal});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget child = SpriteAnimationWidget.asset(
+      path: 'dead_pet.png',
+      images: _deadPetImages,
+      data: SpriteAnimationData.sequenced(
+        amount: 10,
+        amountPerRow: 10,
+        stepTime: 0.08,
+        textureSize: Vector2(512, 512),
+        loop: true,
+      ),
+      errorBuilder: (_) => const SizedBox.shrink(),
+    );
+
+    if (flipHorizontal) {
+      child = Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.diagonal3Values(-1, 1, 1),
+        child: child,
+      );
+    }
+    return child;
   }
 }
 
@@ -1256,8 +1513,14 @@ class _BottomPanel extends StatelessWidget {
   final PveBattleViewModel vm;
   final WidgetRef ref;
   final AnimationController timer;
+  final bool isCollapsed;
+  final VoidCallback onToggleCollapse;
   const _BottomPanel(
-      {required this.vm, required this.ref, required this.timer});
+      {required this.vm,
+      required this.ref,
+      required this.timer,
+      required this.isCollapsed,
+      required this.onToggleCollapse});
 
   @override
   Widget build(BuildContext context) {
@@ -1303,7 +1566,46 @@ class _BottomPanel extends StatelessWidget {
               ),
             ),
           ),
-          _BottomPanelContent(vm: vm, ref: ref, timer: timer),
+          Positioned.fill(
+            top: 20,
+            child: _BottomPanelContent(vm: vm, ref: ref, timer: timer),
+          ),
+          Align(
+            alignment: Alignment.topCenter,
+            child: GestureDetector(
+              onTap: onToggleCollapse,
+              child: Container(
+                margin: const EdgeInsets.only(top: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A243A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isCollapsed
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 15,
+                      color: Colors.white70,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isCollapsed ? 'Show Deck' : 'Hide Deck',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1320,9 +1622,12 @@ class _BottomPanelContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final living = vm.playerTeam.where((p) => !p.isFainted).toList();
+    final filterPet = vm.selectedPetId == null
+        ? null
+        : living.where((p) => p.id == vm.selectedPetId).firstOrNull;
 
     final entries = <(PetViewModel, CardViewModel)>[];
-    for (final pet in living) {
+    for (final pet in filterPet == null ? living : [filterPet]) {
       for (final card in vm.hand.where((c) => c.ownerPetId == pet.id)) {
         entries.add((pet, card));
       }
@@ -1343,97 +1648,116 @@ class _BottomPanelContent extends StatelessWidget {
         // ── Flat card row ────────────────────────────────────────────────
         if (!vm.isBattleOver)
           Expanded(
-            child: entries.isEmpty
-                ? const Center(
-                    child: Text('No cards',
-                        style: TextStyle(color: Colors.white38, fontSize: 12)))
-                : ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-                    itemCount: entries.length,
-                    itemBuilder: (_, i) {
-                      final (pet, card) = entries[i];
-                      final assigned   = vm.pendingSkills[pet.id] ?? [];
-                      final isAssigned = assigned.contains(card.instanceId);
-                      final comboIdx   = isAssigned
-                          ? assigned.indexOf(card.instanceId) + 1
-                          : null;
-                      final isNew     = vm.newCardIds.contains(card.instanceId);
-                      final isFizzled = vm.fizzledCardIds.contains(card.instanceId);
-
-                      // Tiny colored dot above first card of each new pet group
-                      final prevPet  = i > 0 ? entries[i - 1].$1 : null;
-                      final isNewPet = prevPet == null || prevPet.id != pet.id;
-                      final petColor = _PetCardSection._clsColor(
-                          pet.creatureDef?.bodyClass.name ?? '');
-
-                      // Pet class label above the first card of each group
-                      final clsName = pet.creatureDef?.bodyClass.name ?? '';
-                      final clsLabel = clsName.isEmpty ? '' :
-                          clsName[0].toUpperCase() + clsName.substring(1);
-
-                      Widget w = Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            height: 20,
-                            child: isNewPet && clsLabel.isNotEmpty
-                                ? Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 7, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: petColor.withValues(alpha: 0.18),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                          color: petColor.withValues(alpha: 0.55),
-                                          width: 1),
-                                    ),
-                                    child: Text(
-                                      clsLabel,
-                                      style: TextStyle(
-                                          color: petColor,
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.3),
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                          const SizedBox(height: 3),
-                          _SkillCard(
-                            trait:            card.trait,
-                            petName:          card.ownerPetName,
-                            isSelected:       isAssigned,
-                            isPity:           card.isPity,
-                            isFizzled:        isFizzled,
-                            cardArtPath:      card.cardArtPath,
-                            cardTemplatePath: card.cardTemplatePath,
-                            comboIndex:       comboIdx,
-                            onTap: () => ref
-                                .read(pveBattleProvider.notifier)
-                                .assignSkill(card.instanceId),
-                          ),
-                        ],
-                      );
-
-                      if (isNew) {
-                        w = _CardEntrance(
-                          key: ValueKey(card.instanceId),
-                          delay: Duration(milliseconds: i * 55),
-                          child: w,
-                        );
-                      }
-
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          left: isNewPet && i > 0 ? 14 : 3,
-                          right: 3,
-                        ),
-                        child: w,
-                      );
-                    },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (filterPet != null)
+                  _SelectedPetSkillHeader(
+                    pet: filterPet,
+                    onShowAll: () => ref
+                        .read(pveBattleProvider.notifier)
+                        .clearSelectedPet(),
                   ),
+                Expanded(
+                  child: entries.isEmpty
+                      ? Center(
+                          child: Text(
+                            filterPet == null
+                                ? 'No cards'
+                                : 'No cards for ${filterPet.name}',
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 12),
+                          ),
+                        )
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+                          itemCount: entries.length,
+                          itemBuilder: (_, i) {
+                            final (pet, card) = entries[i];
+                            final assigned = vm.pendingSkills[pet.id] ?? [];
+                            final isAssigned = assigned.contains(card.instanceId);
+                            final comboIdx = isAssigned
+                                ? assigned.indexOf(card.instanceId) + 1
+                                : null;
+                            final isNew = vm.newCardIds.contains(card.instanceId);
+                            final isFizzled = vm.fizzledCardIds.contains(card.instanceId);
+
+                            final prevPet = i > 0 ? entries[i - 1].$1 : null;
+                            final isNewPet = prevPet == null || prevPet.id != pet.id;
+                            final petColor = _PetCardSection._clsColor(
+                                pet.creatureDef?.bodyClass.name ?? '');
+
+                            final clsName = pet.creatureDef?.bodyClass.name ?? '';
+                            final clsLabel = clsName.isEmpty
+                                ? ''
+                                : clsName[0].toUpperCase() + clsName.substring(1);
+
+                            Widget w = Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  height: 20,
+                                  child: isNewPet && clsLabel.isNotEmpty
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 7, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: petColor.withValues(alpha: 0.18),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                                color: petColor.withValues(alpha: 0.55),
+                                                width: 1),
+                                          ),
+                                          child: Text(
+                                            clsLabel,
+                                            style: TextStyle(
+                                                color: petColor,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.3),
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                                const SizedBox(height: 3),
+                                _SkillCard(
+                                  trait: card.trait,
+                                  petName: card.ownerPetName,
+                                  isSelected: isAssigned,
+                                  isPity: card.isPity,
+                                  isFizzled: isFizzled,
+                                  cardArtPath: card.cardArtPath,
+                                  cardTemplatePath: card.cardTemplatePath,
+                                  comboIndex: comboIdx,
+                                  onTap: () => ref
+                                      .read(pveBattleProvider.notifier)
+                                      .assignSkill(card.instanceId),
+                                ),
+                              ],
+                            );
+
+                            if (isNew) {
+                              w = _CardEntrance(
+                                key: ValueKey(card.instanceId),
+                                delay: Duration(milliseconds: i * 55),
+                                child: w,
+                              );
+                            }
+
+                            return Padding(
+                              padding: EdgeInsets.only(
+                                left: isNewPet && i > 0 ? 14 : 3,
+                                right: 3,
+                              ),
+                              child: w,
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
 
         // ── End turn ─────────────────────────────────────────────────────
@@ -1442,6 +1766,65 @@ class _BottomPanelContent extends StatelessWidget {
           child: Center(child: _EndTurnButton(vm: vm, ref: ref)),
         ),
       ],
+    );
+  }
+}
+
+class _SelectedPetSkillHeader extends StatelessWidget {
+  final PetViewModel pet;
+  final VoidCallback onShowAll;
+  const _SelectedPetSkillHeader({
+    required this.pet,
+    required this.onShowAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _PetCardSection._clsColor(pet.creatureDef?.bodyClass.name ?? '');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${pet.name} skills: ${pet.traits.map((t) => '${t.name} (${t.effectSummary})').join(' • ')}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onShowAll,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: const Text(
+                'Show all',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2612,10 +2995,23 @@ class _PetInfoDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final def      = kCreatureRegistry[pet.id];
-    final cls      = def?.className ?? 'plant';
+    final def = pet.creatureDef ?? kCreatureRegistry[pet.id];
+    final cls = def?.className ?? pet.creatureDef?.className ?? 'plant';
     final color    = _clsColor(cls);
     final traitMap = {for (final t in pet.traits) t.partName: t};
+    const partOrder = ['horn', 'back', 'tail', 'mouth'];
+    final displayParts = <({String partType, String cardArtPath})>[
+      if (def != null)
+        for (final part in def.parts)
+          (partType: part.partType, cardArtPath: part.cardArtPath)
+      else
+        for (final partType in partOrder)
+            (
+              partType: partType,
+              cardArtPath: pet.partCardArt[partType] ??
+                'assets/images/part-cards/default-card-art.png',
+            ),
+    ];
     final hpFrac   = pet.maxHp > 0
         ? (pet.hp / pet.maxHp).clamp(0.0, 1.0)
         : 0.0;
@@ -2770,7 +3166,7 @@ class _PetInfoDialog extends StatelessWidget {
 
                     // 4 cards in a row
                     Expanded(
-                      child: def == null
+                      child: pet.traits.isEmpty
                           ? const Center(
                               child: Text('No skill data',
                                   style: TextStyle(
@@ -2790,15 +3186,16 @@ class _PetInfoDialog extends StatelessWidget {
                                   crossAxisAlignment:
                                       CrossAxisAlignment.center,
                                   children: [
-                                    for (final part in def.parts)
+                                    for (final part in displayParts)
                                       SizedBox(
-                                        width:  cW,
-                                        height: cardH,
-                                        child: _InfoCard(
-                                          part:  part,
-                                          trait: traitMap[part.partType],
-                                        ),
-                                      ),
+                                         width:  cW,
+                                         height: cardH,
+                                         child: _InfoCard(
+                                           partType: part.partType,
+                                           cardArtPath: part.cardArtPath,
+                                           trait: traitMap[part.partType],
+                                         ),
+                                       ),
                                   ],
                                 );
                               },
@@ -2806,11 +3203,11 @@ class _PetInfoDialog extends StatelessWidget {
                     ),
 
                     // Part names row under cards
-                    if (def != null) ...[
+                    if (displayParts.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          for (final part in def.parts)
+                          for (final part in displayParts)
                             Expanded(
                               child: Center(
                                 child: Text(
@@ -2911,9 +3308,14 @@ class _PartRow extends StatelessWidget {
 // ── Skill card (Axie card style) ──────────────────────────────────────────────
 
 class _InfoCard extends StatelessWidget {
-  final PartDefinition part;
+  final String partType;
+  final String cardArtPath;
   final TraitViewModel? trait;
-  const _InfoCard({required this.part, this.trait});
+  const _InfoCard({
+    required this.partType,
+    required this.cardArtPath,
+    this.trait,
+  });
 
   static Color _borderColor(String? typeName) => switch (typeName) {
         'offensive' => const Color(0xFFCC4433),
@@ -2937,7 +3339,7 @@ class _InfoCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Stack(fit: StackFit.expand, children: [
         // ── Card art background ─────────────────────────────────────
-        Image.asset(part.cardArtPath,
+        Image.asset(cardArtPath,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(color: Colors.black38)),
 
@@ -2992,7 +3394,7 @@ class _InfoCard extends StatelessWidget {
               ],
             ),
             child: Center(
-              child: Text('$cost',
+                child: Text('$cost',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -3014,6 +3416,26 @@ class _InfoCard extends StatelessWidget {
                   shadows: const [Shadow(blurRadius: 3, color: Colors.black)]),
               maxLines: 1,
               overflow: TextOverflow.ellipsis),
+        ),
+
+        Positioned(
+          top: 24,
+          left: 6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              partType.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 7,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ),
 
         // ── Effect badge (damage / shield / heal value) ───────────

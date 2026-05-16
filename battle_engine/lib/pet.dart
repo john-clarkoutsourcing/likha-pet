@@ -147,9 +147,6 @@ class Pet {
         takeDamage(dmg, ignoreShield: true);
         log.burnTick(name, dmg, hp);
         d.roundsRemaining--;
-      } else if (d.type != DebuffType.stunned) {
-        // All other timed debuffs (attackDown, defenseDown, speedDown) tick down.
-        d.roundsRemaining--;
       }
     }
 
@@ -157,9 +154,6 @@ class Pet {
       if (b.type == BuffType.regen) {
         receiveHealing(b.value);
         log.regenTick(name, b.value, hp);
-        b.roundsRemaining--;
-      } else {
-        // All other timed buffs (attackUp, defenseUp, speedUp, energized) tick down.
         b.roundsRemaining--;
       }
     }
@@ -170,6 +164,33 @@ class Pet {
     for (final t in traits) {
       t.tickCooldown();
     }
+  }
+
+  /// Round-end expiry for non-DoT/non-regen statuses.
+  /// Keeps buffs/debuffs active during action resolution for this full round.
+  void tickRoundDurations() {
+    for (final d in List.of(debuffs)) {
+      if (d.type == DebuffType.poisoned ||
+          d.type == DebuffType.burned ||
+          d.type == DebuffType.stunned) {
+        continue;
+      }
+      d.roundsRemaining--;
+    }
+
+    for (final b in List.of(buffs)) {
+      if (b.type == BuffType.regen) continue;
+      b.roundsRemaining--;
+    }
+
+    debuffs.removeWhere((d) => d.roundsRemaining <= 0);
+    buffs.removeWhere((b) => b.roundsRemaining <= 0);
+  }
+
+  /// Classic-style: attack modifiers are consumed when the pet attacks.
+  void consumeAttackModifiers() {
+    buffs.removeWhere((b) => b.type == BuffType.attackUp);
+    debuffs.removeWhere((d) => d.type == DebuffType.attackDown);
   }
 
   // ── Damage / healing application ──────────────────────────────────────────
@@ -203,7 +224,7 @@ class Pet {
   }
 
   void applyShield(int amount) {
-    shield = (shield + amount).clamp(0, 40); // hard cap: 40
+    shield = (shield + amount).clamp(0, 999);
   }
 
   void applyBuff(BuffType type, int value, int duration) {

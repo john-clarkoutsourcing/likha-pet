@@ -76,7 +76,7 @@ class PetAssembledWidget extends StatelessWidget {
   }
 
   /// Derive the Axie sample name from a PartDefinition's card art path.
-  /// 'assets/images/cards/beast-horn-04.png' → 'beast-04'
+  /// 'assets/images/part-cards/beast-horn-04.png' → 'beast-04'
   static String _sample(PartDefinition part) {
     final file  = part.cardArtPath.split('/').last.replaceAll('.png', '');
     final parts = file.split('-');

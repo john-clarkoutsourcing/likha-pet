@@ -122,10 +122,10 @@ class InteractiveBattleEngine {
     for (final p in enemyTeam)  { p.linkPool(enemyEnergy); }
 
     // Initial deal: 6 cards each (only happens once at battle start).
-    _playerDeck.drawTurn(6);
+    _drawAliveOnly(_playerDeck, playerTeam, count: 6);
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
 
-    _enemyDeck.drawTurn(6);
+    _drawAliveOnly(_enemyDeck, enemyTeam, count: 6);
     _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
   }
 
@@ -261,7 +261,7 @@ class InteractiveBattleEngine {
 
     // ── Prepare player's next hand ────────────────────────────────────────
     _playerPity.injectIfNeeded(_playerDeck, playerTeam);
-    _playerDeck.drawTurn();
+    _drawAliveOnly(_playerDeck, playerTeam);
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
 
     // ── Shields are round-scoped: reset to 0 at the end of every round ────
@@ -355,7 +355,7 @@ class InteractiveBattleEngine {
       _enemyDeck.play(id);
     }
     _enemyPity.injectIfNeeded(_enemyDeck, enemyTeam);
-    _enemyDeck.drawTurn();
+    _drawAliveOnly(_enemyDeck, enemyTeam);
     _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
 
     return actions;
@@ -421,6 +421,29 @@ class InteractiveBattleEngine {
 
   List<Pet> _teamOf(Pet p)      => playerTeam.contains(p) ? playerTeam : enemyTeam;
   List<Pet> _enemyTeamOf(Pet p) => playerTeam.contains(p) ? enemyTeam  : playerTeam;
+
+  /// Draws cards while ensuring the hand keeps only cards owned by living pets.
+  void _drawAliveOnly(SkillDeck deck, List<Pet> team,
+      {int count = SkillDeck.kDrawPerTurn}) {
+    final aliveIds = _livePetIds(team).toSet();
+    if (aliveIds.isEmpty) return;
+
+    deck.drawTurn(count);
+    var safety = 0;
+    while (safety < 36) {
+      final invalid = deck.hand
+          .where((card) => !aliveIds.contains(card.ownerPetId))
+          .toList();
+      if (invalid.isEmpty) break;
+
+      for (final card in invalid) {
+        deck.discardCard(card.instanceId);
+      }
+      final redrawn = deck.drawTurn(invalid.length);
+      if (redrawn.isEmpty) break;
+      safety += invalid.length;
+    }
+  }
 
   List<String> _livePetIds(List<Pet> pets) =>
       pets.where((p) => !p.isFainted).map((p) => p.id).toList();

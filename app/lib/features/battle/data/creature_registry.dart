@@ -140,7 +140,7 @@ class CreatureDefinition {
 // ── Card art path helper ──────────────────────────────────────────────────────
 
 String _card(String cls, String part, String variant) =>
-    'assets/images/cards/$cls-$part-$variant.png';
+    'assets/images/part-cards/$cls-$part-$variant.png';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BODY CATALOGUE

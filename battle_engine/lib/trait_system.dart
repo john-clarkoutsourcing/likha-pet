@@ -126,49 +126,73 @@ class TraitSystem {
 
   // ── Card template metadata ─────────────────────────────────────────────────
   // Assets live under:
-  //   assets/images/card-templates/en/cards/<class>/<name>.png
+  //   assets/images/classic-cards/<class>-<part>-<variant>.png
   static const String _cardTemplateBasePath =
-      'assets/images/card-templates/en/cards';
+      'assets/images/classic-cards';
 
-  static const Map<String, ({String cardClass, String imageName})>
-      _traitCardTemplate = {
-    'beast_horn': (cardClass: 'beast', imageName: 'dual blade'),
-    'beast_back': (cardClass: 'beast', imageName: 'ronin'),
-    'beast_tail': (cardClass: 'beast', imageName: 'buba brush'),
-    'beast_mouth': (cardClass: 'beast', imageName: 'axie kiss'),
-    'plant_horn': (cardClass: 'plant', imageName: 'cactus'),
-    'plant_back': (cardClass: 'plant', imageName: 'pumpkin'),
-    'plant_tail': (cardClass: 'plant', imageName: 'cattail'),
-    'plant_mouth': (cardClass: 'plant', imageName: 'serious'),
-    'aquatic_horn': (cardClass: 'aquatic', imageName: 'lam'),
-    'aquatic_back': (cardClass: 'aquatic', imageName: 'sponge'),
-    'aquatic_tail': (cardClass: 'aquatic', imageName: 'koi'),
-    'aquatic_mouth': (cardClass: 'aquatic', imageName: 'catfish'),
-    'bird_horn': (cardClass: 'bird', imageName: 'eggshell'),
-    'bird_back': (cardClass: 'bird', imageName: 'feather spear'),
-    'bird_tail': (cardClass: 'bird', imageName: 'pigeon post'),
-    'bird_mouth': (cardClass: 'bird', imageName: 'doubletalk'),
-    'bug_horn': (cardClass: 'bug', imageName: 'pincer'),
-    'bug_back': (cardClass: 'bug', imageName: 'lagging'),
-    'bug_tail': (cardClass: 'bug', imageName: 'twin tail'),
-    'bug_mouth': (cardClass: 'bug', imageName: 'square teeth'),
-    'reptile_horn': (cardClass: 'reptile', imageName: 'cerastes'),
-    'reptile_back': (cardClass: 'reptile', imageName: 'bone sail'),
-    'reptile_tail': (cardClass: 'reptile', imageName: 'wall gecko'),
-    'reptile_mouth': (cardClass: 'reptile', imageName: 'toothless bite'),
+  static const Map<String, String> _traitCardTemplate = {
+    'beast_horn': 'beast-horn-04',
+    'beast_back': 'beast-back-04',
+    'beast_tail': 'beast-tail-04',
+    'beast_mouth': 'beast-mouth-04',
+    'plant_horn': 'plant-horn-04',
+    'plant_back': 'plant-back-04',
+    'plant_tail': 'plant-tail-04',
+    'plant_mouth': 'plant-mouth-04',
+    'aquatic_horn': 'aquatic-horn-04',
+    'aquatic_back': 'aquatic-back-04',
+    'aquatic_tail': 'aquatic-tail-04',
+    'aquatic_mouth': 'aquatic-mouth-04',
+    'bird_horn': 'bird-horn-04',
+    'bird_back': 'bird-back-04',
+    'bird_tail': 'bird-tail-04',
+    'bird_mouth': 'bird-mouth-04',
+    'bug_horn': 'bug-horn-04',
+    'bug_back': 'bug-back-04',
+    'bug_tail': 'bug-tail-04',
+    'bug_mouth': 'bug-mouth-04',
+    'reptile_horn': 'reptile-horn-04',
+    'reptile_back': 'reptile-back-04',
+    'reptile_tail': 'reptile-tail-04',
+    'reptile_mouth': 'reptile-mouth-04',
+    // Tier-2 trait IDs map to the class' 06 variant cards.
+    'beast_horn_2': 'beast-horn-06',
+    'beast_back_2': 'beast-back-06',
+    'plant_horn_2': 'plant-horn-06',
+    'plant_back_2': 'plant-back-06',
+    'aquatic_horn_2': 'aquatic-horn-06',
+    'aquatic_back_2': 'aquatic-back-06',
+    'bird_horn_2': 'bird-horn-06',
+    'bird_back_2': 'bird-back-06',
+    'bug_horn_2': 'bug-horn-06',
+    'bug_back_2': 'bug-back-06',
+    'reptile_horn_2': 'reptile-horn-06',
+    'reptile_back_2': 'reptile-back-06',
   };
 
   String? cardTemplatePathForId(String id) {
-    final meta = _traitCardTemplate[id];
-    if (meta == null) return null;
-    return '$_cardTemplateBasePath/${meta.cardClass}/${meta.imageName}.png';
+    final cardId = _traitCardTemplate[id];
+    if (cardId != null) return '$_cardTemplateBasePath/$cardId.png';
+
+    final m = RegExp(r'^(beast|bug|bird|plant|aquatic|reptile)_(horn|back|tail|mouth)_(\d{2})$')
+        .firstMatch(id);
+    if (m == null) return null;
+    final cls = m.group(1)!;
+    final part = m.group(2)!;
+    final variant = m.group(3)!;
+    return '$_cardTemplateBasePath/$cls-$part-$variant.png';
   }
 
   String? cardTemplatePathForTrait(Trait trait) =>
       cardTemplatePathForId(trait.id);
 
-  ({String cardClass, String imageName})? cardTemplateMetaForId(String id) =>
-      _traitCardTemplate[id];
+  ({String cardClass, String imageName})? cardTemplateMetaForId(String id) {
+    final cardId = _traitCardTemplate[id];
+    if (cardId == null) return null;
+    final parts = cardId.split('-');
+    if (parts.length < 3) return null;
+    return (cardClass: parts[0], imageName: cardId);
+  }
 
   List<Trait> get allTraits => allTraitIds.map(getById).toList(growable: false);
 

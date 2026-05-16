@@ -57,8 +57,8 @@ class LikhaMixer {
   // ── Public helpers ─────────────────────────────────────────────────────────
 
   /// Derive the Axie sample name from a card-art asset path.
-  ///   'assets/images/cards/beast-horn-04.png'  →  'beast-04'
-  ///   'assets/images/cards/aquatic-back-10.png' →  'aquatic-10'
+  ///   'assets/images/part-cards/beast-horn-04.png'  →  'beast-04'
+  ///   'assets/images/part-cards/aquatic-back-10.png' →  'aquatic-10'
   static String sampleFromCardArt(String cardArtPath) {
     final file = cardArtPath.split('/').last.replaceAll('.png', '');
     final parts = file.split('-');

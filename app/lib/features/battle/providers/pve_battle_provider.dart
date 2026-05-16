@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show Offset;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:likha_pet_battle_engine/battle_state.dart';
@@ -18,6 +19,16 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
   late final InteractiveBattleEngine _engine;
   late final List<Pet> _playerPets;
   late final List<Pet> _enemyPets;
+  List<Offset> _playerBattlePos = const [
+    Offset(0.30, 0.22),
+    Offset(0.15, 0.03),
+    Offset(0.10, 0.48),
+  ];
+  List<Offset> _enemyBattlePos = const [
+    Offset(0.50, 0.22),
+    Offset(0.65, 0.03),
+    Offset(0.75, 0.48),
+  ];
 
   // instanceId → (petId, shieldAmount) for shields pre-applied during planning.
   final Map<String, ({String petId, int amount})> _preAppliedShields = {};
@@ -57,7 +68,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         playerTeamName:   playerTeamName,
         enemyTeamName:    enemyTeamName,
         turnOrder:        _buildTurnOrder(),
-        selectedPetId:    _playerPets.first.id,
+        selectedPetId:    null,
         pendingSkills:    const {},
         hand:             _buildHandVMs(_engine.currentPlayerHand, const {}),
         deckDrawSize:     _engine.playerDeckDrawSize,
@@ -77,7 +88,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         playerTeamName:   playerTeamName,
         enemyTeamName:    enemyTeamName,
         turnOrder:        _buildTurnOrder(),
-        selectedPetId:    _playerPets.first.id,
+        selectedPetId:    null,
         pendingSkills:    const {},
         hand:             _buildHandVMs(_engine.currentPlayerHand, const {}),
         deckDrawSize:     _engine.playerDeckDrawSize,
@@ -93,6 +104,20 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
   void selectPet(String petId) {
     if (state.isBattleOver || state.isResolving) return;
     state = state.copyWith(selectedPetId: petId);
+  }
+
+  void clearSelectedPet() {
+    if (state.isBattleOver || state.isResolving) return;
+    state = state.copyWith(selectedPetId: null);
+  }
+
+  void setBattlePositions({
+    required List<Offset> playerPos,
+    required List<Offset> enemyPos,
+  }) {
+    if (playerPos.length < 3 || enemyPos.length < 3) return;
+    _playerBattlePos = List<Offset>.from(playerPos);
+    _enemyBattlePos = List<Offset>.from(enemyPos);
   }
 
   /// Assign a drawn card to its owner pet.
@@ -211,26 +236,31 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         final isMeleeDash = action.trait.effect.type == EffectType.damage;
         Offset dashDir = Offset.zero;
         if (isMeleeDash) {
-          const pBaseX = [0.17, 0.03, 0.00]; // FRONT, MID, BACK
-          const eBaseX = [0.55, 0.77, 0.88];
-          const pBaseY = [0.22, 0.03, 0.48];
-          const eBaseY = [0.22, 0.03, 0.48];
-
           final actorIdx = (isPlayerActor
                   ? _playerPets.indexWhere((p) => p.id == actorId)
                   : _enemyPets.indexWhere((p) => p.id == actorId))
               .clamp(0, 2);
           final targetIdx = opposingTeam.indexWhere((p) => !p.isFainted);
           if (targetIdx >= 0) {
-            final actorBaseX = isPlayerActor ? pBaseX[actorIdx] : eBaseX[actorIdx];
-            final actorBaseY = isPlayerActor ? pBaseY[actorIdx] : eBaseY[actorIdx];
-            final targetBaseX = isPlayerActor ? eBaseX[targetIdx] : pBaseX[targetIdx];
-            final targetBaseY = isPlayerActor ? eBaseY[targetIdx] : pBaseY[targetIdx];
-            final margin = isPlayerActor ? -0.04 : 0.04;
-            dashDir = Offset(
-              targetBaseX - actorBaseX + margin,
-              targetBaseY - actorBaseY,
+            final actorBase = isPlayerActor
+                ? _playerBattlePos[actorIdx]
+                : _enemyBattlePos[actorIdx];
+            final targetBase = isPlayerActor
+                ? _enemyBattlePos[targetIdx]
+                : _playerBattlePos[targetIdx];
+            final toTarget = Offset(
+              targetBase.dx - actorBase.dx,
+              targetBase.dy - actorBase.dy,
             );
+            final distance = toTarget.distance;
+            if (distance > 0.0001) {
+              // Stop slightly before the target center to avoid sprite overlap.
+              const minGap = 0.06;
+              final dashDistance = math.max(0.0, distance - minGap);
+              final ux = toTarget.dx / distance;
+              final uy = toTarget.dy / distance;
+              dashDir = Offset(ux * dashDistance, uy * dashDistance);
+            }
 
             state = state.copyWith(
               petAnimStates: {actorId: PetCharacterAnimState.move},
@@ -256,6 +286,12 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
       // Undo pre-applied shield for this pet just before the resolver
       // re-applies it, so the final shield value is correct (not doubled).
+      final preHp = <String, int>{
+        for (final p in [..._playerPets, ..._enemyPets]) p.id: p.hp,
+      };
+      final preShield = <String, int>{
+        for (final p in [..._playerPets, ..._enemyPets]) p.id: p.shield,
+      };
       _undoPreShieldIfNeeded(action.actor, action.trait);
 
       final step = _engine.executeNextAction();
@@ -268,6 +304,23 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         playerTeamEnergy: _engine.playerEnergy.energy,
         enemyTeamEnergy:  _engine.enemyEnergy.energy,
       );
+
+      final targetAnims = <String, PetCharacterAnimState>{};
+      for (final p in [..._playerPets, ..._enemyPets]) {
+        if (p.id == actorId) continue;
+        final hpDelta = p.hp - (preHp[p.id] ?? p.hp);
+        final shieldDelta = p.shield - (preShield[p.id] ?? p.shield);
+        if (hpDelta < 0 || shieldDelta < 0) {
+          targetAnims[p.id] =
+              p.isFainted ? PetCharacterAnimState.faint : PetCharacterAnimState.hit;
+        }
+      }
+      if (targetAnims.isNotEmpty) {
+        state = state.copyWith(
+          petAnimStates: Map<String, PetCharacterAnimState>.from(state.petAnimStates)
+            ..addAll(targetAnims),
+        );
+      }
 
       if (!action.actor.isFainted) {
         await Future.delayed(const Duration(milliseconds: 500));
@@ -332,7 +385,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       hand:           newHand,
       deckDrawSize:   _engine.playerDeckDrawSize,
       deckDiscardSize: _engine.playerDeckDiscardSize,
-      selectedPetId:  _playerPets.where((p) => !p.isFainted).firstOrNull?.id,
+      selectedPetId:  state.selectedPetId,
       newCardIds:     newIds,
     );
 

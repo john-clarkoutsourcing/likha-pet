@@ -28,7 +28,7 @@ class OriginsCardEntry {
   });
 
   String get templatePath =>
-      'assets/images/card-templates/en/cards/$cardClass/$imageName.png';
+      'assets/images/cards/$cardClass/$imageName.png';
 }
 
 /// All Origins stage-1 cards that have matching card-template PNG assets.
