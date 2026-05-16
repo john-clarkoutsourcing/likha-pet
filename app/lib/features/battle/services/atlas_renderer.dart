@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -55,14 +56,14 @@ class AtlasData {
           }
           i++;
         }
-        final xy   = (props['xy'] ?? '0,0').split(',');
+        final xy = (props['xy'] ?? '0,0').split(',');
         final size = (props['size'] ?? '0,0').split(',');
         regions[name] = AtlasRegion(
-          name:    name,
-          x:       int.tryParse(xy[0].trim()) ?? 0,
-          y:       int.tryParse(xy.length > 1 ? xy[1].trim() : '0') ?? 0,
-          width:   int.tryParse(size[0].trim()) ?? 0,
-          height:  int.tryParse(size.length > 1 ? size[1].trim() : '0') ?? 0,
+          name: name,
+          x: int.tryParse(xy[0].trim()) ?? 0,
+          y: int.tryParse(xy.length > 1 ? xy[1].trim() : '0') ?? 0,
+          width: int.tryParse(size[0].trim()) ?? 0,
+          height: int.tryParse(size.length > 1 ? size[1].trim() : '0') ?? 0,
           rotated: (props['rotate'] ?? 'false') == 'true',
         );
       } else {
@@ -85,9 +86,11 @@ class _Bone {
   const _Bone({
     required this.name,
     this.parent,
-    this.x = 0, this.y = 0,
+    this.x = 0,
+    this.y = 0,
     this.rotation = 0,
-    this.scaleX = 1, this.scaleY = 1,
+    this.scaleX = 1,
+    this.scaleY = 1,
   });
 }
 
@@ -97,10 +100,13 @@ class _Attachment {
 
   const _Attachment({
     required this.regionName,
-    this.x = 0, this.y = 0,
+    this.x = 0,
+    this.y = 0,
     this.rotation = 0,
-    this.scaleX = 1, this.scaleY = 1,
-    this.width = 0, this.height = 0,
+    this.scaleX = 1,
+    this.scaleY = 1,
+    this.width = 0,
+    this.height = 0,
   });
 }
 
@@ -110,9 +116,12 @@ class _WorldTransform {
   final double x, y, a, b, c, d; // 2×2 matrix + translation
 
   const _WorldTransform({
-    required this.x, required this.y,
-    required this.a, required this.b,
-    required this.c, required this.d,
+    required this.x,
+    required this.y,
+    required this.a,
+    required this.b,
+    required this.c,
+    required this.d,
   });
 
   static const identity = _WorldTransform(x: 0, y: 0, a: 1, b: 0, c: 0, d: 1);
@@ -121,9 +130,9 @@ class _WorldTransform {
     final cos = math.cos(bone.rotation * math.pi / 180);
     final sin = math.sin(bone.rotation * math.pi / 180);
     final na = a * cos * bone.scaleX + b * -sin * bone.scaleY;
-    final nb = a * sin * bone.scaleX + b *  cos * bone.scaleY;
+    final nb = a * sin * bone.scaleX + b * cos * bone.scaleY;
     final nc = c * cos * bone.scaleX + d * -sin * bone.scaleY;
-    final nd = c * sin * bone.scaleX + d *  cos * bone.scaleY;
+    final nd = c * sin * bone.scaleX + d * cos * bone.scaleY;
     final nx = a * bone.x + b * bone.y + x;
     final ny = c * bone.x + d * bone.y + y;
     return _WorldTransform(x: nx, y: ny, a: na, b: nb, c: nc, d: nd);
@@ -145,7 +154,8 @@ class _WorldTransform {
 class PetAtlasRenderer {
   final ui.Image atlasImage;
   final AtlasData atlasData;
-  final List<({String slotName, _Attachment att, _WorldTransform world})> drawCalls;
+  final List<({String slotName, _Attachment att, _WorldTransform world})>
+      drawCalls;
 
   const PetAtlasRenderer._({
     required this.atlasImage,
@@ -161,18 +171,20 @@ class PetAtlasRenderer {
     required String skeletonPath,
     Map<String, String> slotOverrides = const {},
   }) async {
-    final cacheKey = '$skeletonPath|${slotOverrides.entries.map((e)=>'${e.key}:${e.value}').join(',')}';
+    final cacheKey =
+        '$skeletonPath|${slotOverrides.entries.map((e) => '${e.key}:${e.value}').join(',')}';
     if (_cache.containsKey(cacheKey)) return _cache[cacheKey];
 
     try {
       // Load atlas image
       final imgBytes = await rootBundle.load(atlasImagePath);
-      final codec    = await ui.instantiateImageCodec(imgBytes.buffer.asUint8List());
-      final frame    = await codec.getNextFrame();
+      final codec =
+          await ui.instantiateImageCodec(imgBytes.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
       final atlasImg = frame.image;
 
       // Load atlas data
-      final atlasStr  = await rootBundle.loadString(atlasDataPath);
+      final atlasStr = await rootBundle.loadString(atlasDataPath);
       final atlasData = AtlasData.parse(atlasStr);
 
       // Load skeleton
@@ -183,13 +195,13 @@ class PetAtlasRenderer {
 
       final renderer = PetAtlasRenderer._(
         atlasImage: atlasImg,
-        atlasData:  atlasData,
-        drawCalls:  drawCalls,
+        atlasData: atlasData,
+        drawCalls: drawCalls,
       );
       _cache[cacheKey] = renderer;
       return renderer;
     } catch (e) {
-      debugPrint('PetAtlasRenderer.load failed: $e');
+      if (kDebugMode) debugPrint('PetAtlasRenderer.load failed: $e');
       return null;
     }
   }
@@ -201,17 +213,18 @@ class PetAtlasRenderer {
     Map<String, String> overrides,
   ) {
     // Parse bones
-    final boneList = (skel['bones'] as List? ?? []).cast<Map<String, dynamic>>();
-    final bones    = <String, _Bone>{};
+    final boneList =
+        (skel['bones'] as List? ?? []).cast<Map<String, dynamic>>();
+    final bones = <String, _Bone>{};
     for (final b in boneList) {
       bones[b['name'] as String] = _Bone(
-        name:     b['name'] as String,
-        parent:   b['parent'] as String?,
-        x:        (b['x'] as num? ?? 0).toDouble(),
-        y:        (b['y'] as num? ?? 0).toDouble(),
+        name: b['name'] as String,
+        parent: b['parent'] as String?,
+        x: (b['x'] as num? ?? 0).toDouble(),
+        y: (b['y'] as num? ?? 0).toDouble(),
         rotation: (b['rotation'] as num? ?? 0).toDouble(),
-        scaleX:   (b['scaleX'] as num? ?? 1).toDouble(),
-        scaleY:   (b['scaleY'] as num? ?? 1).toDouble(),
+        scaleX: (b['scaleX'] as num? ?? 1).toDouble(),
+        scaleY: (b['scaleY'] as num? ?? 1).toDouble(),
       );
     }
 
@@ -232,19 +245,26 @@ class PetAtlasRenderer {
     }
 
     // Parse slots (defines draw order)
-    final slotList = (skel['slots'] as List? ?? []).cast<Map<String, dynamic>>();
+    final slotList =
+        (skel['slots'] as List? ?? []).cast<Map<String, dynamic>>();
 
-    final calls = <({String slotName, _Attachment att, _WorldTransform world})>[];
+    final calls =
+        <({String slotName, _Attachment att, _WorldTransform world})>[];
 
     for (final slot in slotList) {
-      final slotName   = slot['name'] as String;
-      final boneName   = slot['bone'] as String;
-      final attName    = overrides[slotName] ?? (slot['attachment'] as String? ?? '');
+      final slotName = slot['name'] as String;
+      final boneName = slot['bone'] as String;
+      final attName =
+          overrides[slotName] ?? (slot['attachment'] as String? ?? '');
       if (attName.isEmpty) continue;
 
       // Skip non-visible slots (shadow, ball, legs)
-      if (slotName == 'shadow' || slotName == 'ball' ||
-          slotName.startsWith('leg-') || slotName == 'body-pattern') continue;
+      if (slotName == 'shadow' ||
+          slotName == 'ball' ||
+          slotName.startsWith('leg-') ||
+          slotName == 'body-pattern') {
+        continue;
+      }
 
       final slotAtts = defaultSkinAtts[slotName] as Map<String, dynamic>?;
       if (slotAtts == null) continue;
@@ -258,15 +278,17 @@ class PetAtlasRenderer {
       if (atlas[regionName] == null) continue;
 
       final world = worlds[boneName] ?? _WorldTransform.identity;
-      final att   = _Attachment(
+      final att = _Attachment(
         regionName: regionName,
-        x:        (attData['x'] as num? ?? 0).toDouble(),
-        y:        (attData['y'] as num? ?? 0).toDouble(),
+        x: (attData['x'] as num? ?? 0).toDouble(),
+        y: (attData['y'] as num? ?? 0).toDouble(),
         rotation: (attData['rotation'] as num? ?? 0).toDouble(),
-        scaleX:   (attData['scaleX'] as num? ?? 1).toDouble(),
-        scaleY:   (attData['scaleY'] as num? ?? 1).toDouble(),
-        width:    (attData['width'] as num? ?? attData['w'] as num? ?? 0).toDouble(),
-        height:   (attData['height'] as num? ?? attData['h'] as num? ?? 0).toDouble(),
+        scaleX: (attData['scaleX'] as num? ?? 1).toDouble(),
+        scaleY: (attData['scaleY'] as num? ?? 1).toDouble(),
+        width:
+            (attData['width'] as num? ?? attData['w'] as num? ?? 0).toDouble(),
+        height:
+            (attData['height'] as num? ?? attData['h'] as num? ?? 0).toDouble(),
       );
       calls.add((slotName: slotName, att: att, world: world));
     }
@@ -281,7 +303,10 @@ class PetAtlasRenderer {
   ) {
     if (worlds.containsKey(name)) return;
     final bone = bones[name];
-    if (bone == null) { worlds[name] = _WorldTransform.identity; return; }
+    if (bone == null) {
+      worlds[name] = _WorldTransform.identity;
+      return;
+    }
 
     final parentName = bone.parent;
     if (parentName == null || parentName == 'root') {
@@ -306,7 +331,7 @@ class PetAtlasPainter extends CustomPainter {
 
   const PetAtlasPainter({
     required this.renderer,
-    this.scale   = 0.12,
+    this.scale = 0.12,
     this.offsetX = 0,
     this.offsetY = 0,
   });
@@ -324,36 +349,47 @@ class PetAtlasPainter extends CustomPainter {
       final region = renderer.atlasData[call.att.regionName];
       if (region == null) continue;
 
-      final w   = call.world;
+      final w = call.world;
       final att = call.att;
 
       // Compute attachment world transform
       final cos = math.cos(att.rotation * math.pi / 180);
       final sin = math.sin(att.rotation * math.pi / 180);
-      final wa  = w.a * cos * att.scaleX + w.b * -sin * att.scaleY;
-      final wb  = w.a * sin * att.scaleX + w.b *  cos * att.scaleY;
-      final wc  = w.c * cos * att.scaleX + w.d * -sin * att.scaleY;
-      final wd  = w.c * sin * att.scaleX + w.d *  cos * att.scaleY;
-      final wx  = w.a * att.x + w.b * att.y + w.x;
-      final wy  = w.c * att.x + w.d * att.y + w.y;
+      final wa = w.a * cos * att.scaleX + w.b * -sin * att.scaleY;
+      final wb = w.a * sin * att.scaleX + w.b * cos * att.scaleY;
+      final wc = w.c * cos * att.scaleX + w.d * -sin * att.scaleY;
+      final wd = w.c * sin * att.scaleX + w.d * cos * att.scaleY;
+      final wx = w.a * att.x + w.b * att.y + w.x;
+      final wy = w.c * att.x + w.d * att.y + w.y;
 
-      final rW  = region.width.toDouble();
-      final rH  = region.height.toDouble();
+      final rW = region.width.toDouble();
+      final rH = region.height.toDouble();
 
       // Build local-to-world matrix for this attachment (centered on attachment)
       canvas.save();
       canvas.transform(Float64List.fromList([
-        wa,   wc,   0,  0,
-        wb,   wd,   0,  0,
-        0,    0,    1,  0,
-        wx,   wy,   0,  1,
+        wa,
+        wc,
+        0,
+        0,
+        wb,
+        wd,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        wx,
+        wy,
+        0,
+        1,
       ]));
 
       // Draw region from atlas (src rect → dest rect centered at origin)
       canvas.drawImageRect(
         renderer.atlasImage,
-        Rect.fromLTWH(
-          region.x.toDouble(), region.y.toDouble(), rW, rH),
+        Rect.fromLTWH(region.x.toDouble(), region.y.toDouble(), rW, rH),
         Rect.fromCenter(
           center: Offset.zero,
           width: att.width > 0 ? att.width : rW,
@@ -389,10 +425,10 @@ class PetAtlasWidget extends StatefulWidget {
     required this.atlasDataPath,
     required this.skeletonPath,
     this.slotOverrides = const {},
-    this.size          = 200,
-    this.offsetX       = 0,
-    this.offsetY       = 0,
-    this.scale         = 0.12,
+    this.size = 200,
+    this.offsetX = 0,
+    this.offsetY = 0,
+    this.scale = 0.12,
   });
 
   @override
@@ -412,7 +448,7 @@ class _PetAtlasWidgetState extends State<PetAtlasWidget> {
   @override
   void didUpdateWidget(PetAtlasWidget old) {
     super.didUpdateWidget(old);
-    if (old.skeletonPath    != widget.skeletonPath ||
+    if (old.skeletonPath != widget.skeletonPath ||
         old.slotOverrides.toString() != widget.slotOverrides.toString()) {
       _load();
     }
@@ -422,29 +458,37 @@ class _PetAtlasWidgetState extends State<PetAtlasWidget> {
     setState(() => _loading = true);
     final r = await PetAtlasRenderer.load(
       atlasImagePath: widget.atlasImagePath,
-      atlasDataPath:  widget.atlasDataPath,
-      skeletonPath:   widget.skeletonPath,
-      slotOverrides:  widget.slotOverrides,
+      atlasDataPath: widget.atlasDataPath,
+      skeletonPath: widget.skeletonPath,
+      slotOverrides: widget.slotOverrides,
     );
-    if (mounted) setState(() { _renderer = r; _loading = false; });
+    if (mounted) {
+      setState(() {
+        _renderer = r;
+        _loading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading || _renderer == null) {
-      return SizedBox(width: widget.size, height: widget.size,
-          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+      return SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child:
+              const Center(child: CircularProgressIndicator(strokeWidth: 2)));
     }
     return SizedBox(
-      width:  widget.size,
+      width: widget.size,
       height: widget.size,
-      child:  CustomPaint(
+      child: CustomPaint(
         size: Size(widget.size, widget.size),
         painter: PetAtlasPainter(
           renderer: _renderer!,
-          scale:    widget.scale,
-          offsetX:  widget.offsetX,
-          offsetY:  widget.offsetY,
+          scale: widget.scale,
+          offsetX: widget.offsetX,
+          offsetY: widget.offsetY,
         ),
       ),
     );

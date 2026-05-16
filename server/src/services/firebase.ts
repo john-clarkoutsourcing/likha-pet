@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import * as path from 'path';
+import * as fs from 'fs';
 
 /**
  * Initialize Firebase Admin SDK
@@ -14,10 +14,16 @@ export function initializeFirebase(): void {
     return;
   }
 
-  const isEmulator = process.env.FIRESTORE_EMULATOR_HOST !== undefined;
+  const configuredEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
+  const hasCredentialsPath = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const shouldUseEmulator =
+    !!configuredEmulatorHost || (!isProduction && !hasCredentialsPath);
 
-  if (isEmulator) {
-    console.log(`✓ Using Firebase Emulator at ${process.env.FIRESTORE_EMULATOR_HOST}`);
+  if (shouldUseEmulator) {
+    const emulatorHost = configuredEmulatorHost || '127.0.0.1:8090';
+    process.env.FIRESTORE_EMULATOR_HOST = emulatorHost;
+    console.log(`✓ Using Firebase Emulator at ${emulatorHost}`);
     admin.initializeApp({
       projectId: process.env.FIREBASE_PROJECT_ID || 'demo-likha-pet',
     });
@@ -26,12 +32,16 @@ export function initializeFirebase(): void {
     // Locally with a real project: set GOOGLE_APPLICATION_CREDENTIALS to the key file path.
     const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
     if (credentialsPath) {
+      const serviceAccount = JSON.parse(
+        fs.readFileSync(credentialsPath, 'utf8')
+      ) as admin.ServiceAccount;
       admin.initializeApp({
-        credential: admin.credential.cert(credentialsPath),
+        credential: admin.credential.cert(serviceAccount),
         projectId: process.env.FIREBASE_PROJECT_ID || 'paksi-game-beta',
       });
     } else {
       admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
         projectId: process.env.FIREBASE_PROJECT_ID || 'paksi-game-beta',
       });
     }

@@ -1,0 +1,62 @@
+# ── Likha Pet — Local Dev Stack ───────────────────────────────────────────────
+#
+#  Services:
+#    emulator  — Firebase emulator (Firestore :8090 · Auth :9099 · UI :4000)
+#    server    — Express + WebSocket API with hot reload (:3000)
+#
+#  Usage:
+#    docker compose up           — start everything
+#    docker compose up server    — server only (if emulator already running)
+#    docker compose down         — stop + remove containers
+#    docker compose down -v      — also wipe emulator data
+#
+#  Flutter app still runs natively:
+#    cd app && flutter run -d chrome
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Firebase Emulator ───────────────────────────────────────────────────────
+  emulator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.emulator
+    volumes:
+      - ./docker/firebase.docker.json:/firebase/firebase.json
+      - ./firestore.rules:/firebase/firestore.rules
+      - ./firestore.indexes.json:/firebase/firestore.indexes.json
+      # Cache emulator JARs so they don't re-download on every start
+      - emulator-cache:/root/.cache/firebase/emulators
+    ports:
+      - "4000:4000"   # Emulator UI   → http://localhost:4000
+      - "8090:8090"   # Firestore
+      - "9099:9099"   # Auth
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4000"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  # ── Express + WebSocket Server ──────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    volumes:
+      # Mount only src so edits trigger hot reload without rebuilding the image
+      - ./server/src:/app/src
+    ports:
+      - "3000:3000"
+    environment:
+      - FIRESTORE_EMULATOR_HOST=emulator:8090
+      - FIREBASE_PROJECT_ID=demo-likha-pet
+      - JWT_SECRET=local-dev-secret
+      - PORT=3000
+    depends_on:
+      emulator:
+        condition: service_healthy
+
+volumes:
+  # Persists downloaded Firebase emulator JARs across restarts
+  emulator-cache:

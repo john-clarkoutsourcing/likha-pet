@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import '../data/creature_registry.dart';
 import '../widgets/pet_character_widget.dart' show PetCharacterConfig;
@@ -20,7 +21,7 @@ extension PetCharacterConfigExt on PetCharacterConfig {
     return PetCharacterConfig(
       texturePath: texturePath,
       spineAtlasPath: atlasPath,
-      skeletonJson: skeletonJson,  // Store the mixed skeleton
+      skeletonJson: skeletonJson, // Store the mixed skeleton
     );
   }
 
@@ -56,7 +57,10 @@ extension PetCharacterConfigExt on PetCharacterConfig {
         ) as Map<String, dynamic>;
         LikhaMixer.mergeAnimations(mixedJson, animJson);
       } catch (e) {
-        print('⚠️  Failed to load animations: $e');
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('⚠️  Failed to load animations: $e');
+        }
       }
     }
 
@@ -64,7 +68,7 @@ extension PetCharacterConfigExt on PetCharacterConfig {
     return PetCharacterConfig(
       texturePath: 'assets/spines/mixer/likha-2d-v3-all.png',
       spineAtlasPath: 'assets/spines/mixer/likha-2d-v3-all.atlas',
-      skeletonJson: mixedJson,  // Store the generated skeleton
+      skeletonJson: mixedJson, // Store the generated skeleton
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import '../data/creature_registry.dart';
 import 'likha_mixer.dart';
@@ -127,7 +128,10 @@ class MixedSkeletonService {
       _animationCache[skeletonPath] = json;
       return json;
     } catch (e) {
-      print('Failed to load animations from $skeletonPath: $e');
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('Failed to load animations from $skeletonPath: $e');
+      }
       return null;
     }
   }

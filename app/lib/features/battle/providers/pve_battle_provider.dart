@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' show Offset;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:likha_pet_battle_engine/action.dart';
 import 'package:likha_pet_battle_engine/battle_state.dart';
@@ -80,7 +81,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       );
     }).catchError((e) {
       // Fallback to pre-baked skeletons if mixer fails
-      print('❌ Failed to initialize mixed skeletons: $e');
+      _devLog('❌ Failed to initialize mixed skeletons: $e');
       state = PveBattleViewModel(
         currentRound: 1,
         playerTeam: _toViewModels(_playerPets, isPlayer: true),
@@ -684,9 +685,9 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
               spineAtlasPath: 'assets/spines/mixer/likha-2d-v3-all.atlas',
               skeletonJson: skeleton,
             );
-            print('✅ Mixed skeleton for ${pet.name} (${pet.id})');
+            _devLog('✅ Mixed skeleton for ${pet.name} (${pet.id})');
           } catch (e) {
-            print('⚠️  Failed to mix ${pet.name}: $e');
+            _devLog('⚠️  Failed to mix ${pet.name}: $e');
           }
         }
       }
@@ -702,14 +703,14 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
               spineAtlasPath: 'assets/spines/mixer/likha-2d-v3-all.atlas',
               skeletonJson: skeleton,
             );
-            print('✅ Mixed skeleton for ${pet.name} (${pet.id})');
+            _devLog('✅ Mixed skeleton for ${pet.name} (${pet.id})');
           } catch (e) {
-            print('⚠️  Failed to mix ${pet.name}: $e');
+            _devLog('⚠️  Failed to mix ${pet.name}: $e');
           }
         }
       }
     } catch (e) {
-      print('❌ MixedSkeletonService failed to initialize: $e');
+      _devLog('❌ MixedSkeletonService failed to initialize: $e');
     }
   }
 
@@ -798,3 +799,9 @@ final pveBattleProvider =
     );
   },
 );
+void _devLog(String message) {
+  if (kDebugMode) {
+    // ignore: avoid_print
+    print(message);
+  }
+}

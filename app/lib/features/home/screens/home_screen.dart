@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,10 +7,6 @@ import '../../../core/router/app_router.dart';
 import '../../battle/screens/battle_screen.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../pets/providers/player_provider.dart';
-import '../providers/pet_inventory_provider.dart';
-import '../models/pet_model.dart';
-import '../widgets/egg_card.dart';
-import '../widgets/hatch_animation_dialog.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -34,7 +31,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final player = ref.watch(playerProvider);
-    final eggsAsync = ref.watch(eggsProvider);
     final userId = ref.watch(userIdProvider) ?? '—';
     final userEmail = ref.watch(userEmailProvider) ?? '—';
 
@@ -44,7 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Left panel: branding + eggs ────────────────────────────────
+            // ── Left panel: branding ────────────────────────────────────────
             SizedBox(
               width: 240,
               child: Container(
@@ -97,70 +93,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 12),
                     const Divider(height: 1, color: Color(0xFF1A1F35)),
-                    const SizedBox(height: 8),
-
-                    // Eggs section (scrollable)
                     Expanded(
-                      child: eggsAsync.when(
-                        data: (eggs) {
-                          if (eggs.isEmpty) {
-                            return const Center(
-                              child: Text('No pending eggs',
-                                  style: TextStyle(
-                                      color: AppColors.textMuted,
-                                      fontSize: 11)),
-                            );
-                          }
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 20),
-                                child: Text(
-                                  'Starter Eggs (${eggs.length})',
-                                  style: const TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Expanded(
-                                child: GridView.builder(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    crossAxisSpacing: 8,
-                                    mainAxisSpacing: 8,
-                                    childAspectRatio: 0.82,
-                                  ),
-                                  itemCount: eggs.length,
-                                  itemBuilder: (context, index) {
-                                    final egg = eggs[index];
-                                    return _EggCardContainer(
-                                      egg: egg,
-                                      onHatchPressed: () async {
-                                        await _handleHatchEgg(
-                                            context, ref, egg.id);
-                                      },
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (_, __) => const SizedBox.shrink(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Text(
+                            'Use the main menu to manage your roster and start battles.',
+                            style: TextStyle(
+                              color: AppColors.textMuted.withValues(alpha: 0.9),
+                              fontSize: 11,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -187,7 +135,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           children: [
                             const Expanded(
                               child: Text(
-                                'Profile (Debug)',
+                                kDebugMode ? 'Profile (Debug)' : 'Profile',
                                 style: TextStyle(
                                   color: AppColors.textPrimary,
                                   fontSize: 12,
@@ -301,13 +249,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     onTap: () => context.push(Routes.library),
                   ),
                   const SizedBox(height: 8),
-                  _MenuButton(
-                    icon: '🧪',
-                    label: 'Test Battle Lab',
-                    subtitle: 'Debug traits, body parts & animations',
-                    color: const Color(0xFF7C3AED),
-                    onTap: () => context.go(Routes.testBattle),
-                  ),
+                  if (kDebugMode)
+                    _MenuButton(
+                      icon: '🧪',
+                      label: 'Test Battle Lab',
+                      subtitle: 'Debug traits, body parts & animations',
+                      color: const Color(0xFF7C3AED),
+                      onTap: () => context.go(Routes.testBattle),
+                    ),
                 ],
               ),
             ),
@@ -317,140 +266,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Future<void> _handleHatchEgg(
-    BuildContext context,
-    WidgetRef ref,
-    String petId,
-  ) async {
-    try {
-      final notifier = ref.read(petInventoryProvider.notifier);
-      final currentState = ref.read(petInventoryProvider);
-
-      PetModel? eggToHatch;
-
-      // Extract egg from async state
-      currentState.whenData((pets) {
-        try {
-          eggToHatch = pets.firstWhere(
-            (pet) => pet.id == petId && pet.isEgg,
-          );
-        } catch (e) {
-          // Egg not found
-        }
-      });
-
-      if (!context.mounted || eggToHatch == null) return;
-
-      // Show hatching animation dialog
-      if (!context.mounted) return;
-
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext dialogContext) {
-          return HatchAnimationDialog(
-            egg: eggToHatch!,
-            onHatchComplete: () async {
-              // Perform the actual hatch API call after animation
-              try {
-                final hatchedPet = await notifier.hatchEgg(petId);
-
-                if (context.mounted && hatchedPet != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content:
-                          Text('${hatchedPet.name} hatched successfully! 🎉'),
-                      backgroundColor: Colors.green,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to hatch: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-          );
-        },
-      );
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleLogout() async {
     await ref.read(authProvider.notifier).logout();
     if (!mounted) return;
     context.go(Routes.login);
-  }
-}
-
-class _EggCardContainer extends ConsumerWidget {
-  final dynamic egg;
-  final VoidCallback onHatchPressed;
-
-  const _EggCardContainer({
-    required this.egg,
-    required this.onHatchPressed,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Stack(
-      children: [
-        EggCard(
-          egg: egg,
-          onTap: onHatchPressed,
-        ),
-        // Hatch button overlay
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.8),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: GestureDetector(
-              onTap: onHatchPressed,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.favorite, color: Colors.red, size: 16),
-                  SizedBox(width: 6),
-                  Text(
-                    'Tap to Hatch',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }
 

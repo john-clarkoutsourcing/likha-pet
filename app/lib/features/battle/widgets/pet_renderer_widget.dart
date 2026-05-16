@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:likha_pet_battle_engine/trait.dart';
@@ -40,12 +40,12 @@ class PetRendererWidget extends StatefulWidget {
   const PetRendererWidget({
     super.key,
     required this.def,
-    this.size          = 200,
+    this.size = 200,
     this.flipHorizontal = false,
-    this.animation     = 'action/idle/normal',
+    this.animation = 'action/idle/normal',
     this.figScale,
-    this.scaleMult     = 1.0,
-    this.yOff          = 0.80,
+    this.scaleMult = 1.0,
+    this.yOff = 0.80,
   });
 
   // Fixed scale for the 400px internal canvas — display-size-independent.
@@ -53,19 +53,19 @@ class PetRendererWidget extends StatefulWidget {
 
   static PetRendererWidget fromOwned(
     OwnedPet pet, {
-    double size         = 200,
+    double size = 200,
     bool flipHorizontal = false,
-    String animation    = 'action/idle/normal',
+    String animation = 'action/idle/normal',
     double? figScale,
-    double yOff         = 0.80,
+    double yOff = 0.80,
   }) =>
       PetRendererWidget(
-        def:            pet.toCreatureDefinition(),
-        size:           size,
+        def: pet.toCreatureDefinition(),
+        size: size,
         flipHorizontal: flipHorizontal,
-        animation:      animation,
-        figScale:       figScale,
-        yOff:           yOff,
+        animation: animation,
+        figScale: figScale,
+        yOff: yOff,
       );
 
   @override
@@ -77,8 +77,8 @@ String? _cachedRendererHtml;
 
 class _PetRendererWidgetState extends State<PetRendererWidget> {
   WebViewController? _ctrl;
-  bool _pageReady   = false;   // page fully loaded
-  bool _renderSent  = false;   // render params sent at least once
+  bool _pageReady = false; // page fully loaded
+  bool _renderSent = false; // render params sent at least once
   Timer? _pollTimer;
   String _rendererHtml = '';
   String? _webViewId;
@@ -96,7 +96,8 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
 
   Future<void> _loadAndInit() async {
     if (kIsWeb) return;
-    _cachedRendererHtml ??= await rootBundle.loadString('assets/renderer/renderer.html');
+    _cachedRendererHtml ??=
+        await rootBundle.loadString('assets/renderer/renderer.html');
     if (!mounted) return;
     setState(() => _rendererHtml = _cachedRendererHtml!);
     _initCtrl();
@@ -128,7 +129,8 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       'ch': '${widget.size.toInt()}',
     };
     final query = Uri(queryParameters: params).query;
-    final rendererUrl = Uri.base.resolve('assets/assets/renderer/renderer.html');
+    final rendererUrl =
+        Uri.base.resolve('assets/assets/renderer/renderer.html');
     return '$rendererUrl?$query';
   }
 
@@ -149,7 +151,7 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
           if (!mounted) return;
           _pollTimer?.cancel();
           if (msg.message.startsWith('error:')) {
-            debugPrint('[WebView] RendererReady error: ${msg.message}');
+            _devLog('[WebView] RendererReady error: ${msg.message}');
             return;
           }
           _onMixerReady();
@@ -157,13 +159,13 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       )
       ..addJavaScriptChannel(
         'FlutterLog',
-        onMessageReceived: (msg) => debugPrint('[WebView] ${msg.message}'),
+        onMessageReceived: (msg) => _devLog('[WebView] ${msg.message}'),
       )
       ..setNavigationDelegate(NavigationDelegate(
         onWebResourceError: (e) =>
-            debugPrint('[WebView] Resource error: ${e.description}'),
+            _devLog('[WebView] Resource error: ${e.description}'),
         onPageFinished: (url) {
-          debugPrint('[WebView] Page loaded: $url');
+          _devLog('[WebView] Page loaded: $url');
           if (!mounted) return;
           // Start polling in case JS channels don't fire.
           _startPolling();
@@ -198,10 +200,10 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       if (textures.isNotEmpty) {
         final json = jsonEncode(textures);
         await _ctrl!.runJavaScript('window.preloadedTextures = $json;');
-        debugPrint('[WebView] Injected ${textures.length} preloaded textures');
+        _devLog('[WebView] Injected ${textures.length} preloaded textures');
       }
     } catch (e) {
-      debugPrint('[WebView] Texture preload error: $e');
+      _devLog('[WebView] Texture preload error: $e');
     }
     if (!mounted) return;
     _ctrl!.runJavaScript(_buildRenderCall());
@@ -237,7 +239,8 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
 
     for (final asset in all) {
       if (!asset.startsWith(prefix) || !asset.endsWith('.png')) continue;
-      final relPath = asset.substring(prefix.length); // e.g. "beast-04/back.png"
+      final relPath =
+          asset.substring(prefix.length); // e.g. "beast-04/back.png"
       final dir = relPath.split('/').first;
       if (!neededDirs.contains(dir)) continue;
       try {
@@ -252,14 +255,21 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
   void _startPolling() {
     _pollTimer?.cancel();
     int attempts = 0;
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 800), (timer) async {
-      if (!mounted) { timer.cancel(); return; }
+    _pollTimer =
+        Timer.periodic(const Duration(milliseconds: 800), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       attempts++;
       if (attempts > 30) {
         // 24s timeout — give up
         timer.cancel();
-        debugPrint('[WebView] Poll timeout — renderer not ready after 24s');
-        if (!_pageReady) { _pageReady = true; setState(() {}); }
+        _devLog('[WebView] Poll timeout — renderer not ready after 24s');
+        if (!_pageReady) {
+          _pageReady = true;
+          setState(() {});
+        }
         return;
       }
       try {
@@ -269,16 +279,19 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
         final r = result.toString().replaceAll('"', '');
         if (r == 'ready') {
           timer.cancel();
-          debugPrint('[WebView] Poll: mixer ready (attempt $attempts)');
+          _devLog('[WebView] Poll: mixer ready (attempt $attempts)');
           _onMixerReady();
         } else if (r.startsWith('error:')) {
           timer.cancel();
-          debugPrint('[WebView] Poll: render error: $r');
-          if (!_pageReady) { _pageReady = true; setState(() {}); }
+          _devLog('[WebView] Poll: render error: $r');
+          if (!_pageReady) {
+            _pageReady = true;
+            setState(() {});
+          }
         }
         // else "wait" — keep polling
       } catch (e) {
-        debugPrint('[WebView] Poll error: $e');
+        _devLog('[WebView] Poll error: $e');
       }
     });
   }
@@ -287,8 +300,7 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
   void didUpdateWidget(PetRendererWidget old) {
     super.didUpdateWidget(old);
     if (kIsWeb) {
-      final modelChanged =
-          old.def.horn.id != widget.def.horn.id ||
+      final modelChanged = old.def.horn.id != widget.def.horn.id ||
           old.def.back.id != widget.def.back.id ||
           old.def.tail.id != widget.def.tail.id ||
           old.def.mouth.id != widget.def.mouth.id ||
@@ -314,14 +326,15 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
     }
     if (_ctrl == null || !_pageReady) return;
 
-    final partsChanged =
-        old.def.horn.id != widget.def.horn.id ||
+    final partsChanged = old.def.horn.id != widget.def.horn.id ||
         old.def.back.id != widget.def.back.id ||
         old.def.tail.id != widget.def.tail.id ||
         old.def.mouth.id != widget.def.mouth.id ||
         old.def.bodyClass != widget.def.bodyClass;
 
-    if (partsChanged || old._effectiveScale != widget._effectiveScale || old.yOff != widget.yOff) {
+    if (partsChanged ||
+        old._effectiveScale != widget._effectiveScale ||
+        old.yOff != widget.yOff) {
       _renderSent = false;
       _onMixerReady();
     } else if (old.animation != widget.animation) {
@@ -334,46 +347,54 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
   }
 
   String _buildRenderCall() {
-    final def  = widget.def;
-    final horn  = _sampleForPart(def.horn.cardArtPath, def.bodyClass.name);
-    final back  = _sampleForPart(def.back.cardArtPath, def.bodyClass.name);
-    final tail  = _sampleForPart(def.tail.cardArtPath, def.bodyClass.name);
+    final def = widget.def;
+    final horn = _sampleForPart(def.horn.cardArtPath, def.bodyClass.name);
+    final back = _sampleForPart(def.back.cardArtPath, def.bodyClass.name);
+    final tail = _sampleForPart(def.tail.cardArtPath, def.bodyClass.name);
     final mouth = _sampleForPart(def.mouth.cardArtPath, def.bodyClass.name);
 
     final params = {
-      'body':      'body-normal',
-      'horn':      horn,
-      'back':      back,
-      'tail':      tail,
-      'mouth':     mouth,
-      'ears':      '${def.bodyClass.name}-04',
-      'eyes':      '${def.bodyClass.name}-04',
-      'colorIdx':  _colorIdxFor(def.bodyClass),
-      'anim':      widget.animation,
-      'figScale':  double.parse(widget._effectiveScale.toStringAsFixed(3)),
+      'body': 'body-normal',
+      'horn': horn,
+      'back': back,
+      'tail': tail,
+      'mouth': mouth,
+      'ears': '${def.bodyClass.name}-04',
+      'eyes': '${def.bodyClass.name}-04',
+      'colorIdx': _colorIdxFor(def.bodyClass),
+      'anim': widget.animation,
+      'figScale': double.parse(widget._effectiveScale.toStringAsFixed(3)),
       'scaleMult': double.parse(widget.scaleMult.toStringAsFixed(3)),
-      'yOff':      double.parse(widget.yOff.toStringAsFixed(3)),
-      'width':     widget.size.toInt(),
-      'height':    widget.size.toInt(),
+      'yOff': double.parse(widget.yOff.toStringAsFixed(3)),
+      'width': widget.size.toInt(),
+      'height': widget.size.toInt(),
     };
 
-    debugPrint('[WebView] Sending render: horn=$horn back=$back tail=$tail mouth=$mouth '
+    _devLog(
+        '[WebView] Sending render: horn=$horn back=$back tail=$tail mouth=$mouth '
         'colorIdx=${params["colorIdx"]} figScale=${params["figScale"]}');
     final json = jsonEncode(params);
     return 'window.LikhaPetRenderer.render($json)';
   }
 
   static int _colorIdxFor(CreatureClass cls) => switch (cls) {
-    CreatureClass.beast   => 3,
-    CreatureClass.plant   => 6,
-    CreatureClass.aquatic => 12,
-    CreatureClass.reptile => 18,
-    CreatureClass.bird    => 24,
-    CreatureClass.bug     => 30,
-  };
+        CreatureClass.beast => 3,
+        CreatureClass.plant => 6,
+        CreatureClass.aquatic => 12,
+        CreatureClass.reptile => 18,
+        CreatureClass.bird => 24,
+        CreatureClass.bug => 30,
+      };
 
   static String _sampleForPart(String cardArtPath, String bodyClass) {
-    const validClasses = {'beast', 'plant', 'aquatic', 'reptile', 'bird', 'bug'};
+    const validClasses = {
+      'beast',
+      'plant',
+      'aquatic',
+      'reptile',
+      'bird',
+      'bug'
+    };
     const validVariants = {'02', '04', '06', '08', '10', '12'};
 
     try {
@@ -386,7 +407,8 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       }
     } catch (_) {}
 
-    final fallbackClass = validClasses.contains(bodyClass) ? bodyClass : 'beast';
+    final fallbackClass =
+        validClasses.contains(bodyClass) ? bodyClass : 'beast';
     return '$fallbackClass-04';
   }
 
@@ -416,13 +438,14 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
     }
 
     return SizedBox(
-      width:  widget.size,
+      width: widget.size,
       height: widget.size,
       child: Stack(fit: StackFit.expand, children: [
         view,
         if (!_pageReady)
-          const Center(child: CircularProgressIndicator(
-              strokeWidth: 2, color: Colors.white38)),
+          const Center(
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white38)),
       ]),
     );
   }
@@ -433,7 +456,13 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       anim.startsWith('action/idle') || anim.startsWith('action/mix');
 
   Widget _fallback() => PetCompositeWidget(
-    def:  widget.def,
-    size: widget.size,
-  );
+        def: widget.def,
+        size: widget.size,
+      );
+}
+
+void _devLog(String message) {
+  if (kDebugMode) {
+    debugPrint(message);
+  }
 }
