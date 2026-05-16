@@ -118,8 +118,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 20),
                                 child: Text(
                                   'Starter Eggs (${eggs.length})',
                                   style: const TextStyle(
@@ -158,8 +158,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ],
                           );
                         },
-                        loading: () => const Center(
-                            child: CircularProgressIndicator()),
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
                         error: (_, __) => const SizedBox.shrink(),
                       ),
                     ),
@@ -183,13 +183,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Profile (Debug)',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Profile (Debug)',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: _handleLogout,
+                              icon: const Icon(
+                                Icons.logout,
+                                size: 14,
+                                color: AppColors.textMuted,
+                              ),
+                              label: const Text(
+                                'Logout',
+                                style: TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(0, 28),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -198,7 +226,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             color: AppColors.textPrimary,
                             fontSize: 12,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         SelectableText(
@@ -245,9 +272,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     subtitle: player.hasFullTeam
                         ? 'My Team  vs  Rivals'
                         : 'Set up a team first',
-                    color: player.hasFullTeam
-                        ? AppColors.primary
-                        : Colors.white24,
+                    color:
+                        player.hasFullTeam ? AppColors.primary : Colors.white24,
                     onTap: player.hasFullTeam
                         ? () => context.push(
                               Routes.battle,
@@ -299,7 +325,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       final notifier = ref.read(petInventoryProvider.notifier);
       final currentState = ref.read(petInventoryProvider);
-      
+
       PetModel? eggToHatch;
 
       // Extract egg from async state
@@ -317,7 +343,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       // Show hatching animation dialog
       if (!context.mounted) return;
-      
+
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -332,7 +358,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 if (context.mounted && hatchedPet != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('${hatchedPet.name} hatched successfully! 🎉'),
+                      content:
+                          Text('${hatchedPet.name} hatched successfully! 🎉'),
                       backgroundColor: Colors.green,
                       duration: const Duration(seconds: 2),
                     ),
@@ -362,6 +389,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       }
     }
+  }
+
+  Future<void> _handleLogout() async {
+    await ref.read(authProvider.notifier).logout();
+    if (!mounted) return;
+    context.go(Routes.login);
   }
 }
 

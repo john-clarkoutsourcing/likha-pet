@@ -14,10 +14,11 @@ import 'battle_logger.dart';
 // them server-side during resolveTurn to ensure client and server produce
 // identical results.
 
-const int kMaxSingleHitDamage = 90;  // Single-target damage ceiling
-const int kMaxAoeDamagePerHit  = 30; // Per-target AoE ceiling (3 hits max = 90 total)
-const int kMaxFlatHealing      = 50; // Largest single heal
-const int kMaxShield           = 999; // Classic-style accumulated shield per round
+const int kMaxSingleHitDamage = 90; // Single-target damage ceiling
+const int kMaxAoeDamagePerHit =
+    30; // Per-target AoE ceiling (3 hits max = 90 total)
+const int kMaxFlatHealing = 50; // Largest single heal
+const int kMaxShield = 999; // Classic-style accumulated shield per round
 
 // ── ActionResolver ─────────────────────────────────────────────────────────────
 
@@ -62,28 +63,36 @@ class ActionResolver {
     switch (effect.type) {
       // ── Single-target damage ──────────────────────────────────────────────
       case EffectType.damage:
-        final target = _resolveTarget(
-          effect.target, actor, actorTeam, enemyTeam,
-        );
+        final target = action.primaryTarget != null
+            ? (action.primaryTarget!.isFainted ? null : action.primaryTarget)
+            : _resolveTarget(
+                effect.target,
+                actor,
+                actorTeam,
+                enemyTeam,
+              );
         if (target == null || target.isFainted) {
           log.noTarget();
           return;
         }
-        final net    = _computeDamage(actor, target, effect.value, trait, comboIndex: comboIndex);
+        final net = _computeDamage(actor, target, effect.value, trait,
+            comboIndex: comboIndex);
         final isCrit = _rollCrit(actor, target);
-        final dmg    = _clamp(isCrit ? net * 2 : net, kMaxSingleHitDamage);
+        final dmg = _clamp(isCrit ? net * 2 : net, kMaxSingleHitDamage);
         final actual = target.takeDamage(dmg);
         log.damage(target.name, actual, target.hp, isCrit: isCrit);
         if (target.isFainted) log.fainted(target.name);
 
       // ── AoE damage ────────────────────────────────────────────────────────
       case EffectType.aoe:
-        final targets = _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
+        final targets =
+            _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
         for (final t in targets) {
           if (t.isFainted) continue;
-          final net    = _computeDamage(actor, t, effect.value, trait, comboIndex: comboIndex);
+          final net = _computeDamage(actor, t, effect.value, trait,
+              comboIndex: comboIndex);
           final isCrit = _rollCrit(actor, t);
-          final dmg    = _clamp(isCrit ? net * 2 : net, kMaxAoeDamagePerHit);
+          final dmg = _clamp(isCrit ? net * 2 : net, kMaxAoeDamagePerHit);
           final actual = t.takeDamage(dmg);
           log.damage(t.name, actual, t.hp, isAoe: true, isCrit: isCrit);
           if (t.isFainted) log.fainted(t.name);
@@ -91,7 +100,8 @@ class ActionResolver {
 
       // ── Healing ───────────────────────────────────────────────────────────
       case EffectType.heal:
-        final targets = _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
+        final targets =
+            _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
         for (final t in targets) {
           if (t.isFainted) continue;
           final amount = effect.value.clamp(0, kMaxFlatHealing);
@@ -102,7 +112,10 @@ class ActionResolver {
       // ── Shield ────────────────────────────────────────────────────────────
       case EffectType.shield:
         final target = _resolveTarget(
-          effect.target, actor, actorTeam, enemyTeam,
+          effect.target,
+          actor,
+          actorTeam,
+          enemyTeam,
         );
         if (target == null || target.isFainted) {
           log.noTarget();
@@ -114,30 +127,35 @@ class ActionResolver {
 
       // ── Buffs (single or multi-target) ────────────────────────────────────
       case EffectType.buff:
-        final targets = _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
+        final targets =
+            _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
         for (final t in targets) {
           if (t.isFainted) continue;
           t.applyBuff(effect.buffType!, effect.value, effect.duration);
-          log.buff(t.name, effect.buffType!.name, effect.value, effect.duration);
+          log.buff(
+              t.name, effect.buffType!.name, effect.value, effect.duration);
         }
 
       // ── Debuffs (single OR multi-target, e.g. Kapre Smoke hits all enemies)
       case EffectType.debuff:
-        final targets = _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
+        final targets =
+            _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
         for (final t in targets) {
           if (t.isFainted) continue;
           t.applyDebuff(effect.debuffType!, effect.value, effect.duration);
           if (effect.debuffType == DebuffType.stunned) {
             log.stun(t.name);
           } else {
-            log.debuff(t.name, effect.debuffType!.name, effect.value, effect.duration);
+            log.debuff(
+                t.name, effect.debuffType!.name, effect.value, effect.duration);
           }
           if (t.isFainted) log.fainted(t.name);
         }
 
       // ── Shield break — removes enemy shield, then applies shield to self ─────
       case EffectType.shieldBreak:
-        final target = _resolveTarget(effect.target, actor, actorTeam, enemyTeam);
+        final target =
+            _resolveTarget(effect.target, actor, actorTeam, enemyTeam);
         if (target != null && !target.isFainted) {
           target.shield = 0;
           log.shieldBreak(target.name);
@@ -184,12 +202,12 @@ class ActionResolver {
   // Class advantage (+15%) and same-class card bonus (+10%) stack:
   //   Bird using a Bird card against Beast = ×1.25 damage
 
-  int _computeDamage(Pet attacker, Pet defender, int traitBaseValue, Trait trait,
+  int _computeDamage(
+      Pet attacker, Pet defender, int traitBaseValue, Trait trait,
       {int comboIndex = 0}) {
-    final comboBonus = comboIndex > 0
-        ? (traitBaseValue * attacker.skill ~/ 500)
-        : 0;
-    final raw  = attacker.effectiveAttack + traitBaseValue + comboBonus;
+    final comboBonus =
+        comboIndex > 0 ? (traitBaseValue * attacker.skill ~/ 500) : 0;
+    final raw = attacker.effectiveAttack + traitBaseValue + comboBonus;
     final base = (raw - defender.effectiveDefense).clamp(1, 999);
     return (base * _classMult(attacker, defender, trait)).round().clamp(1, 999);
   }
@@ -201,8 +219,8 @@ class ActionResolver {
   // High-speed defenders are harder to crit — mimics Axie's speed/morale interplay.
 
   bool _rollCrit(Pet attacker, Pet defender) {
-    final chance = (attacker.morale * 0.001 - defender.speed * 0.0005)
-        .clamp(0.0, 0.30);
+    final chance =
+        (attacker.morale * 0.001 - defender.speed * 0.0005).clamp(0.0, 0.30);
     return chance > 0 && _rng.nextDouble() < chance;
   }
 
@@ -224,9 +242,8 @@ class ActionResolver {
   void _tickPoison(List<Pet> allPets, BattleLogger log) {
     for (final pet in allPets) {
       if (pet.isFainted) continue;
-      final poison = pet.debuffs
-          .where((d) => d.type == DebuffType.poisoned)
-          .firstOrNull;
+      final poison =
+          pet.debuffs.where((d) => d.type == DebuffType.poisoned).firstOrNull;
       if (poison == null) continue;
       final dmg = poison.value; // 1 HP per stack per action
       pet.takeDamage(dmg, ignoreShield: true);
@@ -253,28 +270,34 @@ class ActionResolver {
   // 'back_enemy' pierces directly to the back row — skips the front.
 
   Pet? _resolveTarget(
-    String spec, Pet actor, List<Pet> actorTeam, List<Pet> enemyTeam,
+    String spec,
+    Pet actor,
+    List<Pet> actorTeam,
+    List<Pet> enemyTeam,
   ) {
     return switch (spec) {
-      'enemy'           => _firstAlive(enemyTeam),    // hits front of formation
-      'lowest_hp_enemy' => _lowestHp(enemyTeam),      // pierce — ignores formation
-      'back_enemy'      => _backRow(enemyTeam),        // pierce — targets back row
-      'self'            => actor,
-      'lowest_hp_ally'  => _lowestHp(actorTeam),
-      _                 => _firstAlive(enemyTeam),
+      'enemy' => _firstAlive(enemyTeam), // hits front of formation
+      'lowest_hp_enemy' => _lowestHp(enemyTeam), // pierce — ignores formation
+      'back_enemy' => _backRow(enemyTeam), // pierce — targets back row
+      'self' => actor,
+      'lowest_hp_ally' => _lowestHp(actorTeam),
+      _ => _firstAlive(enemyTeam),
     };
   }
 
   List<Pet> _resolveMultiple(
-    String spec, Pet actor, List<Pet> actorTeam, List<Pet> enemyTeam,
+    String spec,
+    Pet actor,
+    List<Pet> actorTeam,
+    List<Pet> enemyTeam,
   ) {
     return switch (spec) {
-      'all_enemies'     => enemyTeam.where((p) => !p.isFainted).toList(),
-      'all_allies'      => actorTeam.where((p) => !p.isFainted).toList(),
-      'lowest_hp_ally'  => _singleOrEmpty(_lowestHp(actorTeam)),
+      'all_enemies' => enemyTeam.where((p) => !p.isFainted).toList(),
+      'all_allies' => actorTeam.where((p) => !p.isFainted).toList(),
+      'lowest_hp_ally' => _singleOrEmpty(_lowestHp(actorTeam)),
       'lowest_hp_enemy' => _singleOrEmpty(_lowestHp(enemyTeam)),
-      'back_enemy'      => _singleOrEmpty(_backRow(enemyTeam)),
-      _                 => _singleOrEmpty(_resolveTarget(spec, actor, actorTeam, enemyTeam)),
+      'back_enemy' => _singleOrEmpty(_backRow(enemyTeam)),
+      _ => _singleOrEmpty(_resolveTarget(spec, actor, actorTeam, enemyTeam)),
     };
   }
 

@@ -76,3 +76,5 @@ May 17, 2026 2:39:34 AM com.google.cloud.datastore.emulator.firestore.websocket.
 INFO: Websocket client disconnected
 May 17, 2026 2:39:34 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketChannelHandler channelClosed
 INFO: Websocket client disconnected
+May 17, 2026 3:20:08 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected HTTP/2 connection.

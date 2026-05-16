@@ -22,14 +22,19 @@ export function initializeFirebase(): void {
       projectId: process.env.FIREBASE_PROJECT_ID || 'demo-likha-pet',
     });
   } else {
-    // For production, use service account from credentials file
-    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || 
-      path.join(__dirname, '../../firebase-credentials.json');
-    
-    admin.initializeApp({
-      credential: admin.credential.cert(credentialsPath),
-      projectId: process.env.FIREBASE_PROJECT_ID || 'paksi-game-beta',
-    });
+    // On Cloud Run / GCE: Application Default Credentials are picked up automatically.
+    // Locally with a real project: set GOOGLE_APPLICATION_CREDENTIALS to the key file path.
+    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (credentialsPath) {
+      admin.initializeApp({
+        credential: admin.credential.cert(credentialsPath),
+        projectId: process.env.FIREBASE_PROJECT_ID || 'paksi-game-beta',
+      });
+    } else {
+      admin.initializeApp({
+        projectId: process.env.FIREBASE_PROJECT_ID || 'paksi-game-beta',
+      });
+    }
   }
 
   console.log('✓ Firestore initialized');

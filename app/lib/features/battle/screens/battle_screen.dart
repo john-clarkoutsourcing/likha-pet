@@ -43,7 +43,7 @@ const _kPanelPeekH = 32.0; // visible height when panel is collapsed
 const _kSpriteBase = 130.0;
 
 /// Depth: front largest/brightest, back smallest/dimmer.
-const _kScaleByPos   = [1.50, 1.50, 1.50];
+const _kScaleByPos = [1.50, 1.50, 1.50];
 const _kOpacityByPos = [1.00, 1.00, 1.00];
 
 /// Battlefield positions as (left%, top%) fractions.
@@ -92,9 +92,9 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
       if (!mounted) return;
       ref.read(battleArgsProvider.notifier).state = widget.args;
       ref.read(pveBattleProvider.notifier).setBattlePositions(
-        playerPos: _playerPos,
-        enemyPos: _enemyPos,
-      );
+            playerPos: _playerPos,
+            enemyPos: _enemyPos,
+          );
     });
 
     SystemChrome.setPreferredOrientations([
@@ -149,9 +149,9 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
       list[index] = Offset(dx ?? cur.dx, dy ?? cur.dy);
     });
     ref.read(pveBattleProvider.notifier).setBattlePositions(
-      playerPos: _playerPos,
-      enemyPos: _enemyPos,
-    );
+          playerPos: _playerPos,
+          enemyPos: _enemyPos,
+        );
   }
 
   void _resetPositions() {
@@ -160,9 +160,9 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
       _enemyPos = List<Offset>.from(_kEnemyPos);
     });
     ref.read(pveBattleProvider.notifier).setBattlePositions(
-      playerPos: _playerPos,
-      enemyPos: _enemyPos,
-    );
+          playerPos: _playerPos,
+          enemyPos: _enemyPos,
+        );
   }
 
   void _ensureWarmup(PveBattleViewModel vm) {
@@ -252,7 +252,7 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
-        fit: StackFit.expand,   // fill edge-to-edge, no implicit margins
+        fit: StackFit.expand, // fill edge-to-edge, no implicit margins
         children: [
           // ── Background (full screen) ─────────────────────────────────────
           const BattleBackgroundWidget(),
@@ -638,20 +638,16 @@ class _PlayerTag extends StatelessWidget {
       ),
     );
     return isPlayer
-        ? Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(width: 72, child: label),
-              const SizedBox(width: 5),
-              avatar,
-            ])
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              avatar,
-              const SizedBox(width: 5),
-              SizedBox(width: 72, child: label),
-            ]);
+        ? Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(width: 72, child: label),
+            const SizedBox(width: 5),
+            avatar,
+          ])
+        : Row(mainAxisSize: MainAxisSize.min, children: [
+            avatar,
+            const SizedBox(width: 5),
+            SizedBox(width: 72, child: label),
+          ]);
   }
 }
 
@@ -833,15 +829,27 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
         List<PetViewModel> newTeam,
         List<Offset> positions,
         Map<String, Offset> dashOffsets,
+        bool isPlayerTeam,
+        PveBattleViewModel vm,
       ) {
         for (var i = 0; i < newTeam.length && i < oldTeam.length; i++) {
           final delta = newTeam[i].hp - oldTeam[i].hp;
           if (delta == 0) continue;
           final petId = newTeam[i].id;
           final frac = positions[i.clamp(0, 2)];
-          final dash = dashOffsets[petId] ?? Offset.zero;
-          final x = w * (frac.dx + dash.dx) + 30;
-          final y = h * (frac.dy + dash.dy) - 10;
+          final rawDash = dashOffsets[petId] ?? Offset.zero;
+          final dashPx = _dashPixelsForPet(
+            vm: vm,
+            actorPetId: petId,
+            isPlayerTeam: isPlayerTeam,
+            actorIndex: i,
+            rawDash: rawDash,
+            w: w,
+            h: h,
+          );
+          final pos = Offset(w * frac.dx + dashPx.dx, h * frac.dy + dashPx.dy);
+          final x = pos.dx + 30;
+          final y = pos.dy - 10;
 
           if (delta < 0) {
             final wasPoisoned = oldTeam[i].activeDebuffs.contains('poisoned');
@@ -880,12 +888,16 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
         newVm.playerTeam,
         widget.playerPos.toList(),
         newVm.petDashOffsets,
+        true,
+        newVm,
       );
       check(
         oldVm.enemyTeam,
         newVm.enemyTeam,
         widget.enemyPos.toList(),
         newVm.petDashOffsets,
+        false,
+        newVm,
       );
 
       if (nums.isNotEmpty) setState(() => _floatNums.addAll(nums));
@@ -1009,39 +1021,67 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
 
             // Enemy pets
             for (var i = 0; i < vm.enemyTeam.length; i++)
+              // Keep melee dash in sync with live target position in screen-space.
+              // The provider flag (petDashOffsets) acts as a dash trigger only.
+              // Final dash vector is computed here using actual layout size.
+              // This avoids drift across web/mobile aspect ratios.
               _placed(
-                  w, h, widget.enemyPos[i],
+                  w,
+                  h,
+                  widget.enemyPos[i],
                   _BattlePet(
-                    pet:          vm.enemyTeam[i],
-                    isPlayer:     false,
-                    isSelected:   false,
-                    hasSkill:     false,
+                    pet: vm.enemyTeam[i],
+                    isPlayer: false,
+                    isSelected: false,
+                    hasSkill: false,
                     positionIndex: i,
-                    animState:    vm.petAnimStates[vm.enemyTeam[i].id],
-                    attackSlot:   vm.petAttackSlots[vm.enemyTeam[i].id],
+                    animState: vm.petAnimStates[vm.enemyTeam[i].id],
+                    attackSlot: vm.petAttackSlots[vm.enemyTeam[i].id],
                     onTap: () => _PetInfoSheet.show(context, vm.enemyTeam[i]),
                   ),
-                  dash: vm.petDashOffsets[vm.enemyTeam[i].id] ?? Offset.zero),
+                  dash: _dashPixelsForPet(
+                    vm: vm,
+                    actorPetId: vm.enemyTeam[i].id,
+                    isPlayerTeam: false,
+                    actorIndex: i,
+                    rawDash:
+                        vm.petDashOffsets[vm.enemyTeam[i].id] ?? Offset.zero,
+                    w: w,
+                    h: h,
+                  )),
 
             // Player pets
             for (var i = 0; i < vm.playerTeam.length; i++)
               _placed(
-                  w, h, widget.playerPos[i],
+                  w,
+                  h,
+                  widget.playerPos[i],
                   _BattlePet(
-                    pet:          vm.playerTeam[i],
-                    isPlayer:     true,
-                    isSelected:   vm.selectedPetId == vm.playerTeam[i].id,
-                    hasSkill:     vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ?? false,
+                    pet: vm.playerTeam[i],
+                    isPlayer: true,
+                    isSelected: vm.selectedPetId == vm.playerTeam[i].id,
+                    hasSkill:
+                        vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ??
+                            false,
                     positionIndex: i,
-                    animState:    vm.petAnimStates[vm.playerTeam[i].id],
-                    attackSlot:   vm.petAttackSlots[vm.playerTeam[i].id],
+                    animState: vm.petAnimStates[vm.playerTeam[i].id],
+                    attackSlot: vm.petAttackSlots[vm.playerTeam[i].id],
                     onTap: () => ref
                         .read(pveBattleProvider.notifier)
                         .selectPet(vm.playerTeam[i].id),
                     onLongPress: () =>
                         _PetInfoSheet.show(context, vm.playerTeam[i]),
                   ),
-                  dash: vm.petDashOffsets[vm.playerTeam[i].id] ?? Offset.zero),
+                  dash: _dashPixelsForPet(
+                    vm: vm,
+                    actorPetId: vm.playerTeam[i].id,
+                    isPlayerTeam: true,
+                    actorIndex: i,
+                    rawDash:
+                        vm.petDashOffsets[vm.playerTeam[i].id] ?? Offset.zero,
+                    w: w,
+                    h: h,
+                  )),
 
             // Flying projectiles
             for (final p in _projectiles)
@@ -1065,14 +1105,71 @@ class _BattlefieldState extends ConsumerState<_Battlefield> {
   }
 
   Widget _placed(double w, double h, Offset pos, Widget child,
-          {Offset dash = Offset.zero}) =>
-      AnimatedPositioned(
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeInOut,
-        left: w * pos.dx + w * dash.dx,
-        top:  h * pos.dy  + h * dash.dy,
-        child: child,
+      {Offset dash = Offset.zero}) {
+    final p = Offset(w * pos.dx + dash.dx, h * pos.dy + dash.dy);
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+      left: p.dx,
+      top: p.dy,
+      child: child,
+    );
+  }
+
+  Offset _dashPixelsForPet({
+    required PveBattleViewModel vm,
+    required String actorPetId,
+    required bool isPlayerTeam,
+    required int actorIndex,
+    required Offset rawDash,
+    required double w,
+    required double h,
+  }) {
+    if (rawDash == Offset.zero) return Offset.zero;
+
+    final actorPositions = isPlayerTeam ? widget.playerPos : widget.enemyPos;
+    final targetPositions = isPlayerTeam ? widget.enemyPos : widget.playerPos;
+    final targetTeam = isPlayerTeam ? vm.enemyTeam : vm.playerTeam;
+    final explicitTargetId = vm.petDashTargets[actorPetId];
+    int targetIndex = -1;
+    if (explicitTargetId != null) {
+      targetIndex = targetTeam.indexWhere(
+        (p) => p.id == explicitTargetId && !p.isFainted,
       );
+      // Locked target died mid-sequence: fizzle dash, do not retarget.
+      if (targetIndex < 0) return Offset.zero;
+    }
+    if (explicitTargetId == null && targetIndex < 0) {
+      targetIndex = targetTeam.indexWhere((p) => !p.isFainted);
+    }
+    if (targetIndex < 0) return Offset.zero;
+
+    final actorSpriteSize = _kSpriteBase *
+        _kScaleByPos[actorIndex.clamp(0, _kScaleByPos.length - 1)];
+    final targetSpriteSize = _kSpriteBase *
+        _kScaleByPos[targetIndex.clamp(0, _kScaleByPos.length - 1)];
+
+    final actorFrac = actorPositions[actorIndex.clamp(0, 2)];
+    final targetFrac = targetPositions[targetIndex.clamp(0, 2)];
+    final actorTopLeft = Offset(w * actorFrac.dx, h * actorFrac.dy);
+    final targetTopLeft = Offset(w * targetFrac.dx, h * targetFrac.dy);
+    final actorCenter =
+        actorTopLeft + Offset(actorSpriteSize * 0.5, actorSpriteSize * 0.5);
+    final targetCenter =
+        targetTopLeft + Offset(targetSpriteSize * 0.5, targetSpriteSize * 0.5);
+    final toTarget = targetCenter - actorCenter;
+    final distance = toTarget.distance;
+    if (distance < 1.0) return Offset.zero;
+
+    final minGapPx = math.max(8.0, (actorSpriteSize + targetSpriteSize) * 0.06);
+    final dashDistance = math.max(0.0, distance - minGapPx);
+    if (dashDistance <= 0) return Offset.zero;
+
+    return Offset(
+      toTarget.dx / distance * dashDistance,
+      toTarget.dy / distance * dashDistance,
+    );
+  }
 }
 
 // ── Floating number widget ────────────────────────────────────────────────────
@@ -1183,10 +1280,10 @@ class _BattlePet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale      = _kScaleByPos[positionIndex.clamp(0, 2)];
-    final opacity    = _kOpacityByPos[positionIndex.clamp(0, 2)];
+    final scale = _kScaleByPos[positionIndex.clamp(0, 2)];
+    final opacity = _kOpacityByPos[positionIndex.clamp(0, 2)];
     final spriteSize = _kSpriteBase * scale;
-    final barWidth   = spriteSize + 14;
+    final barWidth = spriteSize + 14;
     final effectiveOpacity = pet.isFainted ? 0.88 : opacity;
 
     return GestureDetector(
@@ -1217,7 +1314,8 @@ class _BattlePet extends StatelessWidget {
                   if (!pet.isFainted)
                     Positioned(
                       top: -2,
-                      left: 0, right: 0,
+                      left: 0,
+                      right: 0,
                       child: _FloatingHpBar(pet: pet, width: barWidth),
                     ),
                 ],
@@ -1297,28 +1395,34 @@ class _FloatingHpBar extends StatelessWidget {
     final icons = <Widget>[];
 
     // Buffs
-    if (pet.activeBuffs.contains('attackUp'))   icons.add(_s('${s}attack-up.png'));
-    if (pet.activeBuffs.contains('defenseUp'))  icons.add(_s('${s}raise-shield.png'));
-    if (pet.activeBuffs.contains('speedUp'))    icons.add(_s('${s}speed-up.png'));
-    if (pet.activeBuffs.contains('energized'))  icons.add(_s('${s}gain-energy.png'));
-    if (pet.activeBuffs.contains('regen'))      icons.add(_s('${s}self-heal.png'));
+    if (pet.activeBuffs.contains('attackUp'))
+      icons.add(_s('${s}attack-up.png'));
+    if (pet.activeBuffs.contains('defenseUp'))
+      icons.add(_s('${s}raise-shield.png'));
+    if (pet.activeBuffs.contains('speedUp')) icons.add(_s('${s}speed-up.png'));
+    if (pet.activeBuffs.contains('energized'))
+      icons.add(_s('${s}gain-energy.png'));
+    if (pet.activeBuffs.contains('regen')) icons.add(_s('${s}self-heal.png'));
 
     // Debuffs
-    if (pet.activeDebuffs.contains('stunned'))      icons.add(_s('${s}stun.png'));
-    if (pet.activeDebuffs.contains('poisoned'))     icons.add(_s('${s}poison.png'));
-    if (pet.activeDebuffs.contains('burned'))       icons.add(_s('${s}critical.png'));
-    if (pet.activeDebuffs.contains('attackDown'))   icons.add(_s('${s}attack-down.png'));
-    if (pet.activeDebuffs.contains('defenseDown'))  icons.add(_s('${s}fragile.png'));
-    if (pet.activeDebuffs.contains('speedDown'))    icons.add(_s('${s}speed-down.png'));
+    if (pet.activeDebuffs.contains('stunned')) icons.add(_s('${s}stun.png'));
+    if (pet.activeDebuffs.contains('poisoned')) icons.add(_s('${s}poison.png'));
+    if (pet.activeDebuffs.contains('burned')) icons.add(_s('${s}critical.png'));
+    if (pet.activeDebuffs.contains('attackDown'))
+      icons.add(_s('${s}attack-down.png'));
+    if (pet.activeDebuffs.contains('defenseDown'))
+      icons.add(_s('${s}fragile.png'));
+    if (pet.activeDebuffs.contains('speedDown'))
+      icons.add(_s('${s}speed-down.png'));
 
     return icons;
   }
 
   static Widget _s(String path) => SizedBox(
-    width: 13, height: 13,
-    child: Image.asset(path, fit: BoxFit.contain),
-  );
-
+        width: 13,
+        height: 13,
+        child: Image.asset(path, fit: BoxFit.contain),
+      );
 }
 
 // ── Pet sprite ────────────────────────────────────────────────────────────────
@@ -1382,12 +1486,13 @@ class _Sprite extends StatelessWidget {
           )
         else if (pet.creatureDef != null)
           SizedBox(
-            width: size, height: size,
+            width: size,
+            height: size,
             child: PetRendererWidget(
               def: pet.creatureDef!,
               size: size,
               flipHorizontal: isPlayer,
-              animation: _animFor(animState),
+              animation: _animFor(animState, attackSlot: attackSlot),
             ),
           )
         else
@@ -1547,8 +1652,8 @@ class _BottomPanel extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xB80A0E1A),   // soft top (lets battlefield show a bit)
-                  Color(0xF80A0E1A),   // solid bottom
+                  Color(0xB80A0E1A), // soft top (lets battlefield show a bit)
+                  Color(0xF80A0E1A), // solid bottom
                 ],
               ),
               border: Border(
@@ -1558,7 +1663,9 @@ class _BottomPanel extends StatelessWidget {
           ),
           // Inner top shadow to ground the tray
           Positioned(
-            top: 2, left: 0, right: 0,
+            top: 2,
+            left: 0,
+            right: 0,
             child: Container(
               height: 18,
               decoration: BoxDecoration(
@@ -1583,7 +1690,8 @@ class _BottomPanel extends StatelessWidget {
               onTap: onToggleCollapse,
               child: Container(
                 margin: const EdgeInsets.only(top: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A243A),
                   borderRadius: BorderRadius.circular(10),
@@ -1661,9 +1769,8 @@ class _BottomPanelContent extends StatelessWidget {
                 if (filterPet != null)
                   _SelectedPetSkillHeader(
                     pet: filterPet,
-                    onShowAll: () => ref
-                        .read(pveBattleProvider.notifier)
-                        .clearSelectedPet(),
+                    onShowAll: () =>
+                        ref.read(pveBattleProvider.notifier).clearSelectedPet(),
                   ),
                 Expanded(
                   child: entries.isEmpty
@@ -1683,22 +1790,28 @@ class _BottomPanelContent extends StatelessWidget {
                           itemBuilder: (_, i) {
                             final (pet, card) = entries[i];
                             final assigned = vm.pendingSkills[pet.id] ?? [];
-                            final isAssigned = assigned.contains(card.instanceId);
+                            final isAssigned =
+                                assigned.contains(card.instanceId);
                             final comboIdx = isAssigned
                                 ? assigned.indexOf(card.instanceId) + 1
                                 : null;
-                            final isNew = vm.newCardIds.contains(card.instanceId);
-                            final isFizzled = vm.fizzledCardIds.contains(card.instanceId);
+                            final isNew =
+                                vm.newCardIds.contains(card.instanceId);
+                            final isFizzled =
+                                vm.fizzledCardIds.contains(card.instanceId);
 
                             final prevPet = i > 0 ? entries[i - 1].$1 : null;
-                            final isNewPet = prevPet == null || prevPet.id != pet.id;
+                            final isNewPet =
+                                prevPet == null || prevPet.id != pet.id;
                             final petColor = _PetCardSection._clsColor(
                                 pet.creatureDef?.bodyClass.name ?? '');
 
-                            final clsName = pet.creatureDef?.bodyClass.name ?? '';
+                            final clsName =
+                                pet.creatureDef?.bodyClass.name ?? '';
                             final clsLabel = clsName.isEmpty
                                 ? ''
-                                : clsName[0].toUpperCase() + clsName.substring(1);
+                                : clsName[0].toUpperCase() +
+                                    clsName.substring(1);
 
                             Widget w = Column(
                               mainAxisSize: MainAxisSize.min,
@@ -1711,10 +1824,13 @@ class _BottomPanelContent extends StatelessWidget {
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 7, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: petColor.withValues(alpha: 0.18),
-                                            borderRadius: BorderRadius.circular(6),
+                                            color: petColor.withValues(
+                                                alpha: 0.18),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
                                             border: Border.all(
-                                                color: petColor.withValues(alpha: 0.55),
+                                                color: petColor.withValues(
+                                                    alpha: 0.55),
                                                 width: 1),
                                           ),
                                           child: Text(
@@ -1787,7 +1903,8 @@ class _SelectedPetSkillHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _PetCardSection._clsColor(pet.creatureDef?.bodyClass.name ?? '');
+    final color =
+        _PetCardSection._clsColor(pet.creatureDef?.bodyClass.name ?? '');
     return Container(
       margin: const EdgeInsets.fromLTRB(6, 2, 6, 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -1839,12 +1956,12 @@ class _SelectedPetSkillHeader extends StatelessWidget {
 // ── Per-pet card section ──────────────────────────────────────────────────────
 
 class _PetCardSection extends StatelessWidget {
-  final PetViewModel        pet;
+  final PetViewModel pet;
   final List<CardViewModel> cards;
-  final PveBattleViewModel  vm;
-  final WidgetRef           ref;
-  final Set<String>         newCardIds;
-  final Set<String>         fizzledCardIds;
+  final PveBattleViewModel vm;
+  final WidgetRef ref;
+  final Set<String> newCardIds;
+  final Set<String> fizzledCardIds;
 
   const _PetCardSection({
     required this.pet,
@@ -1856,25 +1973,25 @@ class _PetCardSection extends StatelessWidget {
   });
 
   static Color _clsColor(String name) => switch (name.toLowerCase()) {
-    'beast'   => const Color(0xFFFF9800),
-    'plant'   => const Color(0xFF4CAF50),
-    'aquatic' => const Color(0xFF29B6F6),
-    'reptile' => const Color(0xFF66BB6A),
-    'bird'    => const Color(0xFFFF80AB),
-    'bug'     => const Color(0xFFFF5252),
-    _         => const Color(0xFF9C27B0),
-  };
+        'beast' => const Color(0xFFFF9800),
+        'plant' => const Color(0xFF4CAF50),
+        'aquatic' => const Color(0xFF29B6F6),
+        'reptile' => const Color(0xFF66BB6A),
+        'bird' => const Color(0xFFFF80AB),
+        'bug' => const Color(0xFFFF5252),
+        _ => const Color(0xFF9C27B0),
+      };
 
   @override
   Widget build(BuildContext context) {
     final assigned = vm.pendingSkills[pet.id] ?? [];
-    final allDone  = cards.isNotEmpty &&
-        cards.every((c) => assigned.contains(c.instanceId));
-    final cls      = pet.creatureDef?.bodyClass.name ?? pet.name;
-    final color    = _clsColor(cls);
+    final allDone =
+        cards.isNotEmpty && cards.every((c) => assigned.contains(c.instanceId));
+    final cls = pet.creatureDef?.bodyClass.name ?? pet.name;
+    final color = _clsColor(cls);
 
     final hpFrac = pet.maxHp > 0 ? (pet.hp / pet.maxHp).clamp(0.0, 1.0) : 0.0;
-    final hpCol  = hpFrac > 0.5
+    final hpCol = hpFrac > 0.5
         ? const Color(0xFF66FF88)
         : hpFrac > 0.25
             ? const Color(0xFFFFCC44)
@@ -1885,7 +2002,7 @@ class _PetCardSection extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: color, width: 3)),
         borderRadius: const BorderRadius.only(
-          topRight:    Radius.circular(8),
+          topRight: Radius.circular(8),
           bottomRight: Radius.circular(8),
         ),
         color: color.withValues(alpha: 0.06),
@@ -1893,7 +2010,7 @@ class _PetCardSection extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: Column(
-          mainAxisSize: MainAxisSize.min,        // ← don't stretch to fill height
+          mainAxisSize: MainAxisSize.min, // ← don't stretch to fill height
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Pet header ───────────────────────────────────────────────
@@ -1902,14 +2019,17 @@ class _PetCardSection extends StatelessWidget {
               children: [
                 // Class name badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: color.withValues(alpha: 0.5)),
                   ),
                   child: Text(
-                    cls.isEmpty ? 'Pet' : (cls[0].toUpperCase() + cls.substring(1)),
+                    cls.isEmpty
+                        ? 'Pet'
+                        : (cls[0].toUpperCase() + cls.substring(1)),
                     style: TextStyle(
                         color: color,
                         fontSize: 9,
@@ -1979,26 +2099,23 @@ class _PetCardSection extends StatelessWidget {
   }
 
   Widget _buildCard(CardViewModel card, int cardIndex) {
-    final assigned   = vm.pendingSkills[pet.id] ?? [];
+    final assigned = vm.pendingSkills[pet.id] ?? [];
     final isAssigned = assigned.contains(card.instanceId);
-    final comboIdx   = isAssigned
-        ? assigned.indexOf(card.instanceId) + 1
-        : null;
-    final isNew      = newCardIds.contains(card.instanceId);
-    final isFizzled  = fizzledCardIds.contains(card.instanceId);
+    final comboIdx = isAssigned ? assigned.indexOf(card.instanceId) + 1 : null;
+    final isNew = newCardIds.contains(card.instanceId);
+    final isFizzled = fizzledCardIds.contains(card.instanceId);
 
     Widget w = _SkillCard(
-      trait:            card.trait,
-      petName:          card.ownerPetName,
-      isSelected:       isAssigned,
-      isPity:           card.isPity,
-      isFizzled:        isFizzled,
-      cardArtPath:      card.cardArtPath,
+      trait: card.trait,
+      petName: card.ownerPetName,
+      isSelected: isAssigned,
+      isPity: card.isPity,
+      isFizzled: isFizzled,
+      cardArtPath: card.cardArtPath,
       cardTemplatePath: card.cardTemplatePath,
-      comboIndex:       comboIdx,
-      onTap: () => ref
-          .read(pveBattleProvider.notifier)
-          .assignSkill(card.instanceId),
+      comboIndex: comboIdx,
+      onTap: () =>
+          ref.read(pveBattleProvider.notifier).assignSkill(card.instanceId),
     );
 
     if (isNew) {
@@ -2036,7 +2153,8 @@ class _EnergyDisplay extends StatelessWidget {
             children: [
               // Glow ring
               Container(
-                width: 52, height: 52,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
@@ -2049,7 +2167,8 @@ class _EnergyDisplay extends StatelessWidget {
               ),
               // Orb body
               Container(
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
@@ -2058,9 +2177,7 @@ class _EnergyDisplay extends StatelessWidget {
                       energy > 0
                           ? c.withValues(alpha: 0.9)
                           : Colors.white.withValues(alpha: 0.1),
-                      energy > 0
-                          ? const Color(0xFF0A3A6A)
-                          : Colors.black45,
+                      energy > 0 ? const Color(0xFF0A3A6A) : Colors.black45,
                     ],
                   ),
                   border: Border.all(
@@ -2069,10 +2186,12 @@ class _EnergyDisplay extends StatelessWidget {
                           : Colors.white12,
                       width: 2),
                   boxShadow: energy > 0
-                      ? [BoxShadow(
-                          color: c.withValues(alpha: 0.6),
-                          blurRadius: 12,
-                          spreadRadius: 1)]
+                      ? [
+                          BoxShadow(
+                              color: c.withValues(alpha: 0.6),
+                              blurRadius: 12,
+                              spreadRadius: 1)
+                        ]
                       : null,
                 ),
                 child: Center(
@@ -2094,18 +2213,25 @@ class _EnergyDisplay extends StatelessWidget {
         // Tiny gem row
         Row(
           mainAxisSize: MainAxisSize.min,
-          children: List.generate(max, (i) => AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 7, height: 7,
-            margin: const EdgeInsets.symmetric(horizontal: 1.5),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: i < energy ? c : Colors.white12,
-              boxShadow: i < energy
-                  ? [BoxShadow(color: c.withValues(alpha: 0.7), blurRadius: 4)]
-                  : null,
-            ),
-          )),
+          children: List.generate(
+              max,
+              (i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 7,
+                    height: 7,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i < energy ? c : Colors.white12,
+                      boxShadow: i < energy
+                          ? [
+                              BoxShadow(
+                                  color: c.withValues(alpha: 0.7),
+                                  blurRadius: 4)
+                            ]
+                          : null,
+                    ),
+                  )),
         ),
       ],
     );
@@ -2122,9 +2248,9 @@ class _PetGroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assigned = vm.pendingSkills[pet.id] ?? [];
-    final hasDone  = assigned.isNotEmpty;
-    final hpFrac   = pet.maxHp > 0 ? pet.hp / pet.maxHp : 0.0;
-    final hpColor  = hpFrac > 0.5
+    final hasDone = assigned.isNotEmpty;
+    final hpFrac = pet.maxHp > 0 ? pet.hp / pet.maxHp : 0.0;
+    final hpColor = hpFrac > 0.5
         ? const Color(0xFF66FF88)
         : hpFrac > 0.25
             ? const Color(0xFFFFCC44)
@@ -2138,7 +2264,8 @@ class _PetGroupHeader extends StatelessWidget {
         children: [
           // Assigned checkmark or empty circle
           Container(
-            width: 20, height: 20,
+            width: 20,
+            height: 20,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: hasDone
@@ -2160,7 +2287,8 @@ class _PetGroupHeader extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: SizedBox(
-              width: 20, height: 3,
+              width: 20,
+              height: 3,
               child: LinearProgressIndicator(
                 value: hpFrac.clamp(0.0, 1.0),
                 backgroundColor: Colors.white12,
@@ -2180,7 +2308,8 @@ class _PetGroupHeader extends StatelessWidget {
           ),
           // Vertical line separator
           Container(
-            width: 1, height: 20,
+            width: 1,
+            height: 20,
             margin: const EdgeInsets.only(top: 4),
             color: Colors.white.withValues(alpha: 0.12),
           ),
@@ -2373,9 +2502,11 @@ class _DiscardPopupState extends State<_DiscardPopup>
                       itemCount: vm.hand.length,
                       itemBuilder: (_, i) {
                         final card = vm.hand[i];
-                        final prevPetId = i > 0 ? vm.hand[i - 1].ownerPetId : null;
+                        final prevPetId =
+                            i > 0 ? vm.hand[i - 1].ownerPetId : null;
                         final isNewPet = prevPetId != card.ownerPetId;
-                        final petColor = petColors[card.ownerPetId] ?? AppColors.primary;
+                        final petColor =
+                            petColors[card.ownerPetId] ?? AppColors.primary;
 
                         return Padding(
                           padding: EdgeInsets.only(
@@ -2393,10 +2524,13 @@ class _DiscardPopupState extends State<_DiscardPopup>
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 7, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: petColor.withValues(alpha: 0.18),
-                                          borderRadius: BorderRadius.circular(6),
+                                          color:
+                                              petColor.withValues(alpha: 0.18),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
                                           border: Border.all(
-                                              color: petColor.withValues(alpha: 0.55),
+                                              color: petColor.withValues(
+                                                  alpha: 0.55),
                                               width: 1),
                                         ),
                                         child: Text(
@@ -2497,6 +2631,7 @@ class _SkillCard extends StatelessWidget {
   final bool isFizzled;
   final String? cardArtPath;
   final String? cardTemplatePath;
+
   /// 1-based combo position badge when assigned; null = not yet assigned.
   final int? comboIndex;
   final VoidCallback? onTap;
@@ -2517,7 +2652,8 @@ class _SkillCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final usable = discardMode || trait.isUsable;
-    final tc = discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
+    final tc =
+        discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
 
     // Cards fill ~80% of panel height (182px panel, 20px pet label → ~142px usable)
     final cardW = discardMode ? 108.0 : 96.0;
@@ -2570,12 +2706,19 @@ class _SkillCard extends StatelessWidget {
                     child: Image.asset(
                       cardTemplatePath!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          _FallbackCardBody(trait: trait, cardArtPath: cardArtPath, petName: petName, tc: tc),
+                      errorBuilder: (_, __, ___) => _FallbackCardBody(
+                          trait: trait,
+                          cardArtPath: cardArtPath,
+                          petName: petName,
+                          tc: tc),
                     ),
                   )
                 else
-                  _FallbackCardBody(trait: trait, cardArtPath: cardArtPath, petName: petName, tc: tc),
+                  _FallbackCardBody(
+                      trait: trait,
+                      cardArtPath: cardArtPath,
+                      petName: petName,
+                      tc: tc),
 
                 // ── Dynamic overlays (same for both template and fallback) ───
 
@@ -2606,11 +2749,13 @@ class _SkillCard extends StatelessWidget {
                     bottom: 4,
                     left: 4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppColors.utility.withValues(alpha: 0.6)),
+                        border: Border.all(
+                            color: AppColors.utility.withValues(alpha: 0.6)),
                       ),
                       child: Text('CD ${trait.cooldownRemaining}',
                           style: TextStyle(
@@ -2632,7 +2777,10 @@ class _SkillCard extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: tc,
                         border: Border.all(color: Colors.white70, width: 1),
-                        boxShadow: [BoxShadow(color: tc.withValues(alpha: 0.6), blurRadius: 6)],
+                        boxShadow: [
+                          BoxShadow(
+                              color: tc.withValues(alpha: 0.6), blurRadius: 6)
+                        ],
                       ),
                       child: Center(
                         child: Text('$comboIndex',
@@ -2650,11 +2798,13 @@ class _SkillCard extends StatelessWidget {
                     bottom: 5,
                     left: 5,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 3, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
+                        border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.6)),
                       ),
                       child: const Text('★',
                           style: TextStyle(color: Colors.amber, fontSize: 7)),
@@ -2691,7 +2841,8 @@ class _SkillCard extends StatelessWidget {
                           BoxShadow(color: Colors.black54, blurRadius: 4),
                         ],
                       ),
-                      child: const Icon(Icons.close, size: 13, color: Colors.white),
+                      child: const Icon(Icons.close,
+                          size: 13, color: Colors.white),
                     ),
                   ),
                 ],
@@ -2721,9 +2872,9 @@ class _SkillCard extends StatelessWidget {
   static Color _typeColor(String t) => switch (t) {
         'offensive' => AppColors.offensive,
         'defensive' => AppColors.defensive,
-        'support'   => AppColors.support,
-        'utility'   => AppColors.utility,
-        _           => AppColors.primary,
+        'support' => AppColors.support,
+        'utility' => AppColors.utility,
+        _ => AppColors.primary,
       };
 }
 
@@ -2758,7 +2909,9 @@ class _FallbackCardBody extends StatelessWidget {
         ),
         // Gradient fade into info strip
         Positioned(
-          left: 0, right: 0, bottom: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           child: Container(
             height: 72,
             decoration: BoxDecoration(
@@ -2777,7 +2930,9 @@ class _FallbackCardBody extends StatelessWidget {
         ),
         // Info strip
         Positioned(
-          left: 6, right: 6, bottom: 5,
+          left: 6,
+          right: 6,
+          bottom: 5,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -2802,7 +2957,8 @@ class _FallbackCardBody extends StatelessWidget {
                     children: List.generate(
                       trait.energyCost,
                       (_) => Container(
-                        width: 7, height: 7,
+                        width: 7,
+                        height: 7,
                         margin: const EdgeInsets.only(left: 2),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
@@ -2810,7 +2966,12 @@ class _FallbackCardBody extends StatelessWidget {
                               ? AppColors.energyBlue
                               : Colors.white.withValues(alpha: 0.15),
                           boxShadow: trait.canAfford
-                              ? [BoxShadow(color: AppColors.energyBlue.withValues(alpha: 0.6), blurRadius: 4)]
+                              ? [
+                                  BoxShadow(
+                                      color: AppColors.energyBlue
+                                          .withValues(alpha: 0.6),
+                                      blurRadius: 4)
+                                ]
                               : null,
                         ),
                       ),
@@ -2823,7 +2984,8 @@ class _FallbackCardBody extends StatelessWidget {
         ),
         // Type badge
         Positioned(
-          top: 5, left: 5,
+          top: 5,
+          left: 5,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
@@ -2838,9 +3000,11 @@ class _FallbackCardBody extends StatelessWidget {
         ),
         // Pet dot
         Positioned(
-          top: 5, right: 5,
+          top: 5,
+          right: 5,
           child: Container(
-            width: 18, height: 18,
+            width: 18,
+            height: 18,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.black38,
@@ -2849,7 +3013,9 @@ class _FallbackCardBody extends StatelessWidget {
             child: Center(
               child: Text(petName[0],
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900)),
             ),
           ),
         ),
@@ -2858,29 +3024,29 @@ class _FallbackCardBody extends StatelessWidget {
   }
 
   static Color _cardBgColor(String t) => switch (t) {
-    'offensive' => const Color(0xFF5A0A0A),
-    'defensive' => const Color(0xFF0A1A5A),
-    'support'   => const Color(0xFF0A3A15),
-    'utility'   => const Color(0xFF4A2E05),
-    _           => const Color(0xFF1A0F3A),
-  };
+        'offensive' => const Color(0xFF5A0A0A),
+        'defensive' => const Color(0xFF0A1A5A),
+        'support' => const Color(0xFF0A3A15),
+        'utility' => const Color(0xFF4A2E05),
+        _ => const Color(0xFF1A0F3A),
+      };
 
   static String _typeIcon(String t) => switch (t) {
-    'offensive' => '⚔',
-    'defensive' => '🛡',
-    'support'   => '💚',
-    'utility'   => '⚡',
-    _           => '✦',
-  };
+        'offensive' => '⚔',
+        'defensive' => '🛡',
+        'support' => '💚',
+        'utility' => '⚡',
+        _ => '✦',
+      };
 
   static String _partIcon(String p) => switch (p) {
-    'horn'  => '🦏',
-    'back'  => '🎒',
-    'tail'  => '🦚',
-    'mouth' => '👄',
-    'body'  => '🧬',
-    _       => '🧩',
-  };
+        'horn' => '🦏',
+        'back' => '🎒',
+        'tail' => '🦚',
+        'mouth' => '👄',
+        'body' => '🧬',
+        _ => '🧩',
+      };
 }
 
 // ── Character label (bottom of card panel) ────────────────────────────────────
@@ -2991,20 +3157,20 @@ class _PetInfoDialog extends StatelessWidget {
   const _PetInfoDialog({required this.pet});
 
   static Color _clsColor(String cls) => switch (cls) {
-    'plant'   => const Color(0xFF4CAF50),
-    'aquatic' => const Color(0xFF29B6F6),
-    'beast'   => const Color(0xFFFF9800),
-    'reptile' => const Color(0xFF66BB6A),
-    'bird'    => const Color(0xFFFF80AB),
-    'bug'     => const Color(0xFFFF5252),
-    _         => const Color(0xFF9C27B0),
-  };
+        'plant' => const Color(0xFF4CAF50),
+        'aquatic' => const Color(0xFF29B6F6),
+        'beast' => const Color(0xFFFF9800),
+        'reptile' => const Color(0xFF66BB6A),
+        'bird' => const Color(0xFFFF80AB),
+        'bug' => const Color(0xFFFF5252),
+        _ => const Color(0xFF9C27B0),
+      };
 
   @override
   Widget build(BuildContext context) {
     final def = pet.creatureDef ?? kCreatureRegistry[pet.id];
     final cls = def?.className ?? pet.creatureDef?.className ?? 'plant';
-    final color    = _clsColor(cls);
+    final color = _clsColor(cls);
     final traitMap = {for (final t in pet.traits) t.partName: t};
     const partOrder = ['horn', 'back', 'tail', 'mouth'];
     final displayParts = <({String partType, String cardArtPath})>[
@@ -3013,15 +3179,13 @@ class _PetInfoDialog extends StatelessWidget {
           (partType: part.partType, cardArtPath: part.cardArtPath)
       else
         for (final partType in partOrder)
-            (
-              partType: partType,
-              cardArtPath: pet.partCardArt[partType] ??
+          (
+            partType: partType,
+            cardArtPath: pet.partCardArt[partType] ??
                 'assets/images/part-cards/default-card-art.png',
-            ),
+          ),
     ];
-    final hpFrac   = pet.maxHp > 0
-        ? (pet.hp / pet.maxHp).clamp(0.0, 1.0)
-        : 0.0;
+    final hpFrac = pet.maxHp > 0 ? (pet.hp / pet.maxHp).clamp(0.0, 1.0) : 0.0;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -3041,8 +3205,8 @@ class _PetInfoDialog extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.06),
-                  borderRadius: const BorderRadius.horizontal(
-                      left: Radius.circular(15)),
+                  borderRadius:
+                      const BorderRadius.horizontal(left: Radius.circular(15)),
                   border: Border(
                       right: BorderSide(color: color.withValues(alpha: 0.2))),
                 ),
@@ -3052,7 +3216,8 @@ class _PetInfoDialog extends StatelessWidget {
                     // Pet renderer
                     if (pet.creatureDef != null)
                       SizedBox(
-                        width: 160, height: 160,
+                        width: 160,
+                        height: 160,
                         child: PetRendererWidget(
                           def: pet.creatureDef!,
                           size: 160,
@@ -3070,8 +3235,7 @@ class _PetInfoDialog extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.18),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: color.withValues(alpha: 0.6)),
+                        border: Border.all(color: color.withValues(alpha: 0.6)),
                       ),
                       child: Text(
                         cls.isEmpty
@@ -3094,8 +3258,8 @@ class _PetInfoDialog extends StatelessWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Icon(Icons.favorite, size: 10,
-                                  color: Color(0xFF66FF88)),
+                              const Icon(Icons.favorite,
+                                  size: 10, color: Color(0xFF66FF88)),
                               Text('${pet.hp} / ${pet.maxHp}',
                                   style: const TextStyle(
                                       color: Color(0xFF66FF88),
@@ -3107,7 +3271,8 @@ class _PetInfoDialog extends StatelessWidget {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(3),
                             child: SizedBox(
-                              height: 5, width: double.infinity,
+                              height: 5,
+                              width: double.infinity,
                               child: LinearProgressIndicator(
                                 value: hpFrac,
                                 backgroundColor: Colors.white10,
@@ -3127,9 +3292,12 @@ class _PetInfoDialog extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _stat('⚡', '${pet.speed}',  'SPD', const Color(0xFFFFCC44)),
-                        _stat('🏅', '${pet.skill}',  'SKL', const Color(0xFF88CCFF)),
-                        _stat('🔥', '${pet.morale}', 'MOR', const Color(0xFFFF9944)),
+                        _stat('⚡', '${pet.speed}', 'SPD',
+                            const Color(0xFFFFCC44)),
+                        _stat('🏅', '${pet.skill}', 'SKL',
+                            const Color(0xFF88CCFF)),
+                        _stat('🔥', '${pet.morale}', 'MOR',
+                            const Color(0xFFFF9944)),
                       ],
                     ),
                   ],
@@ -3157,14 +3325,15 @@ class _PetInfoDialog extends StatelessWidget {
                         GestureDetector(
                           onTap: () => Navigator.of(context).pop(),
                           child: Container(
-                            width: 26, height: 26,
+                            width: 26,
+                            height: 26,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: Colors.white.withValues(alpha: 0.08),
                               border: Border.all(color: Colors.white24),
                             ),
-                            child: const Icon(Icons.close, size: 14,
-                                color: Colors.white54),
+                            child: const Icon(Icons.close,
+                                size: 14, color: Colors.white54),
                           ),
                         ),
                       ],
@@ -3185,24 +3354,23 @@ class _PetInfoDialog extends StatelessWidget {
                                 // 4 cards in a row, gap 8px between
                                 final cardW = (availW - 24) / 4;
                                 final cardH = math.min(cardW / 0.66, availH);
-                                final cW    = cardH * 0.66;
+                                final cW = cardH * 0.66;
 
                                 return Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceEvenly,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
                                     for (final part in displayParts)
                                       SizedBox(
-                                         width:  cW,
-                                         height: cardH,
-                                         child: _InfoCard(
-                                           partType: part.partType,
-                                           cardArtPath: part.cardArtPath,
-                                           trait: traitMap[part.partType],
-                                         ),
-                                       ),
+                                        width: cW,
+                                        height: cardH,
+                                        child: _InfoCard(
+                                          partType: part.partType,
+                                          cardArtPath: part.cardArtPath,
+                                          trait: traitMap[part.partType],
+                                        ),
+                                      ),
                                   ],
                                 );
                               },
@@ -3247,8 +3415,8 @@ class _PetInfoDialog extends StatelessWidget {
       Column(mainAxisSize: MainAxisSize.min, children: [
         Text(icon, style: const TextStyle(fontSize: 12)),
         Text(val,
-            style: TextStyle(
-                color: c, fontSize: 13, fontWeight: FontWeight.w900)),
+            style:
+                TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w900)),
         Text(label,
             style: const TextStyle(
                 color: Colors.white38,
@@ -3401,7 +3569,7 @@ class _InfoCard extends StatelessWidget {
               ],
             ),
             child: Center(
-                child: Text('$cost',
+              child: Text('$cost',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -3523,7 +3691,7 @@ class _EndTurnButton extends StatelessWidget {
     bool loading = false,
   }) {
     final bgColor = gold
-        ? const Color(0xFFE03030)   // red circle like reference
+        ? const Color(0xFFE03030) // red circle like reference
         : active
             ? const Color(0xFF2A3A5A)
             : const Color(0xFF1A1F2E);
@@ -3557,7 +3725,8 @@ class _EndTurnButton extends StatelessWidget {
         child: Center(
           child: loading
               ? const SizedBox(
-                  width: 22, height: 22,
+                  width: 22,
+                  height: 22,
                   child: CircularProgressIndicator(
                       strokeWidth: 2.5, color: Colors.white70),
                 )
@@ -3703,16 +3872,36 @@ class _BattleLoadingScreen extends StatelessWidget {
 
 // ── Animation name mapper ─────────────────────────────────────────────────────
 
-String _animFor(PetCharacterAnimState? state) => switch (state) {
-  PetCharacterAnimState.move         => 'action/move-forward',
-  PetCharacterAnimState.attack       => 'attack/melee/normal-attack',
-  PetCharacterAnimState.attackMelee  => 'attack/melee/normal-attack',
-  PetCharacterAnimState.attackRanged => 'attack/ranged/cast-fly',
-  PetCharacterAnimState.hit          => 'defense/hit-by-normal',
-  PetCharacterAnimState.buff         => 'battle/get-buff',
-  PetCharacterAnimState.debuff       => 'battle/get-debuff',
-  PetCharacterAnimState.heal         => 'battle/get-buff',
-  PetCharacterAnimState.shield       => 'defense/hit-with-shield',
-  PetCharacterAnimState.faint        => 'action/move-back',
-  _                                  => 'action/idle/normal',
-};
+String _animFor(PetCharacterAnimState? state, {String? attackSlot}) {
+  final isAttack = state == PetCharacterAnimState.attack ||
+      state == PetCharacterAnimState.attackMelee ||
+      state == PetCharacterAnimState.attackRanged;
+  if (isAttack) {
+    switch (attackSlot) {
+      case 'horn':
+        return 'attack/melee/horn-gore';
+      case 'mouth':
+        return 'attack/melee/mouth-bite';
+      case 'tail':
+        return 'attack/melee/tail-roll';
+      case 'back':
+        return 'attack/ranged/cast-fly';
+    }
+  }
+
+  return switch (state) {
+    PetCharacterAnimState.move => 'action/move-forward',
+    PetCharacterAnimState.attack ||
+    PetCharacterAnimState.attackMelee =>
+      'attack/melee/normal-attack',
+    PetCharacterAnimState.attackRanged => 'attack/ranged/cast-fly',
+    PetCharacterAnimState.hit => 'defense/hit-by-normal',
+    PetCharacterAnimState.buff ||
+    PetCharacterAnimState.heal =>
+      'battle/get-buff',
+    PetCharacterAnimState.debuff => 'battle/get-debuff',
+    PetCharacterAnimState.shield => 'defense/hit-with-shield',
+    PetCharacterAnimState.faint => 'action/move-back',
+    _ => 'action/idle/normal',
+  };
+}

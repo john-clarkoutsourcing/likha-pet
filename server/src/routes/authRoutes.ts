@@ -81,6 +81,7 @@ export function createAuthRoutes(firestore: FirestoreService): Router {
       if (error instanceof HatcheryError) {
         res.status(error.status).json({ error: error.message });
       } else {
+        console.error('[auth/register]', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -128,6 +129,7 @@ export function createAuthRoutes(firestore: FirestoreService): Router {
       if (error instanceof HatcheryError) {
         res.status(error.status).json({ error: error.message });
       } else {
+        console.error('[auth/login]', error);
         res.status(500).json({ error: 'Internal server error' });
       }
     }

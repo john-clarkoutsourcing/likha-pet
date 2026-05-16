@@ -38,6 +38,12 @@
 
 set -euo pipefail
 
+# ── Ensure gcloud is in PATH ──────────────────────────────────────────────────
+GCLOUD_SDK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/google-cloud-sdk"
+if [ -d "$GCLOUD_SDK_DIR/bin" ]; then
+  export PATH="$GCLOUD_SDK_DIR/bin:$PATH"
+fi
+
 # ── Config ────────────────────────────────────────────────────────────────────
 PROJECT_ID="paksi-game-beta"
 REGION="asia-southeast1"           # Change if needed (e.g. us-central1)
@@ -89,7 +95,7 @@ if $DEPLOY_SERVER; then
   echo -e "${CYAN}${BOLD}── Building + deploying server to Cloud Run ──${NC}"
 
   log "Building Docker image: $IMAGE"
-  docker build -t "$IMAGE" server/
+  docker build --platform linux/amd64 -t "$IMAGE" server/
   docker push "$IMAGE"
   ok "Image pushed to Container Registry"
 
@@ -107,6 +113,7 @@ if $DEPLOY_SERVER; then
     --memory 512Mi \
     --cpu 1 \
     --timeout 3600 \
+    --no-use-http2 \
     --project "$PROJECT_ID"
 
   SERVER_URL=$(gcloud run services describe "$SERVICE_NAME" \

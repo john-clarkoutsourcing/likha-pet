@@ -300,16 +300,19 @@ class _PvpLoadingScreen extends StatelessWidget {
 }
 
 String _animFor(PetCharacterAnimState state, {String? attackSlot}) {
-  if (attackSlot case final slot?) {
-    switch (slot) {
+  final isAttack = state == PetCharacterAnimState.attack ||
+      state == PetCharacterAnimState.attackMelee ||
+      state == PetCharacterAnimState.attackRanged;
+  if (isAttack) {
+    switch (attackSlot) {
       case 'horn':
         return 'attack/melee/horn-gore';
       case 'mouth':
         return 'attack/melee/mouth-bite';
       case 'tail':
-        return 'attack/melee/tail-smash';
+        return 'attack/melee/tail-roll';
       case 'back':
-        return 'attack/ranged/cast-high';
+        return 'attack/ranged/cast-fly';
     }
   }
 

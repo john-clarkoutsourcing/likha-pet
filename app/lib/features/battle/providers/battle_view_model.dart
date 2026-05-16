@@ -16,7 +16,8 @@ class PvpMatchEndData {
   final String? winnerUid;
   final bool dispute;
   final int mmrDelta;
-  const PvpMatchEndData({required this.winnerUid, required this.dispute, required this.mmrDelta});
+  const PvpMatchEndData(
+      {required this.winnerUid, required this.dispute, required this.mmrDelta});
 }
 
 // ── TraitViewModel ────────────────────────────────────────────────────────────
@@ -257,8 +258,7 @@ class CardViewModel {
       // Player pets supply exact art from their part definition;
       // fall back to the class-based lookup for registry (enemy) pets.
       cardArtPath: resolvedArtPath,
-      cardTemplatePath:
-          _resolveClassicTemplateFromCardArt(resolvedArtPath) ??
+      cardTemplatePath: _resolveClassicTemplateFromCardArt(resolvedArtPath) ??
           _resolveTemplate(card.trait),
     );
   }
@@ -492,6 +492,11 @@ class PveBattleViewModel {
   /// Used to slide a melee attacker toward the target and back.
   final Map<String, Offset> petDashOffsets;
 
+  /// actorPetId -> explicit targetPetId for the active melee dash.
+  /// Used by the battlefield to keep dash landing on the correct enemy slot
+  /// (front/mid/back) for pierce/back-row skills.
+  final Map<String, String> petDashTargets;
+
   // ── PvP extras ──────────────────────────────────────────────────────────────
 
   /// PvP only: true while waiting for the opponent to lock in their cards.
@@ -526,6 +531,7 @@ class PveBattleViewModel {
     this.newCardIds = const {},
     this.fizzledCardIds = const {},
     this.petDashOffsets = const {},
+    this.petDashTargets = const {},
     this.awaitingOpponent = false,
     this.pvpMatchEnd,
   });
@@ -581,6 +587,7 @@ class PveBattleViewModel {
     Set<String>? newCardIds,
     Set<String>? fizzledCardIds,
     Map<String, Offset>? petDashOffsets,
+    Map<String, String>? petDashTargets,
     bool? awaitingOpponent,
     PvpMatchEndData? pvpMatchEnd,
     bool clearSelectedPet = false,
@@ -612,6 +619,7 @@ class PveBattleViewModel {
         newCardIds: newCardIds ?? this.newCardIds,
         fizzledCardIds: fizzledCardIds ?? this.fizzledCardIds,
         petDashOffsets: petDashOffsets ?? this.petDashOffsets,
+        petDashTargets: petDashTargets ?? this.petDashTargets,
         awaitingOpponent: awaitingOpponent ?? this.awaitingOpponent,
         pvpMatchEnd: pvpMatchEnd ?? this.pvpMatchEnd,
       );

@@ -95,8 +95,8 @@ class InteractiveBattleEngine {
   final String enemyTeamName;
   final BattleMode mode;
 
-  final AiController _ai    = AiController();
-  final TurnManager  _turns = TurnManager();
+  final AiController _ai = AiController();
+  final TurnManager _turns = TurnManager();
   int _round = 0;
 
   // PvP: set by the provider when a round:locked WS message arrives.
@@ -108,10 +108,10 @@ class InteractiveBattleEngine {
   late final SkillDeck _enemyDeck;
   late final Random _critRng;
   final PitySentinel _playerPity = PitySentinel();
-  final PitySentinel _enemyPity  = PitySentinel();
+  final PitySentinel _enemyPity = PitySentinel();
 
   final EnergyPool playerEnergy = EnergyPool();
-  final EnergyPool enemyEnergy  = EnergyPool();
+  final EnergyPool enemyEnergy = EnergyPool();
   _RoundExecution? _roundExecution;
 
   // Tracks how many cards each pet has played in the current round for combo bonus.
@@ -126,13 +126,17 @@ class InteractiveBattleEngine {
     this.mode = BattleMode.pve,
   }) {
     final seed = battleSeed ?? Random().nextInt(0xFFFFFF);
-    _critRng    = Random(seed ^ 0xC47F);
+    _critRng = Random(seed ^ 0xC47F);
     _playerDeck = SkillDeck.fromTeam(playerTeam, seed: seed);
-    _enemyDeck  = SkillDeck.fromTeam(enemyTeam,  seed: seed ^ 0x5A3C);
+    _enemyDeck = SkillDeck.fromTeam(enemyTeam, seed: seed ^ 0x5A3C);
 
     // Link every pet to its team's shared energy pool.
-    for (final p in playerTeam) { p.linkPool(playerEnergy); }
-    for (final p in enemyTeam)  { p.linkPool(enemyEnergy); }
+    for (final p in playerTeam) {
+      p.linkPool(playerEnergy);
+    }
+    for (final p in enemyTeam) {
+      p.linkPool(enemyEnergy);
+    }
 
     // Initial deal: 6 cards each (only happens once at battle start).
     _drawAliveOnly(_playerDeck, playerTeam, count: 6);
@@ -147,8 +151,8 @@ class InteractiveBattleEngine {
 
   /// Current player hand — cards the UI should display this turn.
   List<SkillCard> get currentPlayerHand => _playerDeck.hand;
-  int get playerDeckDrawSize             => _playerDeck.drawPileSize;
-  int get playerDeckDiscardSize          => _playerDeck.discardPileSize;
+  int get playerDeckDrawSize => _playerDeck.drawPileSize;
+  int get playerDeckDiscardSize => _playerDeck.discardPileSize;
   bool get hasPendingActions =>
       _roundExecution != null &&
       _roundExecution!.actionIndex < _roundExecution!.orderedActions.length;
@@ -178,7 +182,9 @@ class InteractiveBattleEngine {
     }
     final midWin = _checkWin();
     if (midWin != null) {
-      for (final pet in [...playerTeam, ...enemyTeam]) { pet.shield = 0; }
+      for (final pet in [...playerTeam, ...enemyTeam]) {
+        pet.shield = 0;
+      }
       return RoundStartResult(
         immediateResult: _buildResult(logger, midWin),
         actionQueue: const [],
@@ -193,11 +199,11 @@ class InteractiveBattleEngine {
     if (mode == BattleMode.pvp) {
       final result = _buildEnemyActionsFromChoices(_opponentChoices ?? {});
       opponentActions = result.$1;
-      enemyPlayed     = result.$2;
+      enemyPlayed = result.$2;
       _opponentChoices = null;
     } else {
       opponentActions = _buildAiActions();
-      enemyPlayed     = [];
+      enemyPlayed = [];
     }
 
     logger.phase('Action Phase');
@@ -238,7 +244,7 @@ class InteractiveBattleEngine {
         logger.stunSkip(action.actor.name);
         action.actor.debuffs.removeWhere((d) => d.type == DebuffType.stunned);
       } else {
-        final petId      = action.actor.id;
+        final petId = action.actor.id;
         final comboIndex = _roundComboCount[petId] ?? 0;
         _roundComboCount[petId] = comboIndex + 1;
         resolver.resolve(
@@ -250,7 +256,8 @@ class InteractiveBattleEngine {
       }
     }
 
-    final isRoundComplete = execution.actionIndex >= execution.orderedActions.length;
+    final isRoundComplete =
+        execution.actionIndex >= execution.orderedActions.length;
     return ActionStepResult(
       action: action,
       state: BattleState.fromLive(
@@ -342,10 +349,26 @@ class InteractiveBattleEngine {
     _opponentChoices = Map.of(choices);
   }
 
-  bool get playerHandOverCap =>
-      _playerDeck.handSize > SkillDeck.kHandLimit;
+  bool get playerHandOverCap => _playerDeck.handSize > SkillDeck.kHandLimit;
 
   // ── Private ───────────────────────────────────────────────────────────────
+
+  Pet? _lockedDamageTarget({
+    required Trait trait,
+    required List<Pet> enemyTeam,
+  }) {
+    if (trait.effect.type != EffectType.damage) return null;
+
+    final alive = enemyTeam.where((p) => !p.isFainted).toList();
+    if (alive.isEmpty) return null;
+
+    return switch (trait.effect.target) {
+      'back_enemy' => alive.last,
+      'lowest_hp_enemy' => (alive..sort((a, b) => a.hp.compareTo(b.hp))).first,
+      'enemy' => alive.first,
+      _ => null,
+    };
+  }
 
   List<Action> _buildPlayerActions(Map<String, List<String>> cardChoices) {
     final actions = <Action>[];
@@ -355,7 +378,16 @@ class InteractiveBattleEngine {
       if (instanceIds == null || instanceIds.isEmpty) continue;
       for (final instanceId in instanceIds) {
         final trait = _resolveCardChoice(pet, instanceId);
-        if (trait != null) actions.add(Action(actor: pet, trait: trait));
+        if (trait != null) {
+          actions.add(Action(
+            actor: pet,
+            trait: trait,
+            primaryTarget: _lockedDamageTarget(
+              trait: trait,
+              enemyTeam: enemyTeam,
+            ),
+          ));
+        }
       }
     }
     return actions;
@@ -379,7 +411,7 @@ class InteractiveBattleEngine {
   (List<Action>, List<String>) _buildEnemyActionsFromChoices(
       Map<String, List<String>> choices) {
     final actions = <Action>[];
-    final played  = <String>[];
+    final played = <String>[];
     for (final pet in enemyTeam) {
       if (pet.isFainted) continue;
       final instanceIds = choices[pet.id];
@@ -394,7 +426,14 @@ class InteractiveBattleEngine {
             .firstOrNull
             ?.trait;
         if (trait != null) {
-          actions.add(Action(actor: pet, trait: trait));
+          actions.add(Action(
+            actor: pet,
+            trait: trait,
+            primaryTarget: _lockedDamageTarget(
+              trait: trait,
+              enemyTeam: playerTeam,
+            ),
+          ));
           played.add(instanceId);
         }
       }
@@ -419,7 +458,14 @@ class InteractiveBattleEngine {
       } else {
         trait = _ai.selectTrait(pet, enemyTeam, playerTeam);
       }
-      actions.add(Action(actor: pet, trait: trait));
+      actions.add(Action(
+        actor: pet,
+        trait: trait,
+        primaryTarget: _lockedDamageTarget(
+          trait: trait,
+          enemyTeam: playerTeam,
+        ),
+      ));
     }
 
     // Discard enemy's used cards, then draw next enemy hand.
@@ -441,10 +487,13 @@ class InteractiveBattleEngine {
     if (available.isEmpty) return null;
 
     SkillCard? best;
-    double     bestScore = -999;
+    double bestScore = -999;
     for (final card in available) {
       final score = _aiScoreTrait(card.trait, actor);
-      if (score > bestScore) { bestScore = score; best = card; }
+      if (score > bestScore) {
+        bestScore = score;
+        best = card;
+      }
     }
     return best;
   }
@@ -452,7 +501,9 @@ class InteractiveBattleEngine {
   double _aiScoreTrait(Trait t, Pet actor) {
     final e = t.effect;
     if (e.type == EffectType.heal) {
-      return enemyTeam.any((p) => !p.isFainted && p.hp / kBaseHp < 0.4) ? 90 : 20;
+      return enemyTeam.any((p) => !p.isFainted && p.hp / kBaseHp < 0.4)
+          ? 90
+          : 20;
     }
     if (e.debuffType == DebuffType.stunned) {
       return playerTeam.any((p) => !p.isFainted && !p.isStunned) ? 80 : 5;
@@ -477,8 +528,8 @@ class InteractiveBattleEngine {
         roundLog: logger.transcript,
       ),
       outcome: outcome,
-      events:  List.of(logger.events),
-      log:     logger.transcript,
+      events: List.of(logger.events),
+      log: logger.transcript,
     );
   }
 
@@ -491,8 +542,9 @@ class InteractiveBattleEngine {
     return null;
   }
 
-  List<Pet> _teamOf(Pet p)      => playerTeam.contains(p) ? playerTeam : enemyTeam;
-  List<Pet> _enemyTeamOf(Pet p) => playerTeam.contains(p) ? enemyTeam  : playerTeam;
+  List<Pet> _teamOf(Pet p) => playerTeam.contains(p) ? playerTeam : enemyTeam;
+  List<Pet> _enemyTeamOf(Pet p) =>
+      playerTeam.contains(p) ? enemyTeam : playerTeam;
 
   /// Draws cards while ensuring the hand keeps only cards owned by living pets.
   void _drawAliveOnly(SkillDeck deck, List<Pet> team,
