@@ -264,9 +264,13 @@ class InteractiveBattleEngine {
     _drawAliveOnly(_playerDeck, playerTeam);
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
 
-    // ── Shields are round-scoped: reset to 0 at the end of every round ────
+    // ── Round-end status + shield cleanup ──────────────────────────────────
+    for (final pet in [...playerTeam, ...enemyTeam]) {
+      if (!pet.isFainted) pet.tickRoundDurations();
+    }
+
+    // Shields are round-scoped in Classic: they do not carry into next round.
     // New shields must be earned each round by selecting shield cards.
-    // This also ensures the opponent's shield is hidden during card selection.
     for (final pet in [...playerTeam, ...enemyTeam]) {
       pet.shield = 0;
     }

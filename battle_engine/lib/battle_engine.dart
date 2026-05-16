@@ -158,6 +158,10 @@ class BattleEngine {
 
       // ── Phase 5: End-of-round bookkeeping ─────────────────────────────────
       _logger.phase('End of Round $round');
+      for (final pet in [...teamA, ...teamB]) {
+        if (!pet.isFainted) pet.tickRoundDurations();
+        pet.shield = 0; // Classic-style: shield does not carry to next round.
+      }
       _printTeamStatus();
       _logger.roundEnd();
 

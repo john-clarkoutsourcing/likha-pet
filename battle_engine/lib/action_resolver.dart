@@ -17,7 +17,7 @@ import 'battle_logger.dart';
 const int kMaxSingleHitDamage = 90;  // Single-target damage ceiling
 const int kMaxAoeDamagePerHit  = 30; // Per-target AoE ceiling (3 hits max = 90 total)
 const int kMaxFlatHealing      = 50; // Largest single heal
-const int kMaxShield           = 40; // Max shield HP at any time
+const int kMaxShield           = 999; // Classic-style accumulated shield per round
 
 // ── ActionResolver ─────────────────────────────────────────────────────────────
 
@@ -147,6 +147,12 @@ class ActionResolver {
           actor.applyShield(amount);
           log.shield(actor.name, amount, actor.shield);
         }
+    }
+
+    if (effect.type == EffectType.damage ||
+        effect.type == EffectType.aoe ||
+        effect.type == EffectType.shieldBreak) {
+      actor.consumeAttackModifiers();
     }
 
     // Per-action poison tick — all poisoned pets take 1 HP × stacks after every card.

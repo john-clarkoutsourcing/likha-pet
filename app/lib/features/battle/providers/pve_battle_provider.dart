@@ -454,7 +454,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       amount += card.trait.effect.value;
     }
     amount += card.trait.effect.selfShield;
-    return amount.clamp(0, 40);
+    return amount.clamp(0, 999);
   }
 
   void _applyPreShield(SkillCard card) {

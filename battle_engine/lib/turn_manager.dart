@@ -31,11 +31,18 @@ class TurnManager {
       for (final b in actionsB) _Slot(action: b, teamIndex: 1),
     ];
 
-    // Primary sort: higher speed acts first (descending).
-    // Secondary sort: Team A (index 0) before Team B (index 1) on ties.
+    // Classic-like priority:
+    // 1) higher speed, 2) higher HP, 3) higher skill, 4) higher morale.
+    // Final deterministic tiebreak: Team A before Team B.
     slots.sort((x, y) {
       final speedCmp = y.speed.compareTo(x.speed); // descending — faster first
       if (speedCmp != 0) return speedCmp;
+      final hpCmp = y.hp.compareTo(x.hp);
+      if (hpCmp != 0) return hpCmp;
+      final skillCmp = y.skill.compareTo(x.skill);
+      if (skillCmp != 0) return skillCmp;
+      final moraleCmp = y.morale.compareTo(x.morale);
+      if (moraleCmp != 0) return moraleCmp;
       return x.teamIndex.compareTo(y.teamIndex);
     });
 
@@ -64,6 +71,9 @@ class _Slot {
 
   /// Effective speed (base + Speed Up/Down buffs) — higher acts first.
   int get speed => action.actor.effectiveSpeed;
+  int get hp => action.actor.hp;
+  int get skill => action.actor.skill;
+  int get morale => action.actor.morale;
 
   _Slot({required this.action, required this.teamIndex});
 }

@@ -6,8 +6,8 @@ import 'skill_card.dart';
 /// (team size × traits per pet × 2 copies).
 ///
 /// Draw mechanics:
-///   - Draw 3 cards per turn into a shared hand (max 12 cards).
-///   - If the hand is full before drawing, the oldest card is auto-discarded.
+///   - Draw 3 cards per turn into a shared hand (max 10 cards).
+///   - If the hand is full, newly drawn cards are discarded.
 ///   - When the draw pile empties, the discard pile is reshuffled into a new draw pile.
 ///   - Cards stay in hand until played or overflowed.
 ///
@@ -23,7 +23,7 @@ class SkillDeck {
   final List<SkillCard> _hand    = [];
   final List<SkillCard> _discard = [];
 
-  static const int kHandLimit   = 12; // player manually discards when exceeded
+  static const int kHandLimit   = 10; // Axie Classic hand cap
   static const int kDrawPerTurn = 3;  // per round after the initial deal
 
   SkillDeck.fromTeam(List<Pet> pets, {required int seed}) {
@@ -42,18 +42,20 @@ class SkillDeck {
     _draw.shuffle(Random(seed));
   }
 
-  /// Draw [kDrawPerTurn] cards into hand.
-  /// Returns the newly drawn cards (empty list if deck + discard both empty).
-  /// Draws [count] cards (default [kDrawPerTurn]) into hand — no auto-discard.
-  /// If hand exceeds [kHandLimit] after drawing, the caller shows the discard UI.
+  /// Draws [count] cards (default [kDrawPerTurn]).
+  /// If hand is at [kHandLimit], drawn cards go straight to discard.
   List<SkillCard> drawTurn([int count = kDrawPerTurn]) {
     final drawn = <SkillCard>[];
     for (var i = 0; i < count; i++) {
       if (_draw.isEmpty) _recycleDeck();
       if (_draw.isEmpty) break;
       final card = _draw.removeAt(0);
-      _hand.add(card);
-      drawn.add(card);
+      if (_hand.length < kHandLimit) {
+        _hand.add(card);
+        drawn.add(card);
+      } else {
+        _discard.add(card);
+      }
     }
     return drawn;
   }
