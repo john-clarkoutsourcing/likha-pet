@@ -58,10 +58,11 @@ export class PvpMatchmaker {
     matchId: string,
     round: number,
     selections: Record<string, string[]>,
+    petStates?: any[],
   ): void {
     const match = this.activeMatches.get(matchId);
     if (!match) return;
-    match.handleSubmit(userId, round, selections);
+    match.handleSubmit(userId, round, selections, petStates);
   }
 
   handleClientResult(userId: string, matchId: string, winnerUid: string): void {

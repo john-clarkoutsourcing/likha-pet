@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { AuthedSocket, send } from '../ws/PvpGateway';
 import { MmrService } from '../services/MmrService';
+import { ServerBattleExecutor, RoundExecutionInput, RoundExecutionResult, PetState, PlayerSelection } from './ServerBattleExecutor';
 
 export interface PetDna {
   uid: string;
@@ -29,9 +30,12 @@ export class PvpMatch {
   private round = 0;
   private status: MatchStatus = 'in_round';
   private pendingSelections: Map<string, Record<string, string[]>> = new Map();
+  private pendingPetStates: Map<string, PetState[]> = new Map();
   private clientResults: Map<string, string> = new Map();
   private roundTimer: NodeJS.Timeout | null = null;
   private disconnectTimers: Map<string, NodeJS.Timeout> = new Map();
+  private executor = new ServerBattleExecutor();
+  private petStates: Map<string, PetState[]> = new Map(); // Track state per player
 
   constructor(
     matchId: string,
@@ -49,6 +53,10 @@ export class PvpMatch {
     this.round = 1;
     const deadline = Date.now() + ROUND_TIMEOUT_MS;
 
+    // Initialize pet states from teams
+    this.petStates.set(this.players[0].userId, this._initializePetsFromTeam(this.players[0].team));
+    this.petStates.set(this.players[1].userId, this._initializePetsFromTeam(this.players[1].team));
+
     for (const p of this.players) {
       send(p.socket, {
         type: 'match:found',
@@ -63,11 +71,14 @@ export class PvpMatch {
     this._startRoundTimer();
   }
 
-  handleSubmit(userId: string, round: number, selections: Record<string, string[]>): void {
+  handleSubmit(userId: string, round: number, selections: Record<string, string[]>, petStates?: PetState[]): void {
     if (this.status !== 'in_round' || round !== this.round) return;
     if (this.pendingSelections.has(userId)) return; // already submitted
 
     this.pendingSelections.set(userId, selections);
+    if (petStates) {
+      this.pendingPetStates.set(userId, petStates);
+    }
 
     if (this.pendingSelections.size === 2) {
       this._lockRound();
@@ -120,7 +131,7 @@ export class PvpMatch {
     }
   }
 
-  private _lockRound(): void {
+  private async _lockRound(): Promise<void> {
     if (this.roundTimer) clearTimeout(this.roundTimer);
     this.roundTimer = null;
 
@@ -128,33 +139,120 @@ export class PvpMatch {
     const selectionsA = this.pendingSelections.get(a.userId) ?? {};
     const selectionsB = this.pendingSelections.get(b.userId) ?? {};
 
-    const nextDeadline = Date.now() + ROUND_TIMEOUT_MS;
-    const locked = {
-      type: 'round:locked',
-      matchId: this.matchId,
-      round: this.round,
-      selections: {
-        [a.userId]: selectionsA,
-        [b.userId]: selectionsB,
-      },
-      nextDeadlineMs: nextDeadline,
-    };
+    // Get pet states from clients (fallback to initial state if not provided)
+    let statesA = this.pendingPetStates.get(a.userId) ?? this.petStates.get(a.userId);
+    let statesB = this.pendingPetStates.get(b.userId) ?? this.petStates.get(b.userId);
 
-    send(a.socket, locked);
-    send(b.socket, locked);
+    // Initialize states from DNA if first round
+    if (!statesA || !statesB) {
+      console.error('[PvP] Missing pet states for round execution');
+      this._forfeit(a.userId);
+      return;
+    }
 
-    this.pendingSelections.clear();
-    this.round++;
+    try {
+      // Convert selections to player selections
+      const playerASelection = this._getPlayerSelection(selectionsA, statesA);
+      const playerBSelection = this._getPlayerSelection(selectionsB, statesB);
 
-    // After max rounds both clients send client:result simultaneously.
-    // We don't know max rounds here — wait for both to call handleClientResult.
-    this.status = 'awaiting_results';
-    // Note: if only some rounds have been played, clients call back into
-    // handleSubmit for subsequent rounds; status returns to 'in_round' below.
-    // Actually clients handle this: after round:locked they simulate, and if
-    // battle isn't over they'll submit the next round.
-    this.status = 'in_round';
-    this._startRoundTimer();
+      // Execute round server-side
+      const input: RoundExecutionInput = {
+        seed: this.seed,
+        roundNumber: this.round,
+        playerATeam: statesA,
+        playerBTeam: statesB,
+        playerASelection: playerASelection,
+        playerBSelection: playerBSelection,
+      };
+
+      const result = await this.executor.executeRound(input);
+
+      if (!result.success || !result.petStates || !result.turnOrder) {
+        console.error('[PvP] Round execution failed:', result.error);
+        this._forfeit(a.userId);
+        return;
+      }
+
+      // Update pet states for next round
+      const updatedStatesA: PetState[] = statesA.map((pet) => ({
+        ...pet,
+        ...(result.petStates![pet.uid] || {}),
+      }));
+      const updatedStatesB: PetState[] = statesB.map((pet) => ({
+        ...pet,
+        ...(result.petStates![pet.uid] || {}),
+      }));
+
+      this.petStates.set(a.userId, updatedStatesA);
+      this.petStates.set(b.userId, updatedStatesB);
+
+      // Broadcast round result to both clients
+      const nextDeadline = Date.now() + ROUND_TIMEOUT_MS;
+      const roundResult = {
+        type: 'round:result',
+        matchId: this.matchId,
+        round: this.round,
+        turnOrder: result.turnOrder,
+        petStates: result.petStates,
+        battleComplete: result.battleComplete ?? false,
+        nextDeadlineMs: nextDeadline,
+      };
+
+      send(a.socket, roundResult);
+      send(b.socket, roundResult);
+
+      this.pendingSelections.clear();
+      this.pendingPetStates.clear();
+
+      // If battle is complete, both clients will submit client:result
+      if (result.battleComplete) {
+        this.status = 'awaiting_results';
+      } else {
+        // Continue with next round
+        this.round++;
+        this._startRoundTimer();
+      }
+    } catch (error) {
+      console.error('[PvP] Failed to execute round:', error);
+      this._forfeit(a.userId);
+    }
+  }
+
+  private _initializePetsFromTeam(team: PetDna[]): PetState[] {
+    return team.map((petDna, index) => {
+      // Placeholder: derive stats from DNA (same logic as client)
+      // For now, use default stats; real implementation would decode DNA
+      return {
+        uid: petDna.uid,
+        name: `Likha #${petDna.uid.slice(0, 6).toUpperCase()}`,
+        hp: 150,
+        maxHp: 150,
+        spd: 30,
+        skl: 20,
+        mor: 20,
+        dex: 0,
+        def: 0,
+        index: index,
+        statusEffects: [],
+      };
+    });
+  }
+
+  private _getPlayerSelection(selections: Record<string, string[]>, teamStates: PetState[]): PlayerSelection {
+    // For now, assume selections map petId to [traitName, targetIndex, ...]
+    // Real implementation would parse trait names and target indices
+    const firstPetId = Object.keys(selections)[0];
+    const firstSelection = selections[firstPetId]?.[0];
+
+    if (!firstSelection || !firstPetId) {
+      return { traitName: '', targetIndex: 0 };
+    }
+
+    // Parse "traitName:targetIndex" format or similar
+    const [traitName, targetIndexStr] = firstSelection.split(':');
+    const targetIndex = parseInt(targetIndexStr || '0', 10);
+
+    return { traitName: traitName || '', targetIndex };
   }
 
   private _startRoundTimer(): void {

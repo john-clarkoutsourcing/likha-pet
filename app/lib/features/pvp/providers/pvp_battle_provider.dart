@@ -236,6 +236,9 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         // round:locked can arrive before executeRound starts waiting.
         _pendingRoundLocked = msg;
       }
+    } else if (msg is PvpRoundResult) {
+      // Server-side battle result — apply to local state
+      _applyServerRoundResult(msg);
     } else if (msg is PvpMatchEnd) {
       state = state.copyWith(
         pvpMatchEnd: PvpMatchEndData(
@@ -326,6 +329,46 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       needsDiscard: excess > 0,
       excessDiscards: excess,
     );
+  }
+
+  // ── Apply server-side battle results ────────────────────────────────────────
+
+  void _applyServerRoundResult(PvpRoundResult result) {
+    // Update pet states from server
+    for (final petEntry in result.petStates.entries) {
+      final petUid = petEntry.key;
+      final petData = petEntry.value as Map<String, dynamic>;
+
+      // Find pet in our lists
+      final playerPet = _playerPets.firstWhereOrNull((p) => p.id == petUid);
+      final enemyPet = _enemyPets.firstWhereOrNull((p) => p.id == petUid);
+
+      if (playerPet != null) {
+        playerPet.hp = (petData['hp'] as num).toInt();
+        playerPet.isFainted = playerPet.hp <= 0;
+      } else if (enemyPet != null) {
+        enemyPet.hp = (petData['hp'] as num).toInt();
+        enemyPet.isFainted = enemyPet.hp <= 0;
+      }
+    }
+
+    // Update round log
+    final turnOrderStr = result.turnOrder
+        .map((entry) => '${entry['name']} (${entry['uid'].toString().substring(0, 6)})')
+        .join(' → ');
+    state = state.copyWith(
+      roundLog: '${state.roundLog}\nRound ${result.round}: $turnOrderStr',
+      awaitingOpponent: false,
+    );
+
+    // If battle is complete, both clients will send client:result
+    if (result.battleComplete) {
+      print('[PvP] Server indicates battle complete');
+      state = state.copyWith(isBattleOver: true);
+    } else {
+      // Continue to next round - auto-submit empty selections if player doesn't act
+      print('[PvP] Round ${result.round} result applied, ready for next round');
+    }
   }
 
   // ── PvP round execution ────────────────────────────────────────────────────

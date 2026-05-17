@@ -10,6 +10,7 @@ sealed class PvpMessage {
       'queue:status'           => PvpQueueStatus.fromJson(json),
       'match:found'            => PvpMatchFound.fromJson(json),
       'round:locked'           => PvpRoundLocked.fromJson(json),
+      'round:result'           => PvpRoundResult.fromJson(json),
       'match:end'              => PvpMatchEnd.fromJson(json),
       'match:resume'           => PvpMatchResume.fromJson(json),
       'opponent:disconnected'  => PvpOpponentDisconnected.fromJson(json),
@@ -128,6 +129,33 @@ class PvpRoundLocked extends PvpMessage {
       nextDeadlineMs: (j['nextDeadlineMs'] as num).toInt(),
     );
   }
+}
+
+class PvpRoundResult extends PvpMessage {
+  final String matchId;
+  final int round;
+  final List<Map<String, dynamic>> turnOrder; // [{uid, name, index}, ...]
+  final Map<String, dynamic> petStates;       // {petUid: {hp, maxHp, statusEffects, ...}}
+  final bool battleComplete;
+  final int nextDeadlineMs;
+
+  const PvpRoundResult({
+    required this.matchId,
+    required this.round,
+    required this.turnOrder,
+    required this.petStates,
+    required this.battleComplete,
+    required this.nextDeadlineMs,
+  });
+
+  factory PvpRoundResult.fromJson(Map<String, dynamic> j) => PvpRoundResult(
+    matchId: j['matchId'] as String,
+    round: (j['round'] as num).toInt(),
+    turnOrder: (j['turnOrder'] as List).cast<Map<String, dynamic>>(),
+    petStates: j['petStates'] as Map<String, dynamic>,
+    battleComplete: (j['battleComplete'] as bool?) ?? false,
+    nextDeadlineMs: (j['nextDeadlineMs'] as num).toInt(),
+  );
 }
 
 class PvpMatchEnd extends PvpMessage {

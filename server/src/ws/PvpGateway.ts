@@ -85,6 +85,7 @@ export class PvpGateway {
               msg.matchId as string,
               msg.round as number,
               msg.selections as Record<string, string[]>,
+              msg.petStates as any[] | undefined,
             );
             break;
           case 'client:result':
