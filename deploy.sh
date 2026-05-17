@@ -94,9 +94,16 @@ if $DEPLOY_SERVER; then
   echo ""
   echo -e "${CYAN}${BOLD}── Building + deploying server to Cloud Run ──${NC}"
 
-  log "Building Docker image: $IMAGE"
-  docker build --platform linux/amd64 -t "$IMAGE" server/
-  docker push "$IMAGE"
+  log "Building Docker image: $IMAGE  (linux/amd64, no OCI attestation)"
+  # --platform linux/amd64  → required by Cloud Run (no ARM)
+  # --provenance=false       → prevents BuildKit from creating an OCI manifest
+  #                            list that Cloud Run rejects
+  docker buildx build \
+    --platform linux/amd64 \
+    --provenance=false \
+    --push \
+    -t "$IMAGE" \
+    server/
   ok "Image pushed to Container Registry"
 
   # Resolve the JWT_SECRET from Secret Manager at deploy time.
@@ -106,7 +113,7 @@ if $DEPLOY_SERVER; then
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
-    --set-env-vars "FIREBASE_PROJECT_ID=${PROJECT_ID}" \
+    --set-env-vars "FIREBASE_PROJECT_ID=${PROJECT_ID},NODE_ENV=production" \
     --set-secrets "JWT_SECRET=JWT_SECRET:latest" \
     --min-instances 1 \
     --max-instances 10 \

@@ -4,6 +4,13 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 
+/// True on iOS/Android mobile browsers where iframe WebGL is unreliable.
+/// When true, PetRendererWidget skips the iframe and shows PetCompositeWidget.
+bool get isMobileWebBrowser {
+  final ua = html.window.navigator.userAgent.toLowerCase();
+  return ua.contains('iphone') || ua.contains('ipad') || ua.contains('android');
+}
+
 final Map<String, html.IFrameElement> _iframesByViewId = {};
 
 void registerIFrameFactory(String viewId, String url) {

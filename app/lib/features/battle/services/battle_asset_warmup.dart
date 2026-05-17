@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
@@ -65,13 +66,18 @@ class BattleAssetWarmup {
         precacheImage(AssetImage(imagePath), context).catchError((_) {}),
     ]);
 
-    await Future.wait([
+    // On web the iframe renderer manages its own assets — loading the 9 MB
+    // spine atlas here causes an OOM crash on mobile browsers. Skip it.
+    final coreLoads = [
       imageWarmup,
       rootBundle.loadString('assets/renderer/renderer.html'),
       rootBundle.loadString('assets/data/creature-samples.json'),
-      rootBundle.load('assets/spines/mixer/likha-2d-v3-all.png'),
-      rootBundle.load('assets/spines/mixer/likha-2d-v3-all.atlas'),
-    ]);
+      if (!kIsWeb) ...[
+        rootBundle.load('assets/spines/mixer/likha-2d-v3-all.png'),
+        rootBundle.load('assets/spines/mixer/likha-2d-v3-all.atlas'),
+      ],
+    ];
+    await Future.wait(coreLoads);
 
     _assetManifestList ??=
         (await AssetManifest.loadFromAssetBundle(rootBundle)).listAssets();

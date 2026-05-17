@@ -33,14 +33,80 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
+  <!-- ── Mobile crash catcher ──────────────────────────────────────────────
+       Captures JS/OOM errors before Flutter even starts, and shows them
+       on screen so you can debug without desktop devtools.
+       The overlay is hidden once Flutter mounts successfully.
   -->
+  <div id="crash-overlay" style="
+    display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+    background:#0a0e1a; color:#ff6060; font-family:monospace;
+    font-size:13px; padding:20px; overflow:auto; z-index:99999;
+    white-space:pre-wrap; word-break:break-all;">
+    <b style="font-size:16px; color:#ff4040">⚠ Crash Report</b><br><br>
+    <span id="crash-msg">Loading…</span>
+  </div>
+  <script>
+    var _crashLogs = [];
+    function _showCrash(msg) {
+      var el = document.getElementById('crash-overlay');
+      var msgEl = document.getElementById('crash-msg');
+      if (el && msgEl) {
+        msgEl.textContent = msg;
+        el.style.display = 'block';
+      }
+    }
+    // Catch synchronous JS errors (OOM, type errors, etc.)
+    window.onerror = function(msg, src, line, col, err) {
+      var text = 'JS Error\n' + msg + '\nat ' + src + ':' + line + ':' + col;
+      if (err && err.stack) text += '\n\nStack:\n' + err.stack;
+      _crashLogs.push(text);
+      _showCrash(_crashLogs.join('\n\n---\n\n'));
+    };
+    // Catch unhandled promise rejections (async Dart/JS errors)
+    window.onunhandledrejection = function(e) {
+      var reason = e.reason ? (e.reason.stack || String(e.reason)) : String(e);
+      var text = 'Unhandled Promise Rejection:\n' + reason;
+      _crashLogs.push(text);
+      _showCrash(_crashLogs.join('\n\n---\n\n'));
+    };
+    // Hide the overlay once Flutter signals it is ready
+    window._flutterAppReady = function() {
+      var el = document.getElementById('crash-overlay');
+      if (el) el.style.display = 'none';
+    };
+  </script>
+  <!--
+    Mobile renderer intercept — must run BEFORE flutter_bootstrap.js.
+    On iOS/Android, CanvasKit (WebGL) crashes. This Proxy wraps window._flutter
+    so that when Flutter sets _flutter.loader it immediately patches load() to
+    call initializeEngine({renderer:'html'}) instead of the default CanvasKit.
+    Proxy is fully supported on iOS 10+ and all modern Android browsers.
+  -->
+  <script>
+  (function() {
+    if (!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return;
+
+    window._flutter = new Proxy({}, {
+      set: function(target, prop, value) {
+        if (prop === 'loader' && value && typeof value.load === 'function') {
+          var origLoad = value.load.bind(value);
+          value.load = async function(config) {
+            config = Object.assign({}, config || {});
+            config.onEntrypointLoaded = async function(engineInitializer) {
+              var runner = await engineInitializer.initializeEngine({ renderer: 'html' });
+              await runner.runApp();
+            };
+            return origLoad(config);
+          };
+        }
+        target[prop] = value;
+        return true;
+      },
+      get: function(target, prop) { return target[prop]; }
+    });
+  })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

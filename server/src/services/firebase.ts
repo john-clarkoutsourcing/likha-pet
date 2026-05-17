@@ -17,8 +17,10 @@ export function initializeFirebase(): void {
   const configuredEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
   const hasCredentialsPath = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
   const isProduction = process.env.NODE_ENV === 'production';
-  const shouldUseEmulator =
-    !!configuredEmulatorHost || (!isProduction && !hasCredentialsPath);
+  // Only use the emulator when the host is explicitly configured.
+  // Never infer emulator mode from the absence of credentials — Cloud Run
+  // provides credentials via ADC without setting GOOGLE_APPLICATION_CREDENTIALS.
+  const shouldUseEmulator = !!configuredEmulatorHost && !isProduction;
 
   if (shouldUseEmulator) {
     const emulatorHost = configuredEmulatorHost || '127.0.0.1:8090';

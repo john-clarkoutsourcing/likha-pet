@@ -103,11 +103,24 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
     _initCtrl();
   }
 
+  bool _webRendererFailed = false;
+
   void _setupWebIFrameRenderer() {
     final viewId = 'pet-renderer-${_webViewCounter++}';
     registerIFrameFactory(viewId, _buildWebRendererUrl());
     if (!mounted) return;
     setState(() => _webViewId = viewId);
+
+    // On mobile, give the Pixi/WebGL renderer 6 seconds to signal readiness.
+    // If it stays silent (WebGL context failed, OOM, etc.) fall back to the
+    // static PetCompositeWidget so the pet is always visible.
+    if (isMobileWebBrowser) {
+      Future.delayed(const Duration(seconds: 6), () {
+        if (!mounted || _webRendererFailed) return;
+        // Still not rendered → assume WebGL failed silently
+        setState(() => _webRendererFailed = true);
+      });
+    }
   }
 
   String _buildWebRendererUrl() {
@@ -316,6 +329,8 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
 
       final animChanged = old.animation != widget.animation;
       if (animChanged && _webViewId != null) {
+        // If we're posting a message, renderer is alive — cancel the fallback.
+        if (_webRendererFailed) setState(() => _webRendererFailed = false);
         postIFrameMessage(_webViewId!, {
           'type': 'likha:playAnimation',
           'animation': widget.animation,
@@ -415,7 +430,7 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
-      if (_webViewId == null) return _fallback();
+      if (_webViewId == null || _webRendererFailed) return _fallback();
       Widget view = buildIFrameView(_webViewId!, widget.size);
       if (widget.flipHorizontal) {
         view = Transform(
