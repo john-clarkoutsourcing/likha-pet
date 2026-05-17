@@ -36,15 +36,19 @@ class PvpFirestoreService {
         'playerTeam': playerTeam,
         'opponentTeam': opponentTeam,
         'actionLog': actionLog.map((a) => a.toJson()).toList(),
-        'finalPlayerTeamState': finalPlayerTeamState.map((p) => p.toJson()).toList(),
-        'finalOpponentTeamState': finalOpponentTeamState.map((p) => p.toJson()).toList(),
+        'finalPlayerTeamState':
+            finalPlayerTeamState.map((p) => p.toJson()).toList(),
+        'finalOpponentTeamState':
+            finalOpponentTeamState.map((p) => p.toJson()).toList(),
         'battleDurationMs': battleDurationMs,
         'randomSeed': randomSeed,
         'createdAt': FieldValue.serverTimestamp(),
         'mode': 'pvp',
       });
     } catch (e) {
-      throw Exception('Failed to store battle log: $e');
+      // Silently fail - battle log is not critical for PvP functionality
+      // Server has its own validation results
+      print('[Firestore] Warning: Failed to store battle log: $e');
     }
   }
 
@@ -72,7 +76,9 @@ class PvpFirestoreService {
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      throw Exception('Failed to store validation result: $e');
+      // Silently fail - validation result storage is non-critical
+      // Server has already processed the validation
+      print('[Firestore] Warning: Failed to store validation result: $e');
     }
   }
 
@@ -93,14 +99,17 @@ class PvpFirestoreService {
 
       return snapshot.docs;
     } catch (e) {
-      throw Exception('Failed to fetch battle history: $e');
+      // Return empty list on error - non-critical operation
+      print('[Firestore] Warning: Failed to fetch battle history: $e');
+      return [];
     }
   }
 
   /// Fetches validation results for a player's battles.
   ///
   /// Helps track which battles were flagged for review or rejected.
-  Future<List<DocumentSnapshot<Map<String, dynamic>>>> getPlayerValidationHistory({
+  Future<List<DocumentSnapshot<Map<String, dynamic>>>>
+      getPlayerValidationHistory({
     required String playerId,
     int limit = 50,
   }) async {
@@ -114,7 +123,9 @@ class PvpFirestoreService {
 
       return snapshot.docs;
     } catch (e) {
-      throw Exception('Failed to fetch validation history: $e');
+      // Return empty list on error - non-critical operation
+      print('[Firestore] Warning: Failed to fetch validation history: $e');
+      return [];
     }
   }
 
@@ -134,7 +145,9 @@ class PvpFirestoreService {
 
       return snapshot.docs;
     } catch (e) {
-      throw Exception('Failed to fetch suspicious battles: $e');
+      // Return empty list on error - non-critical operation
+      print('[Firestore] Warning: Failed to fetch suspicious battles: $e');
+      return [];
     }
   }
 
@@ -154,7 +167,9 @@ class PvpFirestoreService {
 
       return snapshot.docs;
     } catch (e) {
-      throw Exception('Failed to fetch flagged battles: $e');
+      // Return empty list on error - non-critical operation
+      print('[Firestore] Warning: Failed to fetch flagged battles: $e');
+      return [];
     }
   }
 
@@ -170,7 +185,9 @@ class PvpFirestoreService {
 
       return snapshot.docs.isNotEmpty;
     } catch (e) {
-      throw Exception('Failed to check player flag status: $e');
+      // Return false on error - assume not flagged if check fails
+      print('[Firestore] Warning: Failed to check player flag status: $e');
+      return false;
     }
   }
 
@@ -182,7 +199,9 @@ class PvpFirestoreService {
       final doc = await _firestore.collection('battles').doc(battleId).get();
       return doc.exists ? doc : null;
     } catch (e) {
-      throw Exception('Failed to fetch battle log: $e');
+      // Return null on error - non-critical operation
+      print('[Firestore] Warning: Failed to fetch battle log: $e');
+      return null;
     }
   }
 
@@ -195,7 +214,9 @@ class PvpFirestoreService {
           await _firestore.collection('validationResults').doc(battleId).get();
       return doc.exists ? doc : null;
     } catch (e) {
-      throw Exception('Failed to fetch validation result: $e');
+      // Return null on error - non-critical operation
+      print('[Firestore] Warning: Failed to fetch validation result: $e');
+      return null;
     }
   }
 }
