@@ -385,7 +385,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
               petDashOffsets: {actorId: dashDir},
               petDashTargets: {actorId: dashTargetId},
             );
-            await Future.delayed(const Duration(milliseconds: 300));
+            await Future.delayed(const Duration(milliseconds: 600));
             if (!mounted) return;
           }
         }
@@ -402,7 +402,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
                   ? {actorId: dashTargetId}
                   : const {},
         );
-        await Future.delayed(const Duration(milliseconds: 300));
+        await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
       }
 
@@ -469,7 +469,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       }
 
       await Future.delayed(
-          Duration(milliseconds: action.actor.isFainted ? 120 : 500));
+          Duration(milliseconds: action.actor.isFainted ? 250 : 700));
       if (!mounted) return;
 
       state = state.copyWith(
@@ -479,7 +479,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         petDashOffsets: const {},
         petDashTargets: const {},
       );
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future.delayed(const Duration(milliseconds: 200));
       if (!mounted) return;
     }
 

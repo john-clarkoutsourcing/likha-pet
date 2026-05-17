@@ -90,6 +90,10 @@ class TraitSystem {
     'plant_back': () => TraitLibrary.plantBack,
     'plant_tail': () => TraitLibrary.plantTail,
     'plant_mouth': () => TraitLibrary.plantMouth,
+    // Vegetal Bite (plant-mouth-02) — energy steal, must be explicit so the
+    // regex fallback never uses plantMouth (lifesteal) as the wrong base.
+    'plant_mouth_vegetal_bite': () => TraitLibrary.plantMouthVegetalBite,
+    'plant_mouth_02': () => TraitLibrary.plantMouthVegetalBite,
     'aquatic_horn': () => TraitLibrary.aquaticHorn,
     'aquatic_back': () => TraitLibrary.aquaticBack,
     'aquatic_tail': () => TraitLibrary.aquaticTail,
@@ -102,6 +106,10 @@ class TraitSystem {
     'bug_back': () => TraitLibrary.bugBack,
     'bug_tail': () => TraitLibrary.bugTail,
     'bug_mouth': () => TraitLibrary.bugMouth,
+    // Blood Taste (bug-mouth-02) — must be registered explicitly so the regex
+    // fallback never strips lifeSteal by using bugMouth as the base trait.
+    'bug_mouth_blood_taste': () => TraitLibrary.bugMouthBloodTaste,
+    'bug_mouth_02': () => TraitLibrary.bugMouthBloodTaste,
     'reptile_horn': () => TraitLibrary.reptileHorn,
     'reptile_back': () => TraitLibrary.reptileBack,
     'reptile_tail': () => TraitLibrary.reptileTail,

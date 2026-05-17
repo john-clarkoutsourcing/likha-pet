@@ -320,12 +320,18 @@ Trait Function() _traitFor(CreatureClass cls, String slot, String v) {
       CreatureClass.bug => () => TraitLibrary.bugTail,
       CreatureClass.reptile => () => TraitLibrary.reptileTail,
     };
+  // Mouth variant '02' uses the alternate lifesteal/energy-steal trait for
+  // bug and plant; all other variants fall back to the base mouth trait.
   return switch (cls) {
-    CreatureClass.beast => () => TraitLibrary.beastMouth,
-    CreatureClass.plant => () => TraitLibrary.plantMouth,
+    CreatureClass.beast   => () => TraitLibrary.beastMouth,
+    CreatureClass.plant   => v == '02'
+        ? () => TraitLibrary.plantMouthVegetalBite  // Vegetal Bite — energy steal
+        : () => TraitLibrary.plantMouth,            // Drain Bite — lifesteal
     CreatureClass.aquatic => () => TraitLibrary.aquaticMouth,
-    CreatureClass.bird => () => TraitLibrary.birdMouth,
-    CreatureClass.bug => () => TraitLibrary.bugMouth,
+    CreatureClass.bird    => () => TraitLibrary.birdMouth,
+    CreatureClass.bug     => v == '02'
+        ? () => TraitLibrary.bugMouthBloodTaste  // Blood Taste — lifesteal
+        : () => TraitLibrary.bugMouth,           // Sunder Claw
     CreatureClass.reptile => () => TraitLibrary.reptileMouth,
   };
 }
