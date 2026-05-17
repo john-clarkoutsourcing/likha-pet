@@ -12,6 +12,7 @@ import '../data/trait_card_catalog.dart';
 import '../providers/pve_battle_provider.dart';
 import '../providers/battle_view_model.dart';
 import '../services/battle_asset_warmup.dart';
+import '../services/battle_audio_service.dart';
 import '../widgets/battle_background_widget.dart';
 import '../widgets/classic_trait_card_widget.dart';
 import '../widgets/pet_renderer_widget.dart';
@@ -81,6 +82,7 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
   @override
   void initState() {
     super.initState();
+    BattleAudioService.instance.init();
     _playerPos = List<Offset>.from(_kPlayerPos);
     _enemyPos = List<Offset>.from(_kEnemyPos);
     // Publish args so pveBattleProvider can read stageId before building.
@@ -689,6 +691,7 @@ class _DiscardPopupState extends State<_DiscardPopup>
                                 discardMode: true,
                                 cardArtPath: card.cardArtPath,
                                 cardTemplatePath: card.cardTemplatePath,
+                                 petColor: card.petColor,
                                 onTap: () => ref
                                     .read(pveBattleProvider.notifier)
                                     .discardCard(card.instanceId),

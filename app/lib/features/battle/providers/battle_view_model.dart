@@ -1,4 +1,5 @@
 import 'dart:ui' show Offset;
+import 'package:flutter/material.dart' show Color;
 import 'package:likha_pet_battle_engine/battle_state.dart';
 import 'package:likha_pet_battle_engine/energy_pool.dart';
 import 'package:likha_pet_battle_engine/pet.dart';
@@ -198,6 +199,16 @@ const _kPetVariant = {
   'bug_1': '06',
 };
 
+// Pet class → color mapping for card badges and visual identity
+const _kPetClassColor = {
+  'plant': Color(0xFF2ECC71),      // Green
+  'aquatic': Color(0xFF3498DB),    // Blue
+  'beast': Color(0xFFE74C3C),      // Red/Orange-Red
+  'reptile': Color(0xFF66BB6A),    // Light Green
+  'bird': Color(0xFFFF80AB),       // Pink
+  'bug': Color(0xFFFF5252),        // Bright Red
+};
+
 class CardViewModel {
   final String instanceId;
   final String ownerPetId;
@@ -219,6 +230,19 @@ class CardViewModel {
     this.cardArtPath,
     this.cardTemplatePath,
   });
+
+  /// Display name combining pet name and skill name: "[Pet Name] - [Skill Name]"
+  /// This strengthens pet identity and makes card ownership clear.
+  String get displayName => '$ownerPetName - ${trait.name}';
+
+  /// Pity cards are visually flagged with a star (★).
+  String get displayNameWithPity => isPity ? '★ $displayName' : displayName;
+
+  /// Pet class color for visual identity (badge color on card).
+  Color get petColor {
+    final petClass = _kPetClass[ownerPetId] ?? 'beast';
+    return _kPetClassColor[petClass] ?? const Color(0xFF9C27B0);
+  }
 
   static String? _resolveArt(
     String ownerPetId,

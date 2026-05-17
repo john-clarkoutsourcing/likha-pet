@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../models/owned_pet.dart';
 import '../models/player_data.dart';
+import '../models/team_composition.dart';
 import '../repositories/player_repository.dart';
 
 // ── PlayerNotifier ────────────────────────────────────────────────────────────
@@ -50,6 +51,73 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   void setActiveTeam(List<String> petUids) {
     assert(petUids.length == 3, 'Active team must have exactly 3 pets');
     state = state.copyWith(activeTeam: petUids);
+    _persist();
+  }
+
+  /// Save the current active team as a new team composition.
+  /// Auto-generates team name from pet classes (e.g., "PPR").
+  void saveTeamComposition(String? customName) {
+    if (state.activeTeam.length != 3) return;
+    
+    final teamId = _uuid.v4();
+    final roster = state.roster;
+    
+    // Generate auto name from pet classes
+    final petClasses = state.activeTeam
+        .map((uid) => roster.firstWhere((p) => p.uid == uid))
+        .map((p) => p.classLabel.isNotEmpty ? p.classLabel[0] : '?')
+        .join('');
+    
+    final teamName = customName?.isEmpty == false 
+        ? customName! 
+        : petClasses.isNotEmpty ? petClasses : 'Team ${state.savedTeams.length + 1}';
+    
+    final newTeam = TeamComposition(
+      id: teamId,
+      name: teamName,
+      petUids: state.activeTeam,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    
+    state = state.copyWith(
+      savedTeams: [...state.savedTeams, newTeam],
+    );
+    _persist();
+  }
+
+  /// Load a saved team composition as the active team.
+  void loadTeamComposition(String teamId) {
+    final team = state.savedTeams.cast<TeamComposition?>().firstWhere(
+      (t) => t?.id == teamId,
+      orElse: () => null,
+    );
+    if (team != null) {
+      state = state.copyWith(activeTeam: team.petUids);
+      _persist();
+    }
+  }
+
+  /// Update the name of a saved team.
+  void renameTeamComposition(String teamId, String newName) {
+    final updated = state.savedTeams.map((t) {
+      if (t.id == teamId) {
+        return t.copyWith(
+          name: newName,
+          updatedAt: DateTime.now(),
+        );
+      }
+      return t;
+    }).toList();
+    
+    state = state.copyWith(savedTeams: updated);
+    _persist();
+  }
+
+  /// Delete a saved team composition.
+  void deleteTeamComposition(String teamId) {
+    final updated = state.savedTeams.where((t) => t.id != teamId).toList();
+    state = state.copyWith(savedTeams: updated);
     _persist();
   }
 

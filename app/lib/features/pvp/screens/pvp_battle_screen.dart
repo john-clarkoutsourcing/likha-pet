@@ -8,6 +8,7 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../battle/providers/battle_view_model.dart';
 import '../../battle/services/battle_asset_warmup.dart';
+import '../../battle/services/battle_audio_service.dart';
 import '../../battle/widgets/shared_battle_hud.dart';
 import '../providers/pvp_battle_provider.dart';
 import 'pvp_result_screen.dart';
@@ -55,6 +56,7 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
   @override
   void initState() {
     super.initState();
+    BattleAudioService.instance.init();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,

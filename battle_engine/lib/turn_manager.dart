@@ -27,13 +27,15 @@ class TurnManager {
     List<Action> actionsB,
   ) {
     final slots = [
-      for (final a in actionsA) _Slot(action: a, teamIndex: 0),
-      for (final b in actionsB) _Slot(action: b, teamIndex: 1),
+      for (final a in actionsA) _Slot(action: a),
+      for (final b in actionsB) _Slot(action: b),
     ];
 
     // Classic-like priority:
     // 1) higher speed, 2) higher HP, 3) higher skill, 4) higher morale.
-    // Final deterministic tiebreak: Team A before Team B.
+    // Final tiebreak: pet ID string comparison — deterministic and identical on
+    // both PvP clients regardless of which side is "player" or "enemy".
+    // (teamIndex was removed: it produced opposite ordering on the two clients.)
     slots.sort((x, y) {
       final speedCmp = y.speed.compareTo(x.speed); // descending — faster first
       if (speedCmp != 0) return speedCmp;
@@ -43,7 +45,7 @@ class TurnManager {
       if (skillCmp != 0) return skillCmp;
       final moraleCmp = y.morale.compareTo(x.morale);
       if (moraleCmp != 0) return moraleCmp;
-      return x.teamIndex.compareTo(y.teamIndex);
+      return x.action.actor.id.compareTo(y.action.actor.id);
     });
 
     return slots.map((s) => s.action).toList();
@@ -67,13 +69,11 @@ class TurnManager {
 
 class _Slot {
   final Action action;
-  final int teamIndex; // 0 = Team A, 1 = Team B
 
-  /// Effective speed (base + Speed Up/Down buffs) — higher acts first.
   int get speed => action.actor.effectiveSpeed;
   int get hp => action.actor.hp;
   int get skill => action.actor.skill;
   int get morale => action.actor.morale;
 
-  _Slot({required this.action, required this.teamIndex});
+  _Slot({required this.action});
 }

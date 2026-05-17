@@ -67,6 +67,15 @@ class _StarterPackScreenState extends ConsumerState<StarterPackScreen>
           .toList();
       _allHatched = _eggStates.isNotEmpty &&
           _eggStates.every((s) => s == _EggState.hatched);
+      
+      // Auto-redirect if all eggs are already hatched (e.g., user returns after hatching)
+      if (_allHatched && mounted) {
+        setState(() => _loading = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _finish();
+        });
+        return;
+      }
     } catch (_) {
       _starterInventory = [];
       _pets = [];

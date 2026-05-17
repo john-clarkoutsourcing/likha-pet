@@ -24,6 +24,10 @@ dependencies:
   shared_preferences: ^2.3.4
   uuid: ^4.5.1
 
+  # Firebase
+  firebase_core: ^3.2.0
+  cloud_firestore: ^5.0.0
+
   cupertino_icons: ^1.0.8
   google_fonts: ^8.1.0
   flame: ^1.37.0
@@ -38,6 +42,7 @@ dependencies:
   widgetbook: ^3.23.0
   widgetbook_annotation: ^3.11.0
   webview_flutter_web: ^0.2.3+4
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -233,5 +238,8 @@ flutter:
     - assets/renderer/mixer-stuffs/v3/reptile-12/
     - assets/renderer/mixer-stuffs/v3/reptile-12/back/
     - assets/renderer/mixer-stuffs/v3/reptile-12/horn/
-    # Audio
+    # Audio — Kenney CC0 sound effects (kenney.nl)
     - assets/audio/
+    - assets/audio/battle/
+    - assets/audio/card/
+    - assets/audio/ui/

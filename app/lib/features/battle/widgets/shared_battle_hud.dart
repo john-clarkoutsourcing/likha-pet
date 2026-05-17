@@ -1225,6 +1225,7 @@ class _BattleBottomPanelContent extends StatelessWidget {
                                   cardArtPath: card.cardArtPath,
                                   cardTemplatePath: card.cardTemplatePath,
                                   comboIndex: comboIdx,
+                                   petColor: card.petColor,
                                   onTap: () => onAssignSkill(card.instanceId),
                                 ),
                               ],
@@ -1400,6 +1401,7 @@ class BattleSkillCard extends StatelessWidget {
   final String? cardArtPath;
   final String? cardTemplatePath;
   final int? comboIndex;
+  final Color? petColor; // Pet class color for badge
   final VoidCallback? onTap;
 
   const BattleSkillCard({
@@ -1413,6 +1415,7 @@ class BattleSkillCard extends StatelessWidget {
     this.cardArtPath,
     this.cardTemplatePath,
     this.comboIndex,
+    this.petColor,
     this.onTap,
   });
 
@@ -1467,7 +1470,7 @@ class BattleSkillCard extends StatelessWidget {
                   child: ClassicTraitCardWidget(
                     imagePath: resolvedTemplatePath,
                     imageName: resolvedImageName,
-                    name: trait.name,
+                    name: '$petName - ${trait.name}',
                     energy: trait.energyCost,
                     attack: battleClassicCardAttack(trait, cardEntry),
                     defense: battleClassicCardDefense(trait, cardEntry),
@@ -1502,6 +1505,22 @@ class BattleSkillCard extends StatelessWidget {
                       child: Text('CD ${trait.cooldownRemaining}',
                           style: TextStyle(color: AppColors.utility,
                               fontSize: 7, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                // Pet class color badge (top-left corner)
+                if (petColor != null)
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: petColor,
+                        border: Border.all(color: Colors.white70, width: 0.5),
+                        boxShadow: [BoxShadow(color: petColor!.withValues(alpha: 0.5), blurRadius: 4)],
+                      ),
                     ),
                   ),
                 if (comboIndex != null)

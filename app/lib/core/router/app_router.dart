@@ -13,6 +13,7 @@ import '../../features/battle/screens/battle_screen.dart';
 import '../../features/battle/screens/battle_result_screen.dart';
 import '../../features/test/screens/test_battle_screen.dart';
 import '../../features/pets/screens/breeding_lab_screen.dart';
+import '../../features/pets/screens/team_management_screen.dart';
 import '../../features/library/screens/library_screen.dart';
 import '../../features/onboarding/screens/starter_pack_screen.dart';
 import '../../features/pvp/screens/pvp_queue_screen.dart';
@@ -27,6 +28,7 @@ class Routes {
   static const roster        = '/roster';
   static const petDetail     = '/pet/:petId';
   static const breed         = '/breed';
+  static const teamManager   = '/teams';
   static const worldMap      = '/pve';
   static const stagePreview  = '/pve/stage/:stageId';
   static const battle        = '/battle';
@@ -88,6 +90,10 @@ GoRouter createGoRouter(bool isAuthenticated) {
       GoRoute(
         path: Routes.breed,
         builder: (_, __) => const BreedingLabScreen(),
+      ),
+      GoRoute(
+        path: Routes.teamManager,
+        builder: (_, __) => const TeamManagementScreen(),
       ),
       GoRoute(
         path: Routes.worldMap,

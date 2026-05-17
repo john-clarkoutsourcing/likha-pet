@@ -132,11 +132,12 @@ class CreatureDefinition {
   }
 
   /// Build a fresh Pet — call once per battle, never share between sessions.
-  Pet toPet() {
+  /// [displayName] overrides the default creature name (e.g., for player-named pets).
+  Pet toPet({String? displayName}) {
     final s = computedStats;
     return Pet(
       id: id,
-      name: name,
+      name: displayName ?? name,
       creatureClass: bodyClass,
       maxHp: s.hp,
       speed: s.speed,

@@ -15,12 +15,16 @@ import 'package:likha_pet_battle_engine/trait.dart';
 import '../../../features/battle/data/creature_registry.dart';
 import '../../../features/battle/engine/interactive_battle_engine.dart';
 import '../../../features/battle/providers/battle_view_model.dart';
+import '../../../features/battle/services/battle_audio_service.dart';
 import '../../../features/battle/services/mixed_skeleton_service.dart';
 import '../../../features/battle/widgets/pet_character_widget.dart'
     show PetCharacterAnimState, PetCharacterConfig;
 import '../../../features/pets/models/owned_pet.dart';
+import '../models/battle_action_log.dart';
 import '../models/pvp_message.dart';
 import '../services/pvp_socket.dart';
+import '../services/authenticated_pvp_validation_service.dart';
+import '../services/pvp_firestore_service.dart';
 
 // ── Args ──────────────────────────────────────────────────────────────────────
 
@@ -55,53 +59,91 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   final Map<String, PetCharacterConfig> _mixedSkeletonConfigs = {};
   final Map<String, CreatureDefinition> _petDefs = {};
 
+  // ── Action logging for PvP validation ───────────────────────────────────
+  final List<BattleActionLog> _actionLog = [];
+  late final int _battleStartTime;
+  late final AuthenticatedPvpValidationService _validationService;
+  late final PvpFirestoreService _firestoreService;
+  late final int _battleSeed;
+
   StreamSubscription<PvpMessage>? _wsSub;
   Completer<Map<String, List<String>>>? _opponentChoicesCompleter;
   PvpRoundLocked? _pendingRoundLocked;
   int? _awaitingRound;
 
-  PvpBattleNotifier(PvpBattleArgs args) : super(PveBattleViewModel.initial()) {
+  PvpBattleNotifier(
+    PvpBattleArgs args, {
+    required AuthenticatedPvpValidationService validationService,
+  }) : super(PveBattleViewModel.initial()) {
+    _validationService = validationService;
     final match = args.matchFound;
     _myUserId = match.you.userId;
     _opponentUserId = match.opponent.userId;
     _matchId = match.matchId;
+    _battleSeed = match.seed;
 
     // Decode own team from OwnedPet list
     _playerPets = args.myTeam
         .where((p) => kBodyCatalogue.containsKey(p.bodyId))
-        .map((p) => p.toCreatureDefinition().toPet())
+        .map((p) => p.toCreatureDefinition().toPet(displayName: p.name))
         .toList();
     for (final p in args.myTeam) {
       _petDefs[p.uid] = p.toCreatureDefinition();
     }
 
     // Decode opponent team from server-provided DNA refs
-    _enemyPets = match.opponent.team.map((ref) {
+    // Note: Server doesn't send pet names, so we use generic names based on position and class
+    _enemyPets = match.opponent.team.asMap().entries.map((e) {
+      final index = e.key;
+      final ref = e.value;
       final owned = OwnedPet(
         uid: ref.uid,
-        name: 'Opponent',
+        name: 'Opponent ${index + 1}', // Generic fallback name
         dna: ref.dna,
         createdAt: DateTime.now(),
       );
       if (kBodyCatalogue.containsKey(owned.bodyId)) {
         final def = owned.toCreatureDefinition();
         _petDefs[owned.uid] = def;
-        return def.toPet();
+        // Use creature class name as display name for clarity
+        return def.toPet(
+            displayName: '${match.opponent.displayName}\'s ${def.className}');
       }
       // Fallback to a default pet if DNA is unrecognised
       return kCreatureRegistry.values.first.toPet();
     }).toList();
 
+    // ── Deck seed assignment ──────────────────────────────────────────────────
+    // Both clients must draw identical cards for the same logical team so that
+    // card instance IDs submitted by one player are found in the other's deck.
+    //
+    // Rule: the player whose userId is lexicographically smaller ("alpha") uses
+    //   playerDeck = seed,         enemyDeck = seed ^ 0x5A3C
+    // The other player ("beta") uses the swapped assignment:
+    //   playerDeck = seed ^ 0x5A3C, enemyDeck = seed
+    //
+    // Result: alpha._enemyDeck and beta._playerDeck share the same seed → same
+    // instance IDs for beta's cards. Likewise for alpha's cards.
+    final bool isAlpha = _myUserId.compareTo(_opponentUserId) < 0;
+    final int playerDeckSeed = isAlpha ? match.seed : match.seed ^ 0x5A3C;
+    final int enemyDeckSeed = isAlpha ? match.seed ^ 0x5A3C : match.seed;
+
     _engine = InteractiveBattleEngine(
       playerTeam: _playerPets,
       enemyTeam: _enemyPets,
       playerTeamName: 'You',
+      playerDeckSeed: playerDeckSeed,
+      enemyDeckSeed: enemyDeckSeed,
       enemyTeamName: match.opponent.displayName.isNotEmpty
           ? match.opponent.displayName
           : 'Opponent',
       battleSeed: match.seed,
       mode: BattleMode.pvp,
     );
+
+    // Initialize action logging with provided validation service
+    _battleStartTime = DateTime.now().millisecondsSinceEpoch;
+    _firestoreService = PvpFirestoreService();
 
     // Subscribe to WS messages
     _wsSub = PvpSocket.instance.messages.listen(_onWsMessage);
@@ -226,6 +268,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         playerTeam: _livePlayerTeamVMs(),
         hand: _buildHandVMs(_engine.currentPlayerHand, newPending),
       );
+      BattleAudioService.instance.playCardUnplay();
       return;
     }
 
@@ -237,6 +280,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       playerTeam: _livePlayerTeamVMs(),
       hand: _buildHandVMs(_engine.currentPlayerHand, newPending),
     );
+    BattleAudioService.instance.playCardPlay();
   }
 
   void discardCard(String cardInstanceId) {
@@ -334,6 +378,17 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     for (final action in started.actionQueue) {
       if (!mounted) return;
       final actorId = action.actor.id;
+
+      // Log action for validation
+      _logAction(
+        round: _engine.round,
+        actorId: actorId,
+        actionName: action.trait.name,
+        targetId: action.primaryTarget?.id,
+        energyUsed: action.trait.energyCost,
+        damageDealt: null, // Will be updated if damage is dealt
+      );
+
       final isNoTargetDamageAction =
           action.trait.effect.type == EffectType.damage &&
               action.primaryTarget != null &&
@@ -402,6 +457,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
                   ? {actorId: dashTargetId}
                   : const {},
         );
+        BattleAudioService.instance.playAttack(effectType);
         await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
       }
@@ -461,6 +517,9 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         }
       }
       if (targetAnims.isNotEmpty) {
+        final hasFaint =
+            targetAnims.values.any((s) => s == PetCharacterAnimState.faint);
+        BattleAudioService.instance.playHit(faint: hasFaint);
         state = state.copyWith(
           petAnimStates:
               Map<String, PetCharacterAnimState>.from(state.petAnimStates)
@@ -526,6 +585,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       deckDiscardSize: _engine.playerDeckDiscardSize,
       newCardIds: newIds,
     );
+    if (newIds.isNotEmpty) BattleAudioService.instance.playCardDraw();
     await Future.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
 
@@ -551,6 +611,126 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       winnerUid: winnerUid,
       transcriptChecksum: checksum,
     ).toJson());
+
+    // Submit battle log for server-side validation (async, don't wait)
+    _submitBattleValidation(outcome);
+  }
+
+  /// Log an action during battle for validation
+  void _logAction({
+    required int round,
+    required String actorId,
+    required String actionName,
+    String? targetId,
+    required int energyUsed,
+    int? damageDealt,
+  }) {
+    _actionLog.add(BattleActionLog(
+      round: round,
+      actor: actorId,
+      action: actionName,
+      target: targetId,
+      energyUsed: energyUsed,
+      damageDealt: damageDealt,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+    ));
+  }
+
+  /// Capture final team state for validation
+  List<PetTeamSnapshot> _captureFinalTeamState(List<Pet> team) {
+    return team.map((pet) {
+      // Capture both debuffs and buffs as status effects
+      final effects = <StatusEffectSnapshot>[];
+
+      // Add debuffs
+      for (final debuff in pet.debuffs) {
+        effects.add(StatusEffectSnapshot(
+          type: debuff.type.name.toLowerCase(),
+          duration: debuff.roundsRemaining,
+          value: debuff.value,
+        ));
+      }
+
+      // Add buffs
+      for (final buff in pet.buffs) {
+        effects.add(StatusEffectSnapshot(
+          type: buff.type.name.toLowerCase(),
+          duration: buff.roundsRemaining,
+          value: buff.value,
+        ));
+      }
+
+      return PetTeamSnapshot(
+        petId: pet.id,
+        hp: pet.hp.clamp(0, 999),
+        statusEffects: effects,
+      );
+    }).toList();
+  }
+
+  /// Submit battle for server validation
+  Future<void> _submitBattleValidation(BattleOutcome? outcome) async {
+    try {
+      final battleDurationMs =
+          DateTime.now().millisecondsSinceEpoch - _battleStartTime;
+
+      final validationRequest = BattleValidationRequest(
+        playerId: _myUserId,
+        playerTeam: _playerPets.map((p) => p.id).toList(),
+        opponentTeam: _enemyPets.map((p) => p.id).toList(),
+        winner: outcome == BattleOutcome.teamAWins ? 'player' : 'opponent',
+        finalPlayerTeamState: _captureFinalTeamState(_playerPets),
+        finalOpponentTeamState: _captureFinalTeamState(_enemyPets),
+        actionLog: _actionLog,
+        battleDurationMs: battleDurationMs,
+        randomSeed: _battleSeed,
+      );
+
+      // Store battle log in Firestore
+      final battleId = _matchId; // Use match ID as battle ID
+      await _firestoreService.storeBattleLog(
+        battleId: battleId,
+        playerId: _myUserId,
+        opponentId: _opponentUserId,
+        playerTeam: validationRequest.playerTeam,
+        opponentTeam: validationRequest.opponentTeam,
+        actionLog: _actionLog,
+        finalPlayerTeamState: validationRequest.finalPlayerTeamState,
+        finalOpponentTeamState: validationRequest.finalOpponentTeamState,
+        battleDurationMs: battleDurationMs,
+        randomSeed: _battleSeed,
+      );
+
+      // Submit validation (async - don't block UI)
+      _validationService
+          .submitBattleValidation(validationRequest)
+          .then((result) {
+        // Store validation result in Firestore
+        _firestoreService.storeValidationResult(
+          battleId: battleId,
+          playerId: _myUserId,
+          response: result,
+          validationDetails:
+              'Result: ${result.result}, Reason: ${result.reason ?? 'none'}',
+        );
+
+        if (result.isAccepted) {
+          // MMR updated, battle accepted
+          print(
+              '[PvP] Battle validation: ACCEPTED (MMR: +${result.mmrChange})');
+        } else if (result.isSuspicious) {
+          // Flagged for review but accepted
+          print('[PvP] Battle validation: SUSPICIOUS (${result.reason})');
+        } else {
+          // Rejected - possible cheat detected
+          print('[PvP] Battle validation: REJECTED (${result.reason})');
+        }
+      }).catchError((e) {
+        print('[PvP] Validation submission error: $e');
+      });
+    } catch (e) {
+      print('[PvP] Error preparing validation request: $e');
+    }
   }
 
   // ── Shield pre-application (mirrors PvE) ───────────────────────────────────
@@ -740,6 +920,14 @@ final pvpBattleProvider =
   (ref) {
     final args = ref.read(pvpBattleArgsProvider);
     if (args == null) throw StateError('pvpBattleArgsProvider not set');
-    return PvpBattleNotifier(args);
+
+    // Get the authenticated validation service
+    final validationService = ref.watch(pvpValidationServiceWithAuthProvider);
+
+    // Create notifier with validated service
+    return PvpBattleNotifier(
+      args,
+      validationService: validationService,
+    );
   },
 );

@@ -123,12 +123,16 @@ class InteractiveBattleEngine {
     required this.playerTeamName,
     required this.enemyTeamName,
     int? battleSeed,
+    // PvP: pass explicit deck seeds so both clients draw identical cards.
+    // Derive these from battleSeed + player identity (see PvpBattleNotifier).
+    int? playerDeckSeed,
+    int? enemyDeckSeed,
     this.mode = BattleMode.pve,
   }) {
     final seed = battleSeed ?? Random().nextInt(0xFFFFFF);
     _critRng = Random(seed ^ 0xC47F);
-    _playerDeck = SkillDeck.fromTeam(playerTeam, seed: seed);
-    _enemyDeck = SkillDeck.fromTeam(enemyTeam, seed: seed ^ 0x5A3C);
+    _playerDeck = SkillDeck.fromTeam(playerTeam, seed: playerDeckSeed ?? seed);
+    _enemyDeck = SkillDeck.fromTeam(enemyTeam, seed: enemyDeckSeed ?? (seed ^ 0x5A3C));
 
     // Link every pet to its team's shared energy pool.
     for (final p in playerTeam) {

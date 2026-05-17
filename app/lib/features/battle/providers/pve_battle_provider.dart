@@ -10,6 +10,7 @@ import 'package:likha_pet_battle_engine/trait.dart';
 import '../data/creature_registry.dart';
 import '../engine/interactive_battle_engine.dart';
 import '../screens/battle_screen.dart' show BattleScreenArgs;
+import '../services/battle_audio_service.dart';
 import '../services/mixed_skeleton_service.dart';
 import '../widgets/pet_character_widget.dart'
     show PetCharacterAnimState, PetCharacterConfig;
@@ -154,6 +155,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         playerTeam: _livePlayerTeamVMs(),
         hand: _buildHandVMs(_engine.currentPlayerHand, newPending),
       );
+      BattleAudioService.instance.playCardUnplay();
       return;
     }
 
@@ -169,6 +171,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       playerTeam: _livePlayerTeamVMs(),
       hand: _buildHandVMs(_engine.currentPlayerHand, newPending),
     );
+    BattleAudioService.instance.playCardPlay();
   }
 
   /// Discard a specific card from the player's hand (overflow discard phase).
@@ -299,6 +302,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
                   ? {actorId: dashTargetId}
                   : const {},
         );
+        BattleAudioService.instance.playAttack(effectType);
         await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
       }
@@ -360,6 +364,9 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
         }
       }
       if (targetAnims.isNotEmpty) {
+        final hasFaint = targetAnims.values
+            .any((s) => s == PetCharacterAnimState.faint);
+        BattleAudioService.instance.playHit(faint: hasFaint);
         state = state.copyWith(
           petAnimStates:
               Map<String, PetCharacterAnimState>.from(state.petAnimStates)
@@ -436,6 +443,7 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       selectedPetId: state.selectedPetId,
       newCardIds: newIds,
     );
+    if (newIds.isNotEmpty) BattleAudioService.instance.playCardDraw();
 
     // Let card entrance animations play.
     await Future.delayed(const Duration(milliseconds: 900));
@@ -755,12 +763,13 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
   // ── Team builders ──────────────────────────────────────────────────────────
 
   /// Player team: built from the 3 active pets in the player's roster.
+  /// Uses OwnedPet display names to strengthen pet identity in battle.
   /// Returns empty list if no roster — the HomeScreen blocks battle entry
   /// when the team isn't full, so this path should not normally be reached.
   static List<Pet> _buildPlayerTeam(List<OwnedPet> activeRoster) {
     return activeRoster
         .where((p) => kBodyCatalogue.containsKey(p.bodyId))
-        .map((p) => p.toCreatureDefinition().toPet())
+        .map((p) => p.toCreatureDefinition().toPet(displayName: p.name))
         .toList();
   }
 

@@ -207,6 +207,29 @@ export class FirestoreService {
     await this.db.collection('users').doc(userId).set({ mmr }, { merge: true });
   }
 
+  async updateUserMmr(userId: string, mmrChange: number, didWin: boolean): Promise<number> {
+    const doc = await this.db.collection('users').doc(userId).get();
+    const currentMmr = (doc.data() as any)?.mmr ?? 1000;
+    const currentWins = (doc.data() as any)?.wins ?? 0;
+    const currentLosses = (doc.data() as any)?.losses ?? 0;
+
+    const newMmr = Math.max(0, currentMmr + mmrChange);
+    const newWins = didWin ? currentWins + 1 : currentWins;
+    const newLosses = didWin ? currentLosses : currentLosses + 1;
+
+    await this.db.collection('users').doc(userId).set(
+      {
+        mmr: newMmr,
+        wins: newWins,
+        losses: newLosses,
+        lastUpdated: new Date(),
+      },
+      { merge: true },
+    );
+
+    return newMmr;
+  }
+
   async getMmrLeaderboard(limit = 20): Promise<Array<{ userId: string; email: string; mmr: number }>> {
     const snapshot = await this.db
       .collection('users')

@@ -72,6 +72,13 @@ service cloud.firestore {
                    && !hasAlreadySubmitted(battleId);
     }
 
+    // ── Battle Validation Results (PvP anti-cheat audit trail) ────────────────
+    match /validationResults/{battleId} {
+      allow read:  if request.auth != null && isParticipant(battleId);
+      // Only Cloud Functions may write validation results (server-side only)
+      allow write: if false;
+    }
+
     // ── Matchmaking queue ──────────────────────────────────────────────────────
     match /matchPool/{uid} {
       allow read, write: if request.auth.uid == uid;
