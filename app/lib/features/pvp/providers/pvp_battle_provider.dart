@@ -92,9 +92,12 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     }
     
     // 🔍 DIAGNOSTIC: Log own team stats
-    print('[PvP] My Team:');
+    print('═' * 60);
+    print('[PvP Match ${match.matchId}] BATTLE STARTED');
+    print('═' * 60);
+    print('[PvP] My Team (${_playerPets.length} pets):');
     for (final pet in _playerPets) {
-      print('  ${pet.name} (${pet.id.substring(0, 6)}) - SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+      print('  • ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} | HP: ${pet.maxHp} | SKL: ${pet.skill} | MOR: ${pet.morale}');
     }
 
     // Decode opponent team from server-provided DNA refs
@@ -122,10 +125,11 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     }).toList();
     
     // 🔍 DIAGNOSTIC: Log opponent team stats
-    print('[PvP] Opponent Team:');
+    print('[PvP] Opponent Team (${_enemyPets.length} pets):');
     for (final pet in _enemyPets) {
-      print('  ${pet.name} (${pet.id.substring(0, 6)}) - SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+      print('  • ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} | HP: ${pet.maxHp} | SKL: ${pet.skill} | MOR: ${pet.morale}');
     }
+    print('═' * 60);
 
     // ── Deck seed assignment ──────────────────────────────────────────────────
     // Both clients must draw identical cards for the same logical team so that
