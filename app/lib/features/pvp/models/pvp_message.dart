@@ -224,14 +224,22 @@ class OutRoundSubmit {
   final int round;
   // petId → [cardInstanceId, ...]
   final Map<String, List<String>> selections;
+  // Current pet state (HP, shield, status) for server sync
+  final List<Map<String, dynamic>>? petStates;
 
-  const OutRoundSubmit({required this.matchId, required this.round, required this.selections});
+  const OutRoundSubmit({
+    required this.matchId,
+    required this.round,
+    required this.selections,
+    this.petStates,
+  });
 
   Map<String, dynamic> toJson() => {
         'type': 'round:submit',
         'matchId': matchId,
         'round': round,
         'selections': selections,
+        if (petStates != null) 'petStates': petStates,
       };
 }
 

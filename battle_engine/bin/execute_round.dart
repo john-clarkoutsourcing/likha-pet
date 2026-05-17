@@ -70,11 +70,22 @@ Map<String, dynamic> calculateTurnOrder(Map<String, dynamic> input) {
     });
   }
 
-  // Sort by speed (highest first), then by original order for stability
+  // Sort by speed (highest first), then by morale, skill, and UID
   allPets.sort((a, b) {
+    // Primary: Speed (descending)
     final speedDiff = (b['spd'] as int).compareTo(a['spd'] as int);
     if (speedDiff != 0) return speedDiff;
-    return (a['originalOrder'] as int).compareTo(b['originalOrder'] as int);
+
+    // Secondary: Morale (descending)
+    final moraleDiff = (b['mor'] as int? ?? 20).compareTo(a['mor'] as int? ?? 20);
+    if (moraleDiff != 0) return moraleDiff;
+
+    // Tertiary: Skill (descending)
+    final skillDiff = (b['skl'] as int? ?? 20).compareTo(a['skl'] as int? ?? 20);
+    if (skillDiff != 0) return skillDiff;
+
+    // Quaternary: UID (lexicographic for determinism)
+    return (a['uid'] as String).compareTo(b['uid'] as String);
   });
 
   // Convert to output format

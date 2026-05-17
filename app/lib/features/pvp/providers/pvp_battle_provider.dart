@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
+import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:likha_pet_battle_engine/action.dart';
@@ -399,11 +400,27 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       _pendingRoundLocked = null;
     }
 
-    // Submit this player's selections to the server
+    // Submit this player's selections to the server, including current pet states
+    final petStatesSnapshot = [..._playerPets, ..._enemyPets].map((pet) => {
+      'uid': pet.id,
+      'name': pet.name,
+      'hp': pet.hp,
+      'maxHp': pet.maxHp,
+      'shield': pet.shield,
+      'isFainted': pet.isFainted,
+      'spd': pet.speed,
+      'skl': pet.skill,
+      'mor': pet.morale,
+      'dex': 0,
+      'def': 0,
+      'statusEffects': [],
+    }).toList();
+
     PvpSocket.instance.send(OutRoundSubmit(
       matchId: _matchId,
       round: expectedRound,
       selections: mySelections,
+      petStates: petStatesSnapshot,
     ).toJson());
 
     // Wait for the server to broadcast round:locked (opponent's selections)

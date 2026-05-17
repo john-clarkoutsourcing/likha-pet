@@ -232,6 +232,8 @@ export class PvpMatch {
         mor: 20,
         dex: 0,
         def: 0,
+        shield: 0,           // Initialize shield to 0
+        isFainted: false,    // Initialize not fainted
         index: index,
         statusEffects: [],
       };

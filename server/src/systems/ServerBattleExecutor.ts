@@ -11,6 +11,8 @@ export interface PetState {
   mor: number;
   dex: number;
   def: number;
+  shield: number;     // NEW: Shield value (absorbed damage)
+  isFainted: boolean; // NEW: Whether pet is defeated
   index: number;
   statusEffects: StatusEffect[];
 }
