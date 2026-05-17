@@ -92,12 +92,13 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     }
     
     // 🔍 DIAGNOSTIC: Log own team stats
-    print('═' * 60);
-    print('[PvP Match ${match.matchId}] BATTLE STARTED');
-    print('═' * 60);
+    print('═' * 80);
+    print('[PvP Match ${match.matchId}] BATTLE STARTED - Seed: ${match.seed}');
+    print('═' * 80);
     print('[PvP] My Team (${_playerPets.length} pets):');
-    for (final pet in _playerPets) {
-      print('  • ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} | HP: ${pet.maxHp} | SKL: ${pet.skill} | MOR: ${pet.morale}');
+    for (var i = 0; i < _playerPets.length; i++) {
+      final pet = _playerPets[i];
+      print('  Pet $i: ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} HP: ${pet.maxHp} SKL: ${pet.skill} MOR: ${pet.morale}');
     }
 
     // Decode opponent team from server-provided DNA refs
@@ -126,10 +127,11 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     
     // 🔍 DIAGNOSTIC: Log opponent team stats
     print('[PvP] Opponent Team (${_enemyPets.length} pets):');
-    for (final pet in _enemyPets) {
-      print('  • ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} | HP: ${pet.maxHp} | SKL: ${pet.skill} | MOR: ${pet.morale}');
+    for (var i = 0; i < _enemyPets.length; i++) {
+      final pet = _enemyPets[i];
+      print('  Pet $i: ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} HP: ${pet.maxHp} SKL: ${pet.skill} MOR: ${pet.morale}');
     }
-    print('═' * 60);
+    print('═' * 80);
 
     // ── Deck seed assignment ──────────────────────────────────────────────────
     // Both clients must draw identical cards for the same logical team so that
@@ -381,8 +383,20 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     
     // 🔍 DIAGNOSTIC: Log turn order for sync debugging
     if (started.hasImmediateResult) {
-      final state = started.immediateResult!.state;
-      print('[PvP] Round ${state.round} log: ${state.roundLog}');
+      final roundState = started.immediateResult!.state;
+      print('\n[PvP] ═══ ROUND ${roundState.round} EXECUTED ═══');
+      print('[PvP] Round Log: ${roundState.roundLog}');
+      print('[PvP] Player Team after round:');
+      for (var i = 0; i < roundState.teamA.length; i++) {
+        final pet = roundState.teamA[i];
+        print('  Pet $i: ${pet.name} | HP: ${pet.hp}/${pet.maxHp} | Fainted: ${pet.isFainted}');
+      }
+      print('[PvP] Enemy Team after round:');
+      for (var i = 0; i < roundState.teamB.length; i++) {
+        final pet = roundState.teamB[i];
+        print('  Pet $i: ${pet.name} | HP: ${pet.hp}/${pet.maxHp} | Fainted: ${pet.isFainted}');
+      }
+      print('═' * 80);
     }
 
     if (started.hasImmediateResult) {
