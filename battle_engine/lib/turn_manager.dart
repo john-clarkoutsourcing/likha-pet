@@ -37,9 +37,16 @@ class TurnManager {
     final firstA = actionsA.isNotEmpty ? actionsA.first.actor.id : '';
     final firstB = actionsB.isNotEmpty ? actionsB.first.actor.id : '';
     
-    final (orderedA, orderedB) = firstA.compareTo(firstB) <= 0
-        ? (actionsA, actionsB)
-        : (actionsB, actionsA);
+    late final List<Action> orderedA;
+    late final List<Action> orderedB;
+    
+    if (firstA.compareTo(firstB) <= 0) {
+      orderedA = actionsA;
+      orderedB = actionsB;
+    } else {
+      orderedA = actionsB;
+      orderedB = actionsA;
+    }
 
     final slots = [
       for (var i = 0; i < orderedA.length; i++)
