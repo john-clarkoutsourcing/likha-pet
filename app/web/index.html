@@ -87,16 +87,33 @@
   (function() {
     if (!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return;
 
+    // On iOS/Android: force HTML renderer by injecting an 'html' build entry
+    // into _flutter.buildConfig and passing config.renderer = 'html' to load().
+    //
+    // Why this works better than initializeEngine({renderer:'html'}):
+    //   Flutter 3.41 selects the renderer during load() — if the chosen build
+    //   has renderer:'canvaskit', CanvasKit WASM is preloaded and the engine
+    //   commits to CanvasKit before initializeEngine is even called.
+    //   By injecting an 'html' build and using config.renderer='html', the
+    //   loader picks the html build from the start and never touches CanvasKit.
+
     window._flutter = new Proxy({}, {
       set: function(target, prop, value) {
+        if (prop === 'buildConfig' && value && Array.isArray(value.builds)) {
+          // Prepend html renderer build — same JS file, no CanvasKit needed.
+          value.builds.unshift({
+            compileTarget: 'dart2js',
+            renderer: 'html',
+            mainJsPath: 'main.dart.js'
+          });
+        }
         if (prop === 'loader' && value && typeof value.load === 'function') {
           var origLoad = value.load.bind(value);
-          value.load = async function(config) {
+          value.load = function(config) {
             config = Object.assign({}, config || {});
-            config.onEntrypointLoaded = async function(engineInitializer) {
-              var runner = await engineInitializer.initializeEngine({ renderer: 'html' });
-              await runner.runApp();
-            };
+            // config.config is the engine config sub-object; renderer here
+            // is what the loader uses to select from buildConfig.builds.
+            config.config = Object.assign({}, config.config || {}, { renderer: 'html' });
             return origLoad(config);
           };
         }

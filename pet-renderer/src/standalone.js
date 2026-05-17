@@ -17,8 +17,11 @@ import {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let _app    = null;
-let _figure = null;
+let _app       = null;
+let _figure    = null;
+let _loader    = null;
+let _spineAtlas = null;
+let _spineData  = null;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 // JSON loaded as raw strings (asset/source) and parsed at runtime via JSON.parse.
@@ -95,16 +98,43 @@ async function renderPet(params) {
     const variant   = result.variant;
     const shift     = getAxieColorPartShift(variant);
 
+    // ── Cleanup previous renderer resources ──────────────────────────────────
+    // Must destroy in this order: figure → app → loader → atlas/spine
+    if (_figure) {
+      try { _figure.destroy(true); _figure = null; } catch (_) {}
+    }
+    if (_app) {
+      try { _app.destroy(true); _app = null; } catch (_) {}
+    }
+    // Reset Pixi loader to free texture references from GPU
+    if (_loader) {
+      try { 
+        _loader.reset();
+        _loader = null;
+      } catch (_) {}
+    }
+    // Destroy spine atlas and data explicitly
+    if (_spineAtlas) {
+      try { _spineAtlas = null; } catch (_) {}
+    }
+    if (_spineData) {
+      try { _spineData = null; } catch (_) {}
+    }
+
     // ── Setup Pixi app ─────────────────────────────────────────────────────────
     // Strategy: render at a FIXED internal resolution (400×400) and CSS-scale
     // the canvas to the caller's display size. This decouples rendering quality
     // from display size — the pet always looks crisp regardless of widget size.
 
-    if (_app) { _app.destroy(true); _app = null; _figure = null; }
-
     PIXI.settings.PRECISION_FRAGMENT = PIXI.PRECISION.HIGH;
 
     const container = document.getElementById('container');
+    
+    // Remove old canvas from DOM before creating new one (prevents iOS memory leak)
+    if (container && container.firstChild) {
+      try { container.removeChild(container.firstChild); } catch (_) {}
+    }
+    
     const displayW = Number(width);
     const displayH = Number(height);
     const INTERNAL = 400; // Fixed rendering canvas size
@@ -157,19 +187,23 @@ async function renderPet(params) {
     status('S3:tex-load(' + toLoad.size + '/pre=' + Object.keys(preloaded).length + ')');
     log('Loading ' + toLoad.size + ' textures, preloaded=' + Object.keys(preloaded).length + ', variant=' + variant);
 
-    const loader = new PIXI.loaders.Loader();
+    _loader = new PIXI.loaders.Loader();
     const IMAGE_TYPE = PIXI.loaders.Resource.LOAD_TYPE.IMAGE;
     for (const [attPath, url] of toLoad) {
-      loader.add(attPath, url, { loadType: IMAGE_TYPE });
+      _loader.add(attPath, url, { loadType: IMAGE_TYPE });
     }
 
-    await new Promise(resolve => loader.load(() => resolve()));
+    await new Promise((resolve, reject) => {
+      _loader.load(() => resolve());
+      // Timeout after 15s to prevent hanging on slow mobile networks
+      setTimeout(() => reject(new Error('Texture load timeout (15s)')), 15000);
+    });
 
     // ── Build texture map ──────────────────────────────────────────────────────
     const allTextures = {};
     let loadedCount = 0;
     for (const [attPath] of toLoad) {
-      const res = loader.resources[attPath];
+      const res = _loader.resources[attPath];
       if (res?.texture) { allTextures[attPath] = res.texture; loadedCount++; }
       else if (res?.error) log('Texture fail: ' + attPath + ' → ' + res.error);
     }
@@ -183,16 +217,16 @@ async function renderPet(params) {
 
     // ── Build spine data ───────────────────────────────────────────────────────
     
-    const spineAtlas  = new PIXI.spine.core.TextureAtlas();
-    spineAtlas.addTextureHash(allTextures, false);
+    _spineAtlas  = new PIXI.spine.core.TextureAtlas();
+    _spineAtlas.addTextureHash(allTextures, false);
     
-    const atlasLoader = new PIXI.spine.core.AtlasAttachmentLoader(spineAtlas);
+    const atlasLoader = new PIXI.spine.core.AtlasAttachmentLoader(_spineAtlas);
     
-    const spineData   = new PIXI.spine.core.SkeletonJson(atlasLoader).readSkeletonData(spineJson);
+    _spineData   = new PIXI.spine.core.SkeletonJson(atlasLoader).readSkeletonData(spineJson);
 
     // ── Spawn figure ───────────────────────────────────────────────────────────
     
-    _figure = new PIXI.spine.Spine(spineData);
+    _figure = new PIXI.spine.Spine(_spineData);
     
     _figure.scale.set(Number(figScale) * Number(scaleMult));
     _figure.stateData.setMix('draft/run-origin',   'action/idle/normal', 0.1);
@@ -267,6 +301,29 @@ window.LikhaPetRenderer = {
     if (!shouldLoop) {
       _figure.state.addAnimation(0, 'action/idle/normal', true, 0);
     }
+  },
+
+  cleanup: function() {
+    // Explicit cleanup for memory management
+    if (_figure) {
+      try { _figure.destroy(true); _figure = null; } catch (_) {}
+    }
+    if (_app) {
+      try { _app.destroy(true); _app = null; } catch (_) {}
+    }
+    if (_loader) {
+      try { 
+        _loader.reset();
+        _loader = null;
+      } catch (_) {}
+    }
+    if (_spineAtlas) {
+      try { _spineAtlas = null; } catch (_) {}
+    }
+    if (_spineData) {
+      try { _spineData = null; } catch (_) {}
+    }
+    log('Renderer cleaned up');
   },
 };
 
