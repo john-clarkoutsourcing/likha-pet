@@ -702,32 +702,34 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       );
 
       // Submit validation (async - don't block UI)
-      _validationService
-          .submitBattleValidation(validationRequest)
-          .then((result) {
-        // Store validation result in Firestore
-        _firestoreService.storeValidationResult(
-          battleId: battleId,
-          playerId: _myUserId,
-          response: result,
-          validationDetails:
-              'Result: ${result.result}, Reason: ${result.reason ?? 'none'}',
-        );
+      unawaited(
+        _validationService
+            .submitBattleValidation(validationRequest)
+            .then((result) async {
+          // Store validation result in Firestore (with proper error handling)
+          await _firestoreService.storeValidationResult(
+            battleId: battleId,
+            playerId: _myUserId,
+            response: result,
+            validationDetails:
+                'Result: ${result.result}, Reason: ${result.reason ?? 'none'}',
+          );
 
-        if (result.isAccepted) {
-          // MMR updated, battle accepted
-          print(
-              '[PvP] Battle validation: ACCEPTED (MMR: +${result.mmrChange})');
-        } else if (result.isSuspicious) {
-          // Flagged for review but accepted
-          print('[PvP] Battle validation: SUSPICIOUS (${result.reason})');
-        } else {
-          // Rejected - possible cheat detected
-          print('[PvP] Battle validation: REJECTED (${result.reason})');
-        }
-      }).catchError((e) {
-        print('[PvP] Validation submission error: $e');
-      });
+          if (result.isAccepted) {
+            // MMR updated, battle accepted
+            print(
+                '[PvP] Battle validation: ACCEPTED (MMR: +${result.mmrChange})');
+          } else if (result.isSuspicious) {
+            // Flagged for review but accepted
+            print('[PvP] Battle validation: SUSPICIOUS (${result.reason})');
+          } else {
+            // Rejected - possible cheat detected
+            print('[PvP] Battle validation: REJECTED (${result.reason})');
+          }
+        }).catchError((e) {
+          print('[PvP] Validation submission or storage error: $e');
+        }),
+      );
     } catch (e) {
       print('[PvP] Error preparing validation request: $e');
     }

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:likha_pet/features/pvp/models/battle_action_log.dart';
 
 /// Service for storing battle validation results in Firestore.
@@ -8,8 +9,12 @@ import 'package:likha_pet/features/pvp/models/battle_action_log.dart';
 /// - Storing validation server results (accepted/rejected, anti-cheat flags)
 /// - Querying player battle history
 /// - Detecting flagged accounts
+///
+/// NOTE: On web platform, Firestore operations are disabled due to type compatibility
+/// issues with JavaScript interop. Server has authoritative validation data.
 class PvpFirestoreService {
   final FirebaseFirestore _firestore;
+  final bool _isWeb = kIsWeb;
 
   PvpFirestoreService({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -17,6 +22,7 @@ class PvpFirestoreService {
   /// Stores a complete battle log in Firestore.
   ///
   /// This is the client-side record. The server's validation result is stored separately.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<void> storeBattleLog({
     required String battleId,
     required String playerId,
@@ -29,6 +35,12 @@ class PvpFirestoreService {
     required int battleDurationMs,
     required int randomSeed,
   }) async {
+    // Skip Firestore operations on web due to type compatibility issues
+    if (_isWeb) {
+      print('[Firestore] Skipping battle log storage on web platform');
+      return;
+    }
+
     try {
       await _firestore.collection('battles').doc(battleId).set({
         'playerId': playerId,
@@ -56,12 +68,19 @@ class PvpFirestoreService {
   ///
   /// This is typically called after the server validates the battle.
   /// Contains the decision (accepted/rejected/suspicious) and anti-cheat details.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<void> storeValidationResult({
     required String battleId,
     required String playerId,
     required BattleValidationResponse response,
     required String validationDetails,
   }) async {
+    // Skip Firestore operations on web due to type compatibility issues
+    if (_isWeb) {
+      print('[Firestore] Skipping validation result storage on web platform');
+      return;
+    }
+
     try {
       await _firestore.collection('validationResults').doc(battleId).set({
         'playerId': playerId,
@@ -85,10 +104,16 @@ class PvpFirestoreService {
   /// Fetches a player's recent battles from Firestore.
   ///
   /// Limited to the last [limit] battles, ordered by most recent first.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<List<DocumentSnapshot<Map<String, dynamic>>>> getPlayerBattleHistory({
     required String playerId,
     int limit = 50,
   }) async {
+    // Return empty list on web - historical data is not critical
+    if (_isWeb) {
+      return [];
+    }
+
     try {
       final snapshot = await _firestore
           .collection('battles')
@@ -108,11 +133,17 @@ class PvpFirestoreService {
   /// Fetches validation results for a player's battles.
   ///
   /// Helps track which battles were flagged for review or rejected.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<List<DocumentSnapshot<Map<String, dynamic>>>>
       getPlayerValidationHistory({
     required String playerId,
     int limit = 50,
   }) async {
+    // Return empty list on web - historical data is not critical
+    if (_isWeb) {
+      return [];
+    }
+
     try {
       final snapshot = await _firestore
           .collection('validationResults')
@@ -132,9 +163,15 @@ class PvpFirestoreService {
   /// Fetches all battles flagged as suspicious.
   ///
   /// Used by admin dashboard to investigate potential cheaters.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<List<DocumentSnapshot<Map<String, dynamic>>>> getSuspiciousBattles({
     int limit = 100,
   }) async {
+    // Return empty list on web - admin features not critical for gameplay
+    if (_isWeb) {
+      return [];
+    }
+
     try {
       final snapshot = await _firestore
           .collection('validationResults')
@@ -154,9 +191,15 @@ class PvpFirestoreService {
   /// Fetches all battles flagged for manual review.
   ///
   /// Used by moderation team to approve/reject suspicious accounts.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<List<DocumentSnapshot<Map<String, dynamic>>>> getFlaggedBattles({
     int limit = 100,
   }) async {
+    // Return empty list on web - admin features not critical for gameplay
+    if (_isWeb) {
+      return [];
+    }
+
     try {
       final snapshot = await _firestore
           .collection('validationResults')
@@ -174,7 +217,13 @@ class PvpFirestoreService {
   }
 
   /// Checks if a player account is currently flagged for suspicious behavior.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<bool> isPlayerFlagged(String playerId) async {
+    // Return false on web - assume not flagged if unavailable
+    if (_isWeb) {
+      return false;
+    }
+
     try {
       final snapshot = await _firestore
           .collection('validationResults')
@@ -192,9 +241,15 @@ class PvpFirestoreService {
   }
 
   /// Gets a single battle log by ID.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<DocumentSnapshot<Map<String, dynamic>>?> getBattleLog(
     String battleId,
   ) async {
+    // Return null on web - historical data is not critical
+    if (_isWeb) {
+      return null;
+    }
+
     try {
       final doc = await _firestore.collection('battles').doc(battleId).get();
       return doc.exists ? doc : null;
@@ -206,9 +261,15 @@ class PvpFirestoreService {
   }
 
   /// Gets validation result for a specific battle.
+  /// Skipped on web platform due to Firebase interop issues.
   Future<DocumentSnapshot<Map<String, dynamic>>?> getValidationResult(
     String battleId,
   ) async {
+    // Return null on web - historical data is not critical
+    if (_isWeb) {
+      return null;
+    }
+
     try {
       final doc =
           await _firestore.collection('validationResults').doc(battleId).get();
