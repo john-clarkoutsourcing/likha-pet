@@ -140,6 +140,7 @@ class TraitViewModel {
           DebuffType.attackDown => 'atk_down',
           DebuffType.defenseDown => 'def_down',
           DebuffType.burned => 'burn',
+          DebuffType.stench => 'stench',
           DebuffType.speedDown => 'spd_down',
           null => 'debuff',
         },
@@ -170,6 +171,7 @@ class TraitViewModel {
             DebuffType.attackDown => 'ATK -${e.value}',
             DebuffType.defenseDown => 'DEF -${e.value}',
             DebuffType.burned => 'BURN ${e.value}',
+            DebuffType.stench => 'STENCH ${e.duration}',
             DebuffType.speedDown => 'SLOW',
             null => 'DEBUFF',
           }) +
@@ -394,6 +396,9 @@ class PetViewModel {
   /// Active debuff type names — e.g. ['poisoned', 'burned', 'speedDown']
   final List<String> activeDebuffs;
 
+  /// Remaining rounds per debuff type, keyed by debuff name.
+  final Map<String, int> debuffRoundsRemaining;
+
   /// Current poison stack count (0 = not poisoned, 1–13 = stacks).
   final int poisonStacks;
   final List<TraitViewModel> traits;
@@ -423,6 +428,7 @@ class PetViewModel {
     this.skill = 20,
     this.activeBuffs = const [],
     this.activeDebuffs = const [],
+    this.debuffRoundsRemaining = const {},
     this.poisonStacks = 0,
     required this.traits,
     this.spriteConfig,
@@ -432,6 +438,8 @@ class PetViewModel {
   });
 
   double get hpPercent => maxHp > 0 ? (hp / maxHp).clamp(0.0, 1.0) : 0.0;
+
+  int debuffRoundsFor(String debuffType) => debuffRoundsRemaining[debuffType] ?? 0;
 
   String get positionLabel => switch (position) {
         0 => 'FRONT',
@@ -466,6 +474,13 @@ class PetViewModel {
         skill: snap.skill,
         activeBuffs: snap.buffs.map((b) => b.type).toList(),
         activeDebuffs: snap.debuffs.map((d) => d.type).toList(),
+        debuffRoundsRemaining: {
+          for (final d in snap.debuffs)
+            d.type: (snap.debuffs
+                    .where((x) => x.type == d.type)
+                    .fold<int>(0, (maxValue, x) =>
+                        x.roundsRemaining > maxValue ? x.roundsRemaining : maxValue)),
+        },
         poisonStacks: snap.debuffs
             .where((d) => d.type == 'poisoned')
             .fold(0, (s, d) => d.value),

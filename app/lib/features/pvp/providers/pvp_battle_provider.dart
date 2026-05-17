@@ -654,6 +654,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         case 'poison':
         case 'burn':
         case 'stun':
+        case 'stench':
         case 'debuff':
         case 'atk_down':
         case 'def_down':
@@ -701,6 +702,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       case 'poison':
       case 'burn':
       case 'stun':
+      case 'stench':
       case 'debuff':
       case 'atk_down':
       case 'def_down':
@@ -1020,6 +1022,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
               DebuffType.poisoned => 'poison',
               DebuffType.burned => 'burn',
               DebuffType.stunned => 'stun',
+              DebuffType.stench => 'stench',
               DebuffType.attackDown => 'atk_down',
               DebuffType.defenseDown => 'def_down',
               DebuffType.speedDown => 'spd_down',

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 700" width="280" height="700">
+  <defs>
+    <filter id="totemGlow" x="-10%" y="-5%" width="120%" height="110%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="6" y="40" width="268" height="660" rx="36" fill="#7fe3f5" opacity="0.2" filter="url(#totemGlow)"/>
+  <rect x="6" y="40" width="268" height="660" rx="36" fill="#0a1224"/>
+  <rect x="11" y="45" width="258" height="655" rx="32" fill="#2a3a5c"/>
+  <rect x="11" y="55" width="14" height="635" rx="22" fill="#1f2c47" opacity="0.8"/>
+  <rect x="255" y="55" width="14" height="635" rx="22" fill="#1f2c47" opacity="0.8"/>
+  <line x1="30" y1="420" x2="250" y2="420" stroke="#7fe3f5" stroke-opacity="0.3" stroke-width="1.5"/>
+  <line x1="30" y1="560" x2="250" y2="560" stroke="#7fe3f5" stroke-opacity="0.3" stroke-width="1.5"/>
+  <g stroke="#0a1224" stroke-width="1.5" stroke-linejoin="round">
+    <polygon points="6,40 26,4 46,40" fill="#1f2c47"/>
+    <polygon points="46,40 66,16 86,40" fill="#1f2c47"/>
+    <polygon points="86,40 106,4 126,40" fill="#1f2c47"/>
+    <polygon points="126,40 146,16 166,40" fill="#1f2c47"/>
+    <polygon points="166,40 186,4 206,40" fill="#1f2c47"/>
+    <polygon points="206,40 226,16 246,40" fill="#1f2c47"/>
+    <polygon points="246,40 266,4 280,40" fill="#1f2c47"/>
+  </g>
+  <g fill="#7fe3f5">
+    <circle cx="26" cy="12" r="2"/>
+    <circle cx="106" cy="12" r="2"/>
+    <circle cx="186" cy="12" r="2"/>
+    <circle cx="266" cy="12" r="2"/>
+  </g>
+  <g stroke="#0a1224" stroke-width="2">
+    <circle cx="35" cy="70" r="16" fill="#1f2c47"/>
+    <circle cx="35" cy="70" r="10" fill="#4ac4d9"/>
+    <circle cx="245" cy="70" r="16" fill="#1f2c47"/>
+    <circle cx="245" cy="70" r="10" fill="#4ac4d9"/>
+  </g>
+</svg>

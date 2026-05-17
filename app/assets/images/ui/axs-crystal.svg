@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+  <defs>
+    <linearGradient id="axsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7fe3f5"/>
+      <stop offset="100%" stop-color="#2273c7"/>
+    </linearGradient>
+    <filter id="axsGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#axsGlow)">
+    <polygon points="40,6 74,40 40,74 6,40" fill="url(#axsGrad)" stroke="#bff0fa" stroke-width="2"/>
+    <polygon points="40,20 56,52 46,52 40,42 34,52 24,52" fill="#0a1a3a" opacity="0.85"/>
+    <polygon points="40,20 56,52 46,52 40,42 34,52 24,52" fill="none" stroke="#bff0fa" stroke-width="1.5"/>
+  </g>
+</svg>

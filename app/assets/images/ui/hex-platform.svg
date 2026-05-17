@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">
+  <defs>
+    <filter id="hexGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#hexGlow)">
+    <polygon points="100,108 172,84 172,36 100,12 28,36 28,84" fill="#0a1224" fill-opacity="0.9" stroke="#4ac4d9" stroke-width="3"/>
+    <polygon points="100,98 160,78 160,42 100,22 40,42 40,78" fill="#4ac4d9" fill-opacity="0.15" stroke="#7fe3f5" stroke-width="1.5" opacity="0.8"/>
+  </g>
+  <g fill="#7fe3f5">
+    <circle cx="100" cy="108" r="3"/>
+    <circle cx="172" cy="84" r="3"/>
+    <circle cx="172" cy="36" r="3"/>
+    <circle cx="100" cy="12" r="3"/>
+    <circle cx="28" cy="36" r="3"/>
+    <circle cx="28" cy="84" r="3"/>
+  </g>
+</svg>

@@ -115,6 +115,7 @@ class Pet {
   bool get isStunned  => debuffs.any((d) => d.type == DebuffType.stunned);
   bool get isPoisoned => debuffs.any((d) => d.type == DebuffType.poisoned);
   bool get isBurned   => debuffs.any((d) => d.type == DebuffType.burned);
+  bool get isStenched => debuffs.any((d) => d.type == DebuffType.stench);
 
   // ── Energy helpers ─────────────────────────────────────────────────────────
 
@@ -259,6 +260,14 @@ class Pet {
       }
       debuffs.add(StatusEffect(type: type, value: 1, roundsRemaining: 999));
       return;
+    }
+    if (type == DebuffType.stench) {
+      final existing = debuffs.where((d) => d.type == DebuffType.stench).firstOrNull;
+      if (existing != null) {
+        existing.roundsRemaining =
+            duration > existing.roundsRemaining ? duration : existing.roundsRemaining;
+        return;
+      }
     }
     debuffs.add(StatusEffect(type: type, value: value, roundsRemaining: duration));
   }

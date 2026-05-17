@@ -1092,12 +1092,13 @@ class _PetStatusIconRow extends StatelessWidget {
 
   // Debuffs ordered by severity — most impactful shown first.
   static const _kDebuffIcons = {
-    'stunned': 'stun-stroke.png',
-    'poisoned': 'poison-stroke.png',
-    'burned': 'critical-stroke.png',
-    'attackDown': 'attack-down-stroke.png',
-    'attack_down': 'attack-down-stroke.png',
-    'defenseDown': 'fragile-stroke.png',
+      'stunned': 'stun-stroke.png',
+      'poisoned': 'poison-stroke.png',
+      'burned': 'critical-stroke.png',
+      'stench': 'stench-stroke.png',
+      'attackDown': 'attack-down-stroke.png',
+      'attack_down': 'attack-down-stroke.png',
+      'defenseDown': 'fragile-stroke.png',
     'defense_down': 'fragile-stroke.png',
     'speedDown': 'speed-down-stroke.png',
     'speed_down': 'speed-down-stroke.png',
@@ -1117,39 +1118,88 @@ class _PetStatusIconRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Collect unique paths: debuffs first, then buffs.
     final seen = <String>{};
-    final paths = <String>[];
+    final icons = <_StatusIconEntry>[];
 
     for (final d in pet.activeDebuffs) {
       final icon = _kDebuffIcons[d];
-      if (icon != null && seen.add(icon)) paths.add('$_kBase$icon');
+      if (icon != null && seen.add(icon)) {
+        icons.add(_StatusIconEntry(
+          assetPath: '$_kBase$icon',
+          roundsRemaining: d == 'stench' ? pet.debuffRoundsFor(d) : 0,
+        ));
+      }
     }
     for (final b in pet.activeBuffs) {
       final icon = _kBuffIcons[b];
-      if (icon != null && seen.add(icon)) paths.add('$_kBase$icon');
+      if (icon != null && seen.add(icon)) {
+        icons.add(_StatusIconEntry(
+          assetPath: '$_kBase$icon',
+        ));
+      }
     }
 
-    if (paths.isEmpty) return const SizedBox.shrink();
+    if (icons.isEmpty) return const SizedBox.shrink();
 
-    final display = paths.take(4).toList();
+    final display = icons.take(4).toList();
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: display
-          .map((path) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Image.asset(
-                  path,
-                  width: 22,
-                  height: 22,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                ),
-              ))
+          .map(
+            (entry) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Image.asset(
+                    entry.assetPath,
+                    width: 22,
+                    height: 22,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                  if (entry.roundsRemaining > 0)
+                    Positioned(
+                      right: -2,
+                      top: -3,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.82),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFB44FD4), width: 1),
+                        ),
+                        child: Text(
+                          '${entry.roundsRemaining}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 8,
+                            height: 1,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          )
           .toList(),
     );
   }
+}
+
+class _StatusIconEntry {
+  final String assetPath;
+  final int roundsRemaining;
+
+  const _StatusIconEntry({
+    required this.assetPath,
+    this.roundsRemaining = 0,
+  });
 }
 
 // ── BattleFloatingHpBar ───────────────────────────────────────────────────────

@@ -88,6 +88,7 @@ enum DebuffType {
   stunned,
   poisoned,
   burned,
+  stench,
   speedDown
 }
 

@@ -278,6 +278,7 @@ class TraitSystem {
         DebuffType.poisoned => 'Inflict Poison (${e.value} dmg/round)',
         DebuffType.burned =>
           'Inflict Burn (${e.value} dmg/round, ignores shield)',
+        DebuffType.stench => 'Inflict Stench (${e.duration} rounds)',
         DebuffType.speedDown => 'Reduce Speed (acts last 1 round)',
         null => 'Apply debuff −${e.value}',
       };

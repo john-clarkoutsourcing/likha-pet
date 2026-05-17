@@ -38,6 +38,7 @@ dependencies:
   webview_flutter: ^4.10.0
   web: ^1.1.1
   web_socket_channel: ^3.0.1
+  flutter_svg: ^2.0.17
   crypto: ^3.0.5
   widgetbook: ^3.23.0
   widgetbook_annotation: ^3.11.0
@@ -243,3 +244,17 @@ flutter:
     - assets/audio/battle/
     - assets/audio/card/
     - assets/audio/ui/
+  fonts:
+    - family: LilitaOne
+      fonts:
+        - asset: assets/fonts/Lilita_One/LilitaOne-Regular.ttf
+    - family: Fredoka
+      fonts:
+        - asset: assets/fonts/Fredoka/static/Fredoka-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Fredoka/static/Fredoka-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Fredoka/static/Fredoka-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Fredoka/static/Fredoka-Bold.ttf
+          weight: 700

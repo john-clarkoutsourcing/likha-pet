@@ -218,14 +218,19 @@ export class ServerBattleExecutor {
         }
 
         // ── Status debuffs ───────────────────────────────────────────────────
-        case 'poison': {
+        case 'poison':
+        case 'stench': {
           const enemy = enemyTeam.find(p => !p.isFainted);
           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           const mag = effectValue > 0 ? effectValue : 15;
-          enemy.statusEffects.push({ name: 'poison', remainingRounds: 2, magnitude: mag });
-          statusApplied = 'poison';
+          enemy.statusEffects.push({
+            name: effectType,
+            remainingRounds: cardFx.duration ?? 2,
+            magnitude: mag,
+          });
+          statusApplied = effectType;
           // Also deal small damage on application
           damage = Math.max(1, Math.floor(mag * 0.5));
           enemy.hp = Math.max(0, enemy.hp - damage);

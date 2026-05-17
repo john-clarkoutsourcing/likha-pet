@@ -62,6 +62,7 @@ class PetSnapshot {
   final String creatureClassName; // 'beast' | 'plant' | 'aquatic' | etc.
   final bool isFainted;
   final bool isStunned;
+  final bool isStenched;
   final List<DebuffSnapshot> debuffs;
   final List<BuffSnapshot> buffs;
   final Map<String, int> traitCooldowns;
@@ -78,6 +79,7 @@ class PetSnapshot {
     required this.creatureClassName,
     required this.isFainted,
     required this.isStunned,
+    required this.isStenched,
     required this.debuffs,
     required this.buffs,
     required this.traitCooldowns,
@@ -95,6 +97,7 @@ class PetSnapshot {
     creatureClassName: pet.creatureClass.name,
     isFainted: pet.isFainted,
     isStunned: pet.isStunned,
+    isStenched: pet.isStenched,
     debuffs: pet.debuffs.map(DebuffSnapshot.fromLive).toList(),
     buffs:   pet.buffs.map(BuffSnapshot.fromLive).toList(),
     traitCooldowns: {
@@ -111,6 +114,7 @@ class PetSnapshot {
     'shield': shield,
     'isFainted': isFainted,
     'isStunned': isStunned,
+    'isStenched': isStenched,
     'debuffs': debuffs.map((d) => d.toJson()).toList(),
     'buffs': buffs.map((b) => b.toJson()).toList(),
     'traitCooldowns': traitCooldowns,
