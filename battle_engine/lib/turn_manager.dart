@@ -22,20 +22,36 @@ import 'action.dart';
 class TurnManager {
   /// Merge and sort [actionsA] (Team A) and [actionsB] (Team B) into
   /// the order in which their effects will be applied this round.
+  ///
+  /// CRITICAL: Both PvP clients must produce identical turn order even if
+  /// called with different input order ([A, B] vs [B, A]).
+  /// Solution: Normalize input order by sorting teams lexicographically
+  /// before merging to ensure _Slot indices are always in same canonical order.
   List<Action> buildResolutionOrder(
     List<Action> actionsA,
     List<Action> actionsB,
   ) {
+    // Normalize input order: always put the team with lexicographically smaller
+    // first pet ID first. This ensures both clients produce identical slot indices
+    // regardless of which side is "player" or "opponent".
+    final firstA = actionsA.isNotEmpty ? actionsA.first.actor.id : '';
+    final firstB = actionsB.isNotEmpty ? actionsB.first.actor.id : '';
+    
+    final (orderedA, orderedB) = firstA.compareTo(firstB) <= 0
+        ? (actionsA, actionsB)
+        : (actionsB, actionsA);
+
     final slots = [
-      for (final a in actionsA) _Slot(action: a),
-      for (final b in actionsB) _Slot(action: b),
+      for (var i = 0; i < orderedA.length; i++)
+        _Slot(action: orderedA[i], originalIndex: i),
+      for (var i = 0; i < orderedB.length; i++)
+        _Slot(action: orderedB[i], originalIndex: orderedA.length + i),
     ];
 
     // Classic-like priority:
     // 1) higher speed, 2) higher HP, 3) higher skill, 4) higher morale.
-    // Final tiebreak: pet ID string comparison — deterministic and identical on
-    // both PvP clients regardless of which side is "player" or "enemy".
-    // (teamIndex was removed: it produced opposite ordering on the two clients.)
+    // Final tiebreaker: pet ID string comparison (then index as ultimate tiebreaker).
+    // This ensures 100% deterministic ordering regardless of platform/runtime.
     slots.sort((x, y) {
       final speedCmp = y.speed.compareTo(x.speed); // descending — faster first
       if (speedCmp != 0) return speedCmp;
@@ -45,7 +61,10 @@ class TurnManager {
       if (skillCmp != 0) return skillCmp;
       final moraleCmp = y.morale.compareTo(x.morale);
       if (moraleCmp != 0) return moraleCmp;
-      return x.action.actor.id.compareTo(y.action.actor.id);
+      final idCmp = x.action.actor.id.compareTo(y.action.actor.id);
+      if (idCmp != 0) return idCmp;
+      // Ultimate tiebreaker: original position in normalized input order
+      return x.originalIndex.compareTo(y.originalIndex);
     });
 
     return slots.map((s) => s.action).toList();
@@ -69,11 +88,12 @@ class TurnManager {
 
 class _Slot {
   final Action action;
+  final int originalIndex; // For deterministic tiebreaker across platforms
 
   int get speed => action.actor.effectiveSpeed;
   int get hp => action.actor.hp;
   int get skill => action.actor.skill;
   int get morale => action.actor.morale;
 
-  _Slot({required this.action});
+  _Slot({required this.action, required this.originalIndex});
 }
