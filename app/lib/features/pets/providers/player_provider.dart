@@ -121,6 +121,31 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
     _persist();
   }
 
+  /// Create a new team composition directly from a name and pet UIDs.
+  void createTeamComposition(String name, List<String> petUids) {
+    assert(petUids.length == 3, 'Team must have exactly 3 pets');
+    final newTeam = TeamComposition(
+      id: _uuid.v4(),
+      name: name,
+      petUids: petUids,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    state = state.copyWith(savedTeams: [...state.savedTeams, newTeam]);
+    _persist();
+  }
+
+  /// Replace the pets and/or name of an existing saved team composition.
+  void updateTeamComposition(String teamId, String name, List<String> petUids) {
+    assert(petUids.length == 3, 'Team must have exactly 3 pets');
+    final updated = state.savedTeams.map((t) {
+      if (t.id != teamId) return t;
+      return t.copyWith(name: name, petUids: petUids, updatedAt: DateTime.now());
+    }).toList();
+    state = state.copyWith(savedTeams: updated);
+    _persist();
+  }
+
   // ── Pet management ─────────────────────────────────────────────────────────
 
   void addPet(OwnedPet pet) {

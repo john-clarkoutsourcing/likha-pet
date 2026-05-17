@@ -244,10 +244,18 @@ class InteractiveBattleEngine {
     final resolver = ActionResolver(logger, rng: _critRng);
 
     if (!action.actor.isFainted) {
-      if (action.actor.isStunned) {
-        logger.stunSkip(action.actor.name);
-        action.actor.debuffs.removeWhere((d) => d.type == DebuffType.stunned);
-      } else {
+        if (action.actor.isStunned || action.actor.isFeared || action.actor.isDisabled) {
+          if (action.actor.isStunned) {
+            logger.stunSkip(action.actor.name);
+            action.actor.removeDebuff(DebuffType.stunned);
+          } else if (action.actor.isFeared) {
+            logger.debuff(action.actor.name, 'fear', 0, 1);
+            action.actor.removeDebuff(DebuffType.fear);
+          } else {
+            logger.debuff(action.actor.name, 'disabled', 0, 1);
+            action.actor.removeDebuff(DebuffType.disabled);
+          }
+        } else {
         final petId = action.actor.id;
         final comboIndex = _roundComboCount[petId] ?? 0;
         _roundComboCount[petId] = comboIndex + 1;

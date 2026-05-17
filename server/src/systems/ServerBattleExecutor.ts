@@ -145,8 +145,13 @@ export class ServerBattleExecutor {
     for (const { pet, team } of allPets) {
       if (pet.isFainted) continue;
 
-      // Check if stunned
-      if (pet.statusEffects.some(s => s.name === 'stun')) continue;
+      // Check if stunned / feared / disabled.
+      if (pet.statusEffects.some(s => s.name === 'stun' || s.name === 'fear' || s.name === 'disabled')) {
+        pet.statusEffects = pet.statusEffects.filter(s =>
+          s.name !== 'stun' && s.name !== 'fear' && s.name !== 'disabled',
+        );
+        continue;
+      }
 
       const selections = team === 'A' ? playerASelections : playerBSelections;
       const selectedCards = (selections[pet.uid] ?? []) as string[];
@@ -174,17 +179,21 @@ export class ServerBattleExecutor {
         // ── Offensive ───────────────────────────────────────────────────────
         case 'damage':
         case 'aoe': {
-          const enemy = enemyTeam.find(p => !p.isFainted);
-          if (!enemy) continue;
+           const enemy = this._selectTarget(enemyTeam);
+           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           const base = effectValue > 0 ? effectValue + rng.nextInt(8) - 4 : 30 + rng.nextInt(8) - 4;
           damage = Math.max(1, base - Math.floor((enemy.def ?? 0) / 3));
           // Class bonus: +15% or -15% based on speed (simplified)
-          const shieldAbsorb = Math.min(enemy.shield, damage);
-          enemy.shield -= shieldAbsorb;
-          enemy.hp = Math.max(0, enemy.hp - (damage - shieldAbsorb));
-          if (enemy.hp <= 0) enemy.isFainted = true;
+           const ignoreShield = enemy.statusEffects.some(s => s.name === 'sleep');
+           const shieldAbsorb = ignoreShield ? 0 : Math.min(enemy.shield, damage);
+           enemy.shield -= shieldAbsorb;
+           enemy.hp = Math.max(0, enemy.hp - (damage - shieldAbsorb));
+           if (enemy.hp <= 0) enemy.isFainted = true;
+           if (ignoreShield) {
+             enemy.statusEffects = enemy.statusEffects.filter(s => s.name !== 'sleep');
+           }
           if (cardFx.lifeSteal) {
             const actual = Math.max(0, damage - shieldAbsorb);
             if (actual > 0) {
@@ -203,11 +212,17 @@ export class ServerBattleExecutor {
               }
             }
           }
+          const reflect = enemy.statusEffects.find(s => s.name === 'reflect');
+          if (reflect && pet.hp > 0) {
+            const reflected = Math.max(1, Math.min(90, Math.round(damage * ((reflect.magnitude ?? 0) / 100))));
+            pet.hp = Math.max(0, pet.hp - reflected);
+            if (pet.hp <= 0) pet.isFainted = true;
+          }
           break;
         }
         case 'shieldBreak': {
-          const enemy = enemyTeam.find(p => !p.isFainted);
-          if (!enemy) continue;
+           const enemy = this._selectTarget(enemyTeam);
+           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           enemy.shield = 0;
@@ -220,8 +235,8 @@ export class ServerBattleExecutor {
         // ── Status debuffs ───────────────────────────────────────────────────
         case 'poison':
         case 'stench': {
-          const enemy = enemyTeam.find(p => !p.isFainted);
-          if (!enemy) continue;
+           const enemy = this._selectTarget(enemyTeam);
+           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           const mag = effectValue > 0 ? effectValue : 15;
@@ -238,8 +253,8 @@ export class ServerBattleExecutor {
           break;
         }
         case 'burn': {
-          const enemy = enemyTeam.find(p => !p.isFainted);
-          if (!enemy) continue;
+           const enemy = this._selectTarget(enemyTeam);
+           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           const mag = effectValue > 0 ? effectValue : 15;
@@ -251,7 +266,7 @@ export class ServerBattleExecutor {
           break;
         }
         case 'stun': {
-          const enemy = enemyTeam.find(p => !p.isFainted);
+          const enemy = this._selectTarget(enemyTeam);
           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
@@ -262,11 +277,20 @@ export class ServerBattleExecutor {
         case 'debuff':
         case 'atk_down':
         case 'def_down':
-        case 'spd_down': {
-          const enemy = targetPref === 'self' || targetPref === 'ally'
-            ? selfOrAllyTarget
-            : enemyTeam.find(p => !p.isFainted);
-          if (!enemy) continue;
+        case 'spd_down':
+        case 'sleep':
+        case 'fear':
+        case 'aroma':
+        case 'chill':
+        case 'jinx':
+        case 'heal_block':
+        case 'crit_block':
+        case 'disabled':
+        case 'reflect': {
+           const enemy = targetPref === 'self' || targetPref === 'ally'
+             ? selfOrAllyTarget
+             : this._selectTarget(enemyTeam);
+           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           const debuffName = cardFx.debuffType ?? effectType;
@@ -286,6 +310,9 @@ export class ServerBattleExecutor {
           const targetPet = targetPref === 'self' || targetPref === 'ally'
             ? selfOrAllyTarget
             : pet;
+          if (targetPet.statusEffects.some(s => s.name === 'heal_block')) {
+            break;
+          }
           targetPet.hp = Math.min(targetPet.maxHp, targetPet.hp + healAmount);
           actionTarget = targetPet;
           actionTargetTeam = team;
@@ -323,8 +350,8 @@ export class ServerBattleExecutor {
 
         // ── Default: treat as damage ─────────────────────────────────────────
         default: {
-          const enemy = enemyTeam.find(p => !p.isFainted);
-          if (!enemy) continue;
+           const enemy = this._selectTarget(enemyTeam);
+           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           const base = effectValue > 0 ? effectValue + rng.nextInt(6) - 3 : 30 + rng.nextInt(6) - 3;
@@ -397,5 +424,14 @@ export class ServerBattleExecutor {
         return Math.floor(this.next() * max);
       },
     };
+  }
+
+  private _selectTarget(team: PetState[]): PetState | null {
+    const alive = team.filter((p) => !p.isFainted);
+    if (alive.length === 0) return null;
+    const aroma = alive.find((p) => p.statusEffects.some((s) => s.name === 'aroma'));
+    if (aroma) return aroma;
+    const visible = alive.find((p) => !p.statusEffects.some((s) => s.name === 'stench'));
+    return visible ?? alive[0];
   }
 }

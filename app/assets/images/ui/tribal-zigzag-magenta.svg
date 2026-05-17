@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 48" width="240" height="48" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="zzMag" x="0" y="0" width="48" height="48" patternUnits="userSpaceOnUse">
+      <rect width="48" height="48" fill="#1a0a14"/>
+      <polygon points="0,48 24,24 48,48" fill="#3d1228" stroke="#f5a8d3" stroke-width="1" stroke-opacity="0.5"/>
+      <polygon points="12,48 24,36 36,48" fill="#e85aa8" fill-opacity="0.75"/>
+      <circle cx="24" cy="30" r="2" fill="#ffc9e4"/>
+      <polygon points="0,0 12,12 0,24" fill="#ffc9e4" fill-opacity="0.28"/>
+      <polygon points="48,0 36,12 48,24" fill="#ffc9e4" fill-opacity="0.28"/>
+    </pattern>
+  </defs>
+  <rect width="240" height="48" fill="url(#zzMag)"/>
+</svg>

@@ -50,6 +50,7 @@ class Pet {
   int hp;
   int shield;
   bool isFainted;
+  int lastStandTicks = 0;
 
   EnergyPool? _pool;
   int _ownEnergy;
@@ -115,7 +116,18 @@ class Pet {
   bool get isStunned  => debuffs.any((d) => d.type == DebuffType.stunned);
   bool get isPoisoned => debuffs.any((d) => d.type == DebuffType.poisoned);
   bool get isBurned   => debuffs.any((d) => d.type == DebuffType.burned);
+  bool get isAsleep   => debuffs.any((d) => d.type == DebuffType.sleep);
+  bool get isFeared   => debuffs.any((d) => d.type == DebuffType.fear);
+  bool get isAromatized => debuffs.any((d) => d.type == DebuffType.aroma);
+  bool get isChilled  => debuffs.any((d) => d.type == DebuffType.chill);
+  bool get isJinxed   => debuffs.any((d) => d.type == DebuffType.jinx);
+  bool get isHealBlocked => debuffs.any((d) => d.type == DebuffType.healBlocked);
+  bool get isCritBlocked => debuffs.any((d) => d.type == DebuffType.critBlocked);
+  bool get isDisabled => debuffs.any((d) => d.type == DebuffType.disabled);
+  bool get isReflecting => debuffs.any((d) => d.type == DebuffType.reflect);
   bool get isStenched => debuffs.any((d) => d.type == DebuffType.stench);
+  bool get isInLastStand => lastStandTicks > 0;
+  bool get canEnterLastStand => !isChilled;
 
   // ── Energy helpers ─────────────────────────────────────────────────────────
 
@@ -180,6 +192,15 @@ class Pet {
     debuffs.removeWhere((d) => d.roundsRemaining <= 0);
     buffs.removeWhere((b) => b.roundsRemaining <= 0);
 
+    if (lastStandTicks > 0) {
+      lastStandTicks--;
+      if (lastStandTicks <= 0) {
+        lastStandTicks = 0;
+        hp = 0;
+        isFainted = true;
+      }
+    }
+
     for (final t in traits) {
       t.tickCooldown();
     }
@@ -220,6 +241,15 @@ class Pet {
   int takeDamage(int finalDamage, {bool ignoreShield = false}) {
     if (isFainted) return 0;
 
+    if (lastStandTicks > 0) {
+      lastStandTicks = (lastStandTicks - 1).clamp(0, 999);
+      if (lastStandTicks <= 0) {
+        hp = 0;
+        isFainted = true;
+      }
+      return finalDamage.clamp(1, 999);
+    }
+
     int remaining = finalDamage.clamp(1, 999);
 
     if (!ignoreShield && shield > 0) {
@@ -231,14 +261,19 @@ class Pet {
     final actual = remaining.clamp(0, 999);
     hp -= actual;
     if (hp <= 0) {
-      hp = 0;
-      isFainted = true;
+      if (canEnterLastStand) {
+        hp = 1;
+        lastStandTicks = _computeLastStandTicks();
+      } else {
+        hp = 0;
+        isFainted = true;
+      }
     }
     return actual;
   }
 
   void receiveHealing(int amount) {
-    if (isFainted) return;
+    if (isFainted || isHealBlocked) return;
     hp = (hp + amount).clamp(0, maxHp);
   }
 
@@ -272,6 +307,10 @@ class Pet {
     debuffs.add(StatusEffect(type: type, value: value, roundsRemaining: duration));
   }
 
+  void removeDebuff(DebuffType type) {
+    debuffs.removeWhere((d) => d.type == type);
+  }
+
   // ── Trait selection: return the best available trait, or null ─────────────
 
   Trait? selectTrait() {
@@ -287,4 +326,9 @@ class Pet {
 
   // Expose own energy for PetSnapshot serialization (pool energy read via getter)
   int get ownEnergy => _ownEnergy;
+
+  int _computeLastStandTicks() {
+    final ticks = 1 + (morale ~/ 15);
+    return ticks.clamp(1, 3);
+  }
 }

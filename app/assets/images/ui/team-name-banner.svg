@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 96" width="480" height="96">
+  <defs>
+    <linearGradient id="parchG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#dfeaf5"/>
+      <stop offset="100%" stop-color="#a8c9e0"/>
+    </linearGradient>
+  </defs>
+  <!-- shadow -->
+  <rect x="6" y="14" width="468" height="74" rx="14" fill="#050810" opacity="0.55"/>
+  <!-- outer border -->
+  <rect x="6" y="6" width="468" height="78" rx="14" fill="#0a1224"/>
+  <!-- inner parchment -->
+  <rect x="12" y="12" width="456" height="66" rx="10" fill="url(#parchG)" stroke="#1f2c47" stroke-width="2"/>
+  <!-- subtle map texture splotches -->
+  <g fill="#5b7aa8" opacity="0.25">
+    <ellipse cx="60" cy="32" rx="22" ry="6"/>
+    <ellipse cx="430" cy="60" rx="28" ry="8"/>
+    <ellipse cx="220" cy="64" rx="36" ry="5"/>
+    <circle cx="100" cy="58" r="3"/>
+    <circle cx="380" cy="22" r="2.5"/>
+  </g>
+  <!-- top inner highlight -->
+  <rect x="22" y="16" width="436" height="3" rx="1.5" fill="#ffffff" opacity="0.55"/>
+</svg>

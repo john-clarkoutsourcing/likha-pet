@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="gearGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- outer dark disc -->
+  <circle cx="32" cy="32" r="28" fill="#0a1224" stroke="#1f2c47" stroke-width="2"/>
+  <circle cx="32" cy="32" r="24" fill="#2a3a5c"/>
+  <!-- gear shape -->
+  <g filter="url(#gearGlow)">
+    <g fill="#7fe3f5" stroke="#0a1224" stroke-width="1.5" stroke-linejoin="round">
+      <path d="M32 12 L36 18 L40 14 L44 18 L42 24 L48 24 L52 30 L48 36 L52 40 L48 44 L42 42 L42 48 L36 50 L32 46 L28 50 L22 48 L22 42 L16 42 L12 38 L16 32 L12 26 L16 22 L22 24 L22 18 L28 14 L32 12 Z"/>
+    </g>
+    <circle cx="32" cy="32" r="7" fill="#0a1224" stroke="#7fe3f5" stroke-width="2"/>
+    <circle cx="32" cy="32" r="3" fill="#7fe3f5"/>
+  </g>
+</svg>

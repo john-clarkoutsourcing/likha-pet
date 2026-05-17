@@ -51,13 +51,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final player = ref.watch(playerProvider);
     final userEmail = ref.watch(userEmailProvider) ?? 'qiqapi@likha.pet';
     final playerName = userEmail.split('@').first;
+    final mediaQuery = MediaQuery.of(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFF050810),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final size = Size(constraints.maxWidth, constraints.maxHeight);
-          final isCompact = size.width < 980;
+          final layout = _HomeLayoutMetrics.fromView(
+            screenSize: size,
+            safePadding: mediaQuery.padding,
+          );
 
           return Stack(
             fit: StackFit.expand,
@@ -80,10 +84,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ),
               CustomPaint(painter: _FireflyPainter(animation: _sceneController)),
-              _buildTeamFormation(player, size, isCompact),
-              _buildTopCluster(playerName, size, isCompact),
-              _buildRightTotem(player, size, isCompact),
-              _buildBottomLeftNav(size, isCompact),
+              Positioned.fromRect(
+                rect: layout.contentRect,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    _buildTeamFormation(player, layout),
+                    _buildTopCluster(playerName, layout),
+                    _buildRightTotem(player, layout),
+                    _buildBottomLeftNav(layout),
+                  ],
+                ),
+              ),
             ],
           );
         },
@@ -91,15 +103,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildTopCluster(String playerName, Size size, bool isCompact) {
-    final nameplateWidth = size.width * (isCompact ? 0.40 : 0.29);
-    final nameplateHeight = size.height * (isCompact ? 0.11 : 0.08);
-    final topInset = size.height * 0.045;
+  Widget _buildTopCluster(String playerName, _HomeLayoutMetrics layout) {
+    final size = layout.contentSize;
+    final leftRegionWidth =
+        size.width - layout.totemWidth - layout.horizontalGap * 2;
+    final nameplateLeft = size.width * 0.02;
+    final topInset = size.height * 0.02;
+    final nameplateWidth = (leftRegionWidth * (layout.isMobile ? 0.54 : 0.50))
+        .clamp(170.0, 430.0);
+    final nameplateHeight = (size.height *
+            (layout.isMobile ? 0.08 : (layout.isCompact ? 0.095 : 0.082)))
+        .clamp(44.0, 84.0);
+    final questSize = (layout.isMobile ? 52.0 : (layout.isCompact ? 62.0 : 70.0));
+    final questLeft = math.min(
+      leftRegionWidth - questSize,
+      nameplateLeft + nameplateWidth + layout.horizontalGap,
+    );
+    final energyTop = topInset + nameplateHeight + size.height * 0.018;
 
     return Stack(
       children: [
         Positioned(
-          left: size.width * 0.042,
+          left: nameplateLeft,
           top: topInset,
           child: _AssetFrame(
             assetPath: 'assets/images/ui/nameplate.svg',
@@ -114,7 +139,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _displayStyle(
-                    fontSize: isCompact ? 24 : 28,
+                    fontSize: layout.isCompact ? 24 : 28,
                     glow: true,
                   ),
                 ),
@@ -123,30 +148,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
         ),
         Positioned(
-          left: size.width * 0.055,
-          top: size.height * 0.15,
-          child: _EnergyChip(isCompact: isCompact),
+          left: nameplateLeft + size.width * 0.01,
+          top: energyTop,
+          child: _EnergyChip(
+            isCompact: layout.isCompact,
+            isMobile: layout.isMobile,
+          ),
         ),
         Positioned(
-          left: size.width * (isCompact ? 0.43 : 0.36),
+          left: questLeft,
           top: topInset,
           child: _QuestButton(
             onTap: () => context.push(Routes.library),
-            size: isCompact ? 62 : 70,
+            size: questSize,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildRightTotem(PlayerData player, Size size, bool isCompact) {
-    final width = (size.width * (isCompact ? 0.33 : 0.22)).clamp(210.0, 360.0);
-    final height = size.height * (isCompact ? 0.90 : 0.95);
+  Widget _buildRightTotem(PlayerData player, _HomeLayoutMetrics layout) {
+    final size = layout.contentSize;
+    final width = layout.totemWidth;
+    final height = layout.totemHeight;
     final canQuickBattle = player.hasFullTeam;
 
     return Positioned(
-      right: size.width * 0.015,
-      top: size.height * 0.03,
+      right: 0,
+      top: size.height * (layout.isMobile ? 0.01 : 0.005),
       width: width,
       height: height,
       child: _AssetFrame(
@@ -156,9 +185,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             width * 0.12,
-            height * 0.11,
+            height * (layout.isMobile ? 0.13 : 0.11),
             width * 0.12,
-            height * 0.07,
+            height * (layout.isMobile ? 0.08 : 0.07),
           ),
           child: Stack(
             children: [
@@ -167,6 +196,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 children: [
                   _PvpBanner(
                     width: width * 0.82,
+                    compact: layout.isMobile,
                     onTap: () => context.push(Routes.pvpQueue),
                   ),
                   SizedBox(height: height * 0.035),
@@ -175,6 +205,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     label: 'ADVENTURE',
                     icon: Icons.flag,
                     width: width * 0.82,
+                    compact: layout.isMobile,
                     onTap: () => context.push(Routes.worldMap),
                   ),
                   SizedBox(height: height * 0.02),
@@ -183,6 +214,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     label: 'ARENA',
                     icon: Icons.sports_martial_arts,
                     width: width * 0.82,
+                    compact: layout.isMobile,
                     onTap: canQuickBattle
                         ? () => context.push(
                               Routes.battle,
@@ -195,8 +227,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                   const Spacer(),
                   _TotemFooter(
-                    iconSize: isCompact ? 18 : 20,
-                    tileSize: isCompact ? 42 : 46,
+                    iconSize: layout.isMobile ? 14 : (layout.isCompact ? 18 : 20),
+                    tileSize: layout.isMobile ? 34 : (layout.isCompact ? 42 : 46),
                     onRankTap: () => context.push(Routes.pvpQueue),
                     onNewsTap: () => context.push(Routes.library),
                     onProfileTap: () => context.push(Routes.roster),
@@ -216,25 +248,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildBottomLeftNav(Size size, bool isCompact) {
-    final buttonSize = isCompact ? 84.0 : 96.0;
+  Widget _buildBottomLeftNav(_HomeLayoutMetrics layout) {
+    final buttonSize = layout.navButtonSize;
+    final gap = layout.horizontalGap;
 
     return Positioned(
-      left: size.width * 0.02,
-      bottom: size.height * 0.025,
+      left: 0,
+      bottom: 0,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           _NavAssetButton(
-            label: 'PETS',
-            icon: Icons.pets,
+            label: 'MY PETS',
+            svgIcon: 'assets/images/ui/pets.svg',
+            svgColorFilter: const ColorFilter.mode(
+              Color(0xFF7FE3F5), BlendMode.srcIn),
             size: buttonSize,
             onTap: () => context.push(Routes.roster),
           ),
-          SizedBox(width: size.width * 0.014),
+          SizedBox(width: gap),
+          _NavAssetButton(
+            label: 'MY TEAMS',
+            svgIcon: 'assets/images/ui/teams-icon.svg',
+            size: buttonSize,
+            onTap: () => context.push(Routes.teamManager),
+          ),
+          SizedBox(width: gap),
           _NavAssetButton(
             label: 'TRAITS',
-            icon: Icons.shield,
+            svgIcon: 'assets/images/ui/traits-icon.svg',
             size: buttonSize,
             onTap: () => context.push(Routes.library),
           ),
@@ -243,17 +285,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildTeamFormation(PlayerData player, Size size, bool isCompact) {
+  Widget _buildTeamFormation(PlayerData player, _HomeLayoutMetrics layout) {
+    final size = layout.contentSize;
     final team = _resolveActiveTeam(player);
-
-    final formationHeight = size.height * (isCompact ? 0.52 : 0.58);
-    final formationWidth = size.width * (isCompact ? 0.62 : 0.58);
+    final leftRegionWidth =
+        size.width - layout.totemWidth - layout.horizontalGap * 2;
+    final maxHeight = size.height -
+        layout.navRowHeight -
+        layout.horizontalGap * 1.7 -
+        size.height * (layout.isMobile ? 0.18 : 0.14);
+    final formationHeight = math.min(
+      size.height * (layout.isMobile ? 0.36 : (layout.isCompact ? 0.50 : 0.56)),
+      maxHeight,
+    );
+    final formationWidth = math.min(
+      leftRegionWidth,
+      size.width * (layout.isMobile ? 0.66 : (layout.isCompact ? 0.62 : 0.60)),
+    );
     final baseSize =
-        (formationHeight * (isCompact ? 0.50 : 0.56)).clamp(150.0, 340.0);
+        (formationHeight *
+                (layout.isMobile ? 0.60 : (layout.isCompact ? 0.56 : 0.60)))
+            .clamp(layout.isMobile ? 120.0 : 180.0, layout.isMobile ? 170.0 : 360.0);
+    final leftOne = layout.isMobile ? 0.00 : 0.04;
+    final leftTwo = layout.isMobile ? 0.24 : 0.24;
+    final leftThree = layout.isMobile ? 0.49 : 0.47;
 
     return Positioned(
-      left: size.width * 0.01,
-      bottom: size.height * (isCompact ? 0.19 : 0.21),
+      left: 0,
+      bottom: layout.navRowHeight + layout.horizontalGap * 1.5,
       width: formationWidth,
       height: formationHeight,
       child: Stack(
@@ -261,9 +320,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _PetActor(
             pet: team[0],
             label: 'FRONT',
-            size: baseSize * 0.9,
-            left: formationWidth * 0.09,
-            bottom: formationHeight * 0.02,
+            size: baseSize * 0.94,
+            left: formationWidth * leftOne,
+            bottom: formationHeight * 0.01,
             animation: _sceneController,
             phase: 0.4,
           ),
@@ -271,8 +330,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             pet: team[1],
             label: 'MID',
             size: baseSize,
-            left: formationWidth * 0.29,
-            bottom: formationHeight * 0.01,
+            left: formationWidth * leftTwo,
+            bottom: formationHeight * 0.0,
             animation: _sceneController,
             phase: 1.0,
             isHero: true,
@@ -280,9 +339,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _PetActor(
             pet: team[2],
             label: 'BACK',
-            size: baseSize * 0.9,
-            left: formationWidth * 0.49,
-            bottom: formationHeight * 0.02,
+            size: baseSize * 0.94,
+            left: formationWidth * leftThree,
+            bottom: formationHeight * 0.01,
             animation: _sceneController,
             phase: 1.6,
           ),
@@ -312,6 +371,77 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     return team;
   }
+}
+
+class _HomeLayoutMetrics {
+  final Size screenSize;
+  final EdgeInsets safePadding;
+  final Rect contentRect;
+  final bool isCompact;
+  final bool isMobile;
+  final double scale;
+
+  const _HomeLayoutMetrics({
+    required this.screenSize,
+    required this.safePadding,
+    required this.contentRect,
+    required this.isCompact,
+    required this.isMobile,
+    required this.scale,
+  });
+
+  factory _HomeLayoutMetrics.fromView({
+    required Size screenSize,
+    required EdgeInsets safePadding,
+  }) {
+    final usableWidth = screenSize.width - safePadding.horizontal;
+    final usableHeight = screenSize.height - safePadding.vertical;
+    final horizontalInset = math.max(12.0, usableWidth * 0.018);
+    final verticalInset = math.max(10.0, usableHeight * 0.02);
+    final contentRect = Rect.fromLTWH(
+      safePadding.left + horizontalInset,
+      safePadding.top + verticalInset,
+      usableWidth - (horizontalInset * 2),
+      usableHeight - (verticalInset * 2),
+    );
+    final shortestSide = math.min(contentRect.width, contentRect.height);
+    final isMobile = contentRect.width < 760 || shortestSide < 520;
+    final isCompact = contentRect.width < 1100;
+    final scale = math.min(contentRect.width / 1600, contentRect.height / 900)
+        .clamp(0.55, 1.2);
+
+    return _HomeLayoutMetrics(
+      screenSize: screenSize,
+      safePadding: safePadding,
+      contentRect: contentRect,
+      isCompact: isCompact,
+      isMobile: isMobile,
+      scale: scale,
+    );
+  }
+
+  Size get contentSize => contentRect.size;
+
+  double get horizontalGap =>
+      (contentSize.width * (isMobile ? 0.018 : 0.014)).clamp(8.0, 18.0);
+
+  double get totemWidth =>
+      (isMobile ? contentSize.width * 0.29 : contentSize.width * 0.22)
+          .clamp(isMobile ? 148.0 : 220.0, isMobile ? 188.0 : 360.0);
+
+  double get totemHeight => math.min(
+        contentSize.height * (isMobile ? 0.66 : 0.94),
+        contentSize.height,
+      );
+
+  double get navButtonSize =>
+      (isMobile ? contentSize.width * 0.13 : contentSize.width * 0.078)
+          .clamp(56.0, 88.0);
+
+  double get navLabelHeight =>
+      navButtonSize < 75 ? 14.0 : (navButtonSize < 90 ? 16.0 : 18.0);
+
+  double get navRowHeight => navButtonSize + navLabelHeight + 8;
 }
 
 class _FireflyPainter extends CustomPainter {
@@ -495,13 +625,14 @@ class _QuestButton extends StatelessWidget {
 
 class _EnergyChip extends StatelessWidget {
   final bool isCompact;
+  final bool isMobile;
 
-  const _EnergyChip({required this.isCompact});
+  const _EnergyChip({required this.isCompact, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
-    final chipWidth = isCompact ? 108.0 : 118.0;
-    final chipHeight = isCompact ? 40.0 : 44.0;
+    final chipWidth = isMobile ? 96.0 : (isCompact ? 108.0 : 118.0);
+    final chipHeight = isMobile ? 36.0 : (isCompact ? 40.0 : 44.0);
 
     return SizedBox(
       width: chipWidth,
@@ -552,9 +683,14 @@ class _EnergyChip extends StatelessWidget {
 
 class _PvpBanner extends StatelessWidget {
   final double width;
+  final bool compact;
   final VoidCallback onTap;
 
-  const _PvpBanner({required this.width, required this.onTap});
+  const _PvpBanner({
+    required this.width,
+    required this.compact,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -577,9 +713,16 @@ class _PvpBanner extends StatelessWidget {
             ),
             Positioned(
               top: width * 0.52,
-              child: Text(
-                'PVP Arena',
-                style: _displayStyle(fontSize: width < 170 ? 16 : 18),
+              left: width * 0.13,
+              right: width * 0.13,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'PVP Arena',
+                  style: _displayStyle(
+                    fontSize: compact ? 13 : (width < 170 ? 16 : 18),
+                  ),
+                ),
               ),
             ),
             Positioned(
@@ -612,6 +755,7 @@ class _TotemButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final double width;
+  final bool compact;
   final VoidCallback onTap;
 
   const _TotemButton({
@@ -619,6 +763,7 @@ class _TotemButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.width,
+    required this.compact,
     required this.onTap,
   });
 
@@ -640,15 +785,24 @@ class _TotemButton extends StatelessWidget {
                 Icon(
                   icon,
                   color: Colors.white,
-                  size: width * 0.12,
+                  size: compact ? width * 0.11 : width * 0.12,
                   shadows: const [
                     Shadow(color: Color(0xAA0A1224), blurRadius: 8),
                   ],
                 ),
                 SizedBox(width: width * 0.04),
-                Text(
-                  label,
-                  style: _displayStyle(fontSize: width < 200 ? 17 : 19, glow: true),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: _displayStyle(
+                        fontSize: compact ? 14 : (width < 200 ? 17 : 19),
+                        glow: true,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -806,21 +960,28 @@ class _RuneColumn extends StatelessWidget {
 }
 
 class _NavAssetButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final double size;
-  final VoidCallback onTap;
+  final String        label;
+  final IconData?     icon;
+  final String?       svgIcon;
+  final ColorFilter?  svgColorFilter;
+  final double        size;
+  final VoidCallback  onTap;
 
   const _NavAssetButton({
     required this.label,
-    required this.icon,
     required this.size,
     required this.onTap,
-  });
+    this.icon,
+    this.svgIcon,
+    this.svgColorFilter,
+  }) : assert(icon != null || svgIcon != null,
+            'Provide either icon or svgIcon');
 
   @override
   Widget build(BuildContext context) {
-    final labelHeight = size < 90 ? 16.0 : 18.0;
+    final labelHeight = size < 75 ? 14.0 : (size < 90 ? 16.0 : 18.0);
+    final runeSize    = size < 75 ? 9.0 : 11.0;
+    final iconArea    = size * (svgIcon != null ? 0.52 : 0.34);
 
     return GestureDetector(
       onTap: onTap,
@@ -842,37 +1003,49 @@ class _NavAssetButton extends StatelessWidget {
                     ),
                   ),
                   Positioned(
-                    top: 7,
-                    left: 8,
+                    top: 6,
+                    left: 7,
                     child: SvgPicture.asset(
                       'assets/images/ui/rune-swirl.svg',
-                      width: 11,
-                      height: 11,
+                      width: runeSize,
+                      height: runeSize,
                     ),
                   ),
                   Positioned(
-                    top: 7,
-                    right: 8,
+                    top: 6,
+                    right: 7,
                     child: Transform(
                       alignment: Alignment.center,
-                      transform: Matrix4.identity()..scale(-1.0, 1.0),
+                      transform: Matrix4.identity()..scaleByDouble(-1.0, 1.0, 1.0, 1.0),
                       child: SvgPicture.asset(
                         'assets/images/ui/rune-swirl.svg',
-                        width: 11,
-                        height: 11,
+                        width: runeSize,
+                        height: runeSize,
                       ),
                     ),
                   ),
                   Center(
-                    child: Icon(
-                      icon,
-                      color: const Color(0xFF7FE3F5),
-                      size: size * 0.34,
-                      shadows: const [
-                        Shadow(color: Color(0xAA00E5FF), blurRadius: 12),
-                        Shadow(color: Color(0xAA4AC4D9), blurRadius: 22),
-                      ],
-                    ),
+                    child: svgIcon != null
+                        ? SvgPicture.asset(
+                            svgIcon!,
+                            width:       iconArea,
+                            height:      iconArea,
+                            fit:         BoxFit.contain,
+                            colorFilter: svgColorFilter,
+                          )
+                        : Icon(
+                            icon!,
+                            color: const Color(0xFF7FE3F5),
+                            size: iconArea,
+                            shadows: const [
+                              Shadow(
+                                  color: Color(0xAA00E5FF),
+                                  blurRadius: 12),
+                              Shadow(
+                                  color: Color(0xAA4AC4D9),
+                                  blurRadius: 22),
+                            ],
+                          ),
                   ),
                 ],
               ),
@@ -885,7 +1058,8 @@ class _NavAssetButton extends StatelessWidget {
                 child: Text(
                   label,
                   maxLines: 1,
-                  style: _displayStyle(fontSize: size < 90 ? 14 : 16),
+                  style: _displayStyle(
+                      fontSize: size < 75 ? 11 : (size < 90 ? 13 : 15)),
                 ),
               ),
             ),
@@ -964,26 +1138,46 @@ class _PetActor extends StatelessWidget {
                 if (pet != null)
                   Positioned(
                     bottom: size * 0.06,
-                    child: Container(
-                      width: size * (isHero ? 0.7 : 0.66),
-                      height: size * (isHero ? 0.7 : 0.66),
-                      decoration: BoxDecoration(
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xAA4AC4D9).withValues(alpha: 0.38),
-                            blurRadius: 26,
+                    child: SizedBox(
+                      width: size * (isHero ? 0.82 : 0.76),
+                      height: size * (isHero ? 0.82 : 0.76),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: size * (isHero ? 0.38 : 0.32),
+                            height: size * (isHero ? 0.38 : 0.32),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFF00E5FF)
+                                  .withValues(alpha: 0.10 * pulse),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF00E5FF)
+                                      .withValues(alpha: 0.55 * pulse),
+                                  blurRadius: 55,
+                                  spreadRadius: 22,
+                                ),
+                                BoxShadow(
+                                  color: const Color(0xFF4AC4D9)
+                                      .withValues(alpha: 0.30 * pulse),
+                                  blurRadius: 90,
+                                  spreadRadius: 36,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()..scaleByDouble(-1.0, 1.0, 1.0, 1.0),
+                            child: PetRendererWidget.fromOwned(
+                              pet!,
+                              size: size * 0.76,
+                              figScale: 0.25,
+                              animation: 'action/idle/normal',
+                            ),
                           ),
                         ],
-                      ),
-                      child: Transform(
-                        alignment: Alignment.center,
-                        transform: Matrix4.identity()..scale(-1.0, 1.0),
-                        child: PetRendererWidget.fromOwned(
-                          pet!,
-                          size: size * 0.68,
-                          figScale: 0.25,
-                          animation: 'action/idle/normal',
-                        ),
                       ),
                     ),
                   )

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="traitsGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.2"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="shieldFill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1f2c47"/>
+      <stop offset="100%" stop-color="#0a1224"/>
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#traitsGlow)">
+    <!-- shield body -->
+    <path d="M 32 6 L 54 14 V 30 C 54 44, 44 54, 32 58 C 20 54, 10 44, 10 30 V 14 Z"
+          fill="url(#shieldFill)" stroke="#7fe3f5" stroke-width="2.2" stroke-linejoin="round"/>
+
+    <!-- inner shield ring -->
+    <path d="M 32 11 L 49 17 V 30 C 49 41, 41 50, 32 53 C 23 50, 15 41, 15 30 V 17 Z"
+          fill="none" stroke="#4ac4d9" stroke-width="1" stroke-opacity="0.45"/>
+
+    <!-- DNA helix — left strand -->
+    <path d="M 24 17 C 30 22, 30 28, 24 33 C 18 38, 18 44, 24 49"
+          fill="none" stroke="#7fe3f5" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- DNA helix — right strand -->
+    <path d="M 40 17 C 34 22, 34 28, 40 33 C 46 38, 46 44, 40 49"
+          fill="none" stroke="#ffc9e4" stroke-width="2.2" stroke-linecap="round"/>
+
+    <!-- rung 1 (top crossing) cyan attribute dot -->
+    <line x1="26" y1="20" x2="38" y2="20" stroke="#1f2c47" stroke-width="1.2"/>
+    <circle cx="26" cy="20" r="2.4" fill="#7fe3f5" stroke="#0a1224" stroke-width="1"/>
+    <circle cx="38" cy="20" r="2.4" fill="#ffc9e4" stroke="#0a1224" stroke-width="1"/>
+
+    <!-- rung 2 (mid crossing) -->
+    <line x1="28" y1="33" x2="36" y2="33" stroke="#1f2c47" stroke-width="1.2"/>
+    <circle cx="28" cy="33" r="2.6" fill="#e85aa8" stroke="#0a1224" stroke-width="1"/>
+    <circle cx="36" cy="33" r="2.6" fill="#4ac4d9" stroke="#0a1224" stroke-width="1"/>
+
+    <!-- rung 3 (bottom crossing) -->
+    <line x1="26" y1="46" x2="38" y2="46" stroke="#1f2c47" stroke-width="1.2"/>
+    <circle cx="26" cy="46" r="2.4" fill="#ffc9e4" stroke="#0a1224" stroke-width="1"/>
+    <circle cx="38" cy="46" r="2.4" fill="#7fe3f5" stroke="#0a1224" stroke-width="1"/>
+  </g>
+</svg>

@@ -654,6 +654,15 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         case 'poison':
         case 'burn':
         case 'stun':
+        case 'sleep':
+        case 'fear':
+        case 'aroma':
+        case 'chill':
+        case 'jinx':
+        case 'heal_block':
+        case 'crit_block':
+        case 'disabled':
+        case 'reflect':
         case 'stench':
         case 'debuff':
         case 'atk_down':
@@ -701,8 +710,17 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       case 'shieldBreak':
       case 'poison':
       case 'burn':
-      case 'stun':
-      case 'stench':
+        case 'stun':
+        case 'sleep':
+        case 'fear':
+        case 'aroma':
+        case 'chill':
+        case 'jinx':
+        case 'heal_block':
+        case 'crit_block':
+        case 'disabled':
+        case 'reflect':
+        case 'stench':
       case 'debuff':
       case 'atk_down':
       case 'def_down':
@@ -1022,6 +1040,15 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
               DebuffType.poisoned => 'poison',
               DebuffType.burned => 'burn',
               DebuffType.stunned => 'stun',
+              DebuffType.sleep => 'sleep',
+              DebuffType.fear => 'fear',
+              DebuffType.aroma => 'aroma',
+              DebuffType.chill => 'chill',
+              DebuffType.jinx => 'jinx',
+              DebuffType.healBlocked => 'heal_block',
+              DebuffType.critBlocked => 'crit_block',
+              DebuffType.disabled => 'disabled',
+              DebuffType.reflect => 'reflect',
               DebuffType.stench => 'stench',
               DebuffType.attackDown => 'atk_down',
               DebuffType.defenseDown => 'def_down',

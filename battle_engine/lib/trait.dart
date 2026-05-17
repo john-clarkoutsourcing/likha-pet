@@ -88,6 +88,15 @@ enum DebuffType {
   stunned,
   poisoned,
   burned,
+  sleep,
+  fear,
+  aroma,
+  chill,
+  jinx,
+  healBlocked,
+  critBlocked,
+  disabled,
+  reflect,
   stench,
   speedDown
 }

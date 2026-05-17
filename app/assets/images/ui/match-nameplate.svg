@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 72" width="440" height="72">
+  <rect x="4" y="8" width="432" height="60" rx="24" fill="#050810"/>
+  <rect x="4" y="4" width="432" height="60" rx="24" fill="#0a1224"/>
+  <rect x="8" y="8" width="424" height="52" rx="20" fill="#2a3a5c"/>
+  <rect x="18" y="13" width="404" height="42" rx="16" fill="#1f2c47" stroke="#0a1224" stroke-width="2"/>
+  <path d="M 24 50 Q 50 42, 76 50 T 124 50 T 172 50 T 220 50 T 268 50 T 316 50 T 364 50 T 412 50" stroke="#7fc8e0" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <rect x="28" y="9" width="384" height="3" rx="1.5" fill="#5b7aa8" opacity="0.85"/>
+  <!-- end-cap rivets -->
+  <circle cx="14" cy="34" r="3.5" fill="#0a1224"/>
+  <circle cx="426" cy="34" r="3.5" fill="#0a1224"/>
+</svg>

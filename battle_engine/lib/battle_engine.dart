@@ -142,11 +142,17 @@ class BattleEngine {
       for (final action in ordered) {
         if (action.actor.isFainted) continue;
 
-        if (action.actor.isStunned) {
-          _logger.stunSkip(action.actor.name);
-          action.actor.debuffs.removeWhere(
-            (d) => d.type == DebuffType.stunned,
-          );
+        if (action.actor.isStunned || action.actor.isFeared || action.actor.isDisabled) {
+          if (action.actor.isStunned) {
+            _logger.stunSkip(action.actor.name);
+            action.actor.removeDebuff(DebuffType.stunned);
+          } else if (action.actor.isFeared) {
+            _logger.debuff(action.actor.name, 'fear', 0, 1);
+            action.actor.removeDebuff(DebuffType.fear);
+          } else {
+            _logger.debuff(action.actor.name, 'disabled', 0, 1);
+            action.actor.removeDebuff(DebuffType.disabled);
+          }
           continue;
         }
 

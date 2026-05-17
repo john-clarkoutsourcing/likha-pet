@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <defs>
+    <filter id="vsGlowC" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="vsX" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4ac4d9" stop-opacity="0.55"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#e85aa8" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <!-- big X behind VS -->
+  <g opacity="0.85" filter="url(#vsGlowC)">
+    <polygon points="50,40 100,30 270,260 220,270" fill="url(#vsX)"/>
+    <polygon points="270,30 220,40 50,260 100,270" fill="url(#vsX)"/>
+  </g>
+  <!-- VS letters (centered using dominant-baseline) -->
+  <g font-family="Lilita One, Fredoka, sans-serif" font-size="160" font-weight="700" text-anchor="middle" dominant-baseline="central" filter="url(#vsGlowC)">
+    <text x="160" y="170" fill="#ffffff" stroke="#0a1224" stroke-width="8" paint-order="stroke" letter-spacing="-4">VS</text>
+  </g>
+</svg>

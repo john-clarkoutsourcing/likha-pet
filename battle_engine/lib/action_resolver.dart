@@ -52,6 +52,19 @@ class ActionResolver {
     final effect = trait.effect;
 
     if (actor.isFainted) return;
+    if (actor.isStunned || actor.isFeared || actor.isDisabled) {
+      if (actor.isStunned) {
+        log.stunSkip(actor.name);
+        actor.removeDebuff(DebuffType.stunned);
+      } else if (actor.isFeared) {
+        log.debuff(actor.name, 'fear', 0, 1);
+        actor.removeDebuff(DebuffType.fear);
+      } else {
+        log.debuff(actor.name, 'disabled', 0, 1);
+        actor.removeDebuff(DebuffType.disabled);
+      }
+      return;
+    }
 
     // Spend energy and start cooldown before resolving effects so that a pet
     // cannot re-use the same trait if it somehow acts twice in one round.
@@ -75,11 +88,15 @@ class ActionResolver {
           log.noTarget();
           return;
         }
+        final ignoreShield = effect.target == 'enemy' && target.isAsleep;
         final net = _computeDamage(actor, target, effect.value, trait,
             comboIndex: comboIndex);
         final isCrit = _rollCrit(actor, target);
         final dmg = _clamp(isCrit ? net * 2 : net, kMaxSingleHitDamage);
-        final actual = target.takeDamage(dmg);
+        final actual = target.takeDamage(dmg, ignoreShield: ignoreShield);
+        if (target.isAsleep) {
+          target.removeDebuff(DebuffType.sleep);
+        }
         log.damage(target.name, actual, target.hp, isCrit: isCrit);
         if (target.isFainted) log.fainted(target.name);
         // Lifesteal — heal attacker by however much HP the enemy actually lost.
@@ -88,6 +105,20 @@ class ActionResolver {
           final heal = actual.clamp(0, kMaxFlatHealing);
           actor.receiveHealing(heal);
           log.heal(actor.name, heal, actor.hp);
+        }
+        if (target.isReflecting && actual > 0) {
+          final reflect = (actual * (target.debuffs
+                      .where((d) => d.type == DebuffType.reflect)
+                      .firstOrNull
+                      ?.value ?? 0) /
+                  100.0)
+              .round()
+              .clamp(1, kMaxSingleHitDamage);
+          if (reflect > 0 && !actor.isFainted) {
+            final reflected = actor.takeDamage(reflect, ignoreShield: true);
+            log.damage(actor.name, reflected, actor.hp);
+            if (actor.isFainted) log.fainted(actor.name);
+          }
         }
         // Energy steal/drain — runs even if the hit kills the target.
         // steal: enemy loses 1 energy, attacker's team gains 1 energy.
@@ -153,6 +184,7 @@ class ActionResolver {
             _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
         for (final t in targets) {
           if (t.isFainted) continue;
+          if (t.isHealBlocked && effect.buffType == BuffType.regen) continue;
           t.applyBuff(effect.buffType!, effect.value, effect.duration);
           log.buff(
               t.name, effect.buffType!.name, effect.value, effect.duration);
@@ -241,6 +273,7 @@ class ActionResolver {
   // High-speed defenders are harder to crit — mimics Axie's speed/morale interplay.
 
   bool _rollCrit(Pet attacker, Pet defender) {
+    if (attacker.isJinxed || defender.isCritBlocked) return false;
     final chance =
         (attacker.morale * 0.001 - defender.speed * 0.0005).clamp(0.0, 0.30);
     return chance > 0 && _rng.nextDouble() < chance;
@@ -298,9 +331,9 @@ class ActionResolver {
     List<Pet> enemyTeam,
   ) {
     return switch (spec) {
-      'enemy' => _firstAlive(enemyTeam), // hits front of formation
-      'lowest_hp_enemy' => _lowestHp(enemyTeam), // pierce — ignores formation
-      'back_enemy' => _backRow(enemyTeam), // pierce — targets back row
+      'enemy' => _preferredTarget(_aliveCandidates(enemyTeam)), // hits front
+      'lowest_hp_enemy' => _preferredTarget(_lowestHpCandidates(enemyTeam)),
+      'back_enemy' => _preferredTarget(_backRowCandidates(enemyTeam)),
       'self' => actor,
       'lowest_hp_ally' => _lowestHp(actorTeam),
       _ => _firstAlive(enemyTeam),
@@ -332,20 +365,42 @@ class ActionResolver {
     return null;
   }
 
-  Pet? _lowestHp(List<Pet> team) {
-    final alive = team.where((p) => !p.isFainted).toList();
-    if (alive.isEmpty) return null;
+  List<Pet> _aliveCandidates(List<Pet> team) =>
+      team.where((p) => !p.isFainted).toList();
+
+  List<Pet> _lowestHpCandidates(List<Pet> team) {
+    final alive = _aliveCandidates(team);
     alive.sort((a, b) => a.hp.compareTo(b.hp));
-    return alive.first;
+    return alive;
+  }
+
+  List<Pet> _backRowCandidates(List<Pet> team) {
+    final alive = _aliveCandidates(team);
+    return alive.reversed.toList();
+  }
+
+  Pet? _lowestHp(List<Pet> team) {
+    final alive = _lowestHpCandidates(team);
+    return alive.isEmpty ? null : _preferredTarget(alive);
   }
 
   /// Back row = last alive pet in the team list (highest index still alive).
   /// Falls back to front if only one pet remains.
   Pet? _backRow(List<Pet> team) {
-    final alive = team.where((p) => !p.isFainted).toList();
-    if (alive.isEmpty) return null;
-    return alive.last; // last alive = back-most in formation
+    final alive = _backRowCandidates(team);
+    return alive.isEmpty ? null : _preferredTarget(alive);
   }
 
   List<Pet> _singleOrEmpty(Pet? pet) => pet != null ? [pet] : [];
+
+  Pet? _preferredTarget(List<Pet> candidates) {
+    if (candidates.isEmpty) return null;
+    final aroma = candidates.where((p) => p.isAromatized && !p.isFainted).toList();
+    if (aroma.isNotEmpty) return aroma.first;
+
+    final visible = candidates.where((p) => !p.isStenched && !p.isFainted).toList();
+    if (visible.isNotEmpty) return visible.first;
+
+    return candidates.firstWhere((p) => !p.isFainted, orElse: () => candidates.first);
+  }
 }
