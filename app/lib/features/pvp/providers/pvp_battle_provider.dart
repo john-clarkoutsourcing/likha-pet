@@ -95,10 +95,15 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     print('═' * 80);
     print('[PvP Match ${match.matchId}] BATTLE STARTED - Seed: ${match.seed}');
     print('═' * 80);
-    print('[PvP] My Team (${_playerPets.length} pets):');
-    for (var i = 0; i < _playerPets.length; i++) {
-      final pet = _playerPets[i];
-      print('  Pet $i: ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} HP: ${pet.maxHp} SKL: ${pet.skill} MOR: ${pet.morale}');
+    print('[PvP DEBUG] Decoded ${_playerPets.length} pets from args.myTeam');
+    if (_playerPets.isNotEmpty) {
+      print('[PvP] My Team (${_playerPets.length} pets):');
+      for (var i = 0; i < _playerPets.length; i++) {
+        final pet = _playerPets[i];
+        print('  ➤ Pet $i: ${pet.name} | SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+      }
+    } else {
+      print('[PvP ERROR] No pets decoded! Check kBodyCatalogue');
     }
 
     // Decode opponent team from server-provided DNA refs
@@ -126,10 +131,15 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     }).toList();
     
     // 🔍 DIAGNOSTIC: Log opponent team stats
-    print('[PvP] Opponent Team (${_enemyPets.length} pets):');
-    for (var i = 0; i < _enemyPets.length; i++) {
-      final pet = _enemyPets[i];
-      print('  Pet $i: ${pet.name} | ID: ${pet.id} | SPD: ${pet.effectiveSpeed} HP: ${pet.maxHp} SKL: ${pet.skill} MOR: ${pet.morale}');
+    print('[PvP DEBUG] Decoded ${_enemyPets.length} pets from opponent');
+    if (_enemyPets.isNotEmpty) {
+      print('[PvP] Opponent Team (${_enemyPets.length} pets):');
+      for (var i = 0; i < _enemyPets.length; i++) {
+        final pet = _enemyPets[i];
+        print('  ➤ Pet $i: ${pet.name} | SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+      }
+    } else {
+      print('[PvP ERROR] No opponent pets decoded!');
     }
     print('═' * 80);
 
