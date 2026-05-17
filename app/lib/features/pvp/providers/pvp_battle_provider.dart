@@ -90,6 +90,12 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     for (final p in args.myTeam) {
       _petDefs[p.uid] = p.toCreatureDefinition();
     }
+    
+    // 🔍 DIAGNOSTIC: Log own team stats
+    print('[PvP] My Team:');
+    for (final pet in _playerPets) {
+      print('  ${pet.name} (${pet.id.substring(0, 6)}) - SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+    }
 
     // Decode opponent team from server-provided DNA refs
     // Note: Server doesn't send pet names, so we use generic names based on position and class
@@ -114,6 +120,12 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       // Fallback to a default pet if DNA is unrecognised
       return kCreatureRegistry.values.first.toPet();
     }).toList();
+    
+    // 🔍 DIAGNOSTIC: Log opponent team stats
+    print('[PvP] Opponent Team:');
+    for (final pet in _enemyPets) {
+      print('  ${pet.name} (${pet.id.substring(0, 6)}) - SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+    }
 
     // ── Deck seed assignment ──────────────────────────────────────────────────
     // Both clients must draw identical cards for the same logical team so that
@@ -362,6 +374,12 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     // Feed opponent choices into engine, then run round
     _engine.setOpponentChoices(opponentSelections);
     final started = _engine.prepareRound(mySelections);
+    
+    // 🔍 DIAGNOSTIC: Log turn order for sync debugging
+    if (started.hasImmediateResult) {
+      final state = started.immediateResult!.state;
+      print('[PvP] Round ${state.round} log: ${state.roundLog}');
+    }
 
     if (started.hasImmediateResult) {
       final immediate = started.immediateResult!;
