@@ -60,10 +60,11 @@ export class PvpMatchmaker {
     selections: Record<string, string[]>,
     petStates?: any[],
     cardEffects?: Record<string, any>,
+    cardTraits?: Record<string, string>,
   ): void {
     const match = this.activeMatches.get(matchId);
     if (!match) return;
-    match.handleSubmit(userId, round, selections, petStates, cardEffects);
+    match.handleSubmit(userId, round, selections, petStates, cardEffects, cardTraits);
   }
 
   handleClientResult(userId: string, matchId: string, winnerUid: string): void {

@@ -94,14 +94,16 @@ export class PvpMatch {
   }
 
   private pendingCardEffects: Map<string, Record<string, any>> = new Map();
+  private pendingCardTraits: Map<string, Record<string, string>> = new Map();
 
-  handleSubmit(userId: string, round: number, selections: Record<string, string[]>, petStates?: PetState[], cardEffects?: Record<string, any>): void {
+  handleSubmit(userId: string, round: number, selections: Record<string, string[]>, petStates?: PetState[], cardEffects?: Record<string, any>, cardTraits?: Record<string, string>): void {
     if (this.status !== 'in_round' || round !== this.round) return;
     if (this.pendingSelections.has(userId)) return;
 
     this.pendingSelections.set(userId, selections);
     if (petStates)    this.pendingPetStates.set(userId, petStates);
     if (cardEffects)  this.pendingCardEffects.set(userId, cardEffects);
+    if (cardTraits)   this.pendingCardTraits.set(userId, cardTraits);
     this._logFiles('round:submit', {
       userId,
       round,
@@ -208,14 +210,18 @@ export class PvpMatch {
 
     try {
       // Execute round server-side with full selections
-      const input: RoundExecutionInput = {
-        seed: this.seed,
-        roundNumber: this.round,
-        playerATeam: statesA,
-        playerBTeam: statesB,
-        playerASelections: selectionsA,
-        playerBSelections: selectionsB,
-      };
+    const input: RoundExecutionInput = {
+      seed: this.seed,
+      roundNumber: this.round,
+      playerATeam: statesA,
+      playerBTeam: statesB,
+      playerASelections: selectionsA,
+      playerBSelections: selectionsB,
+      cardTraits: {
+        ...(this.pendingCardTraits.get(a.userId) ?? {}),
+        ...(this.pendingCardTraits.get(b.userId) ?? {}),
+      },
+    };
 
       // Merge card effects from both players
       const mergedCardEffects: Record<string, any> = {
@@ -280,6 +286,7 @@ export class PvpMatch {
       this.pendingSelections.clear();
       this.pendingPetStates.clear();
       this.pendingCardEffects.clear();
+      this.pendingCardTraits.clear();
 
       const actions = result.turnOrder ?? [];
 
@@ -440,6 +447,7 @@ export class PvpMatch {
         dex: 0,
         def: 0,
         shield: 0,           // Initialize shield to 0
+        energy: 3,
         isFainted: false,    // Initialize not fainted
         index: index,
         statusEffects: [],

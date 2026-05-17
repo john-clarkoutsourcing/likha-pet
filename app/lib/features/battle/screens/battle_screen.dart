@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,15 +6,12 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
-import '../data/creature_registry.dart';
-import '../data/trait_card_catalog.dart';
 import '../providers/pve_battle_provider.dart';
 import '../providers/battle_view_model.dart';
 import '../services/battle_asset_warmup.dart';
 import '../services/battle_audio_service.dart';
 import '../widgets/battle_background_widget.dart';
-import '../widgets/classic_trait_card_widget.dart';
-import '../widgets/pet_renderer_widget.dart';
+import '../widgets/pet_detail_sheet.dart';
 import '../widgets/shared_battle_hud.dart';
 import 'battle_result_screen.dart';
 
@@ -51,13 +47,6 @@ const _kEnemyPos = [
   Offset(0.65, 0.03), // MID
   Offset(0.75, 0.35), // BACK
 ];
-
-// Card catalog and helpers are now in shared_battle_hud.dart.
-// Local aliases keep internal references in this file working unchanged.
-final _cardCatalogByTraitId = kBattleCardCatalogByTraitId;
-String? _classicImageNameFromPath(String? p) => battleClassicImageNameFromPath(p);
-int _classicCardAttack(TraitViewModel t, TraitCardCatalogEntry? e) => battleClassicCardAttack(t, e);
-int _classicCardDefense(TraitViewModel t, TraitCardCatalogEntry? e) => battleClassicCardDefense(t, e);
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -264,9 +253,9 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
               opponentPos: _enemyPos,
               playerFlipHorizontal: true,
               opponentFlipHorizontal: false,
-              onPlayerPetTap: (pet) => _PetInfoSheet.show(context, pet),
-              onPlayerPetLongPress: (pet) => _PetInfoSheet.show(context, pet),
-              onOpponentPetTap: (pet) => _PetInfoSheet.show(context, pet),
+              onPlayerPetTap: (pet) => BattlePetDetailsSheet.show(context, pet),
+              onPlayerPetLongPress: (pet) => BattlePetDetailsSheet.show(context, pet),
+              onOpponentPetTap: (pet) => BattlePetDetailsSheet.show(context, pet),
             ),
           ),
 
@@ -714,312 +703,6 @@ class _DiscardPopupState extends State<_DiscardPopup>
 
 
 
-// ── Pet info sheet ────────────────────────────────────────────────────────────
-
-// ── Pet info sheet — Axie-style layout ───────────────────────────────────────
-//
-// Layout mirrors the Axie "My Axies" panel:
-//   • Stats bar  (Health / Speed / Shield / Energy)
-//   • Left col   — pet name + class icon + parts list with part-icon sprites
-//   • Right area — 2×2 card grid (card art + energy badge + name + effect + desc)
-
-class _PetInfoSheet {
-  static void show(BuildContext context, PetViewModel pet) {
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.75),
-      builder: (_) => _PetInfoDialog(pet: pet),
-    );
-  }
-}
-
-class _PetInfoDialog extends StatelessWidget {
-  final PetViewModel pet;
-  const _PetInfoDialog({required this.pet});
-
-  static Color _clsColor(String cls) => switch (cls) {
-        'plant' => const Color(0xFF4CAF50),
-        'aquatic' => const Color(0xFF29B6F6),
-        'beast' => const Color(0xFFFF9800),
-        'reptile' => const Color(0xFF66BB6A),
-        'bird' => const Color(0xFFFF80AB),
-        'bug' => const Color(0xFFFF5252),
-        _ => const Color(0xFF9C27B0),
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    final def = pet.creatureDef ?? kCreatureRegistry[pet.id];
-    final cls = def?.className ?? pet.creatureDef?.className ?? 'plant';
-    final color = _clsColor(cls);
-    final traitMap = {for (final t in pet.traits) t.partName: t};
-    const partOrder = ['horn', 'back', 'tail', 'mouth'];
-    final displayParts = <({String partType, String cardArtPath})>[
-      if (def != null)
-        for (final part in def.parts)
-          (partType: part.partType, cardArtPath: part.cardArtPath)
-      else
-        for (final partType in partOrder)
-          (
-            partType: partType,
-            cardArtPath: pet.partCardArt[partType] ??
-                'assets/images/part-cards/default-card-art.png',
-          ),
-    ];
-    final hpFrac = pet.maxHp > 0 ? (pet.hp / pet.maxHp).clamp(0.0, 1.0) : 0.0;
-
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF0D1220),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ── Left: pet renderer + name + stats ────────────────────────
-            SizedBox(
-              width: 200,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.06),
-                  borderRadius:
-                      const BorderRadius.horizontal(left: Radius.circular(15)),
-                  border: Border(
-                      right: BorderSide(color: color.withValues(alpha: 0.2))),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Pet renderer
-                    if (pet.creatureDef != null)
-                      SizedBox(
-                        width: 160,
-                        height: 160,
-                        child: PetRendererWidget(
-                          def: pet.creatureDef!,
-                          size: 160,
-                        ),
-                      )
-                    else
-                      const Icon(Icons.pets, size: 80, color: Colors.white24),
-
-                    const SizedBox(height: 8),
-
-                    // Class badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: color.withValues(alpha: 0.6)),
-                      ),
-                      child: Text(
-                        cls.isEmpty
-                            ? 'Unknown'
-                            : cls[0].toUpperCase() + cls.substring(1),
-                        style: TextStyle(
-                            color: color,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800),
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // HP bar
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Icon(Icons.favorite,
-                                  size: 10, color: Color(0xFF66FF88)),
-                              Text('${pet.hp} / ${pet.maxHp}',
-                                  style: const TextStyle(
-                                      color: Color(0xFF66FF88),
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(3),
-                            child: SizedBox(
-                              height: 5,
-                              width: double.infinity,
-                              child: LinearProgressIndicator(
-                                value: hpFrac,
-                                backgroundColor: Colors.white10,
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF66FF88)),
-                                minHeight: 5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Stats row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _stat('⚡', '${pet.speed}', 'SPD',
-                            const Color(0xFFFFCC44)),
-                        _stat('🏅', '${pet.skill}', 'SKL',
-                            const Color(0xFF88CCFF)),
-                        _stat('🔥', '${pet.morale}', 'MOR',
-                            const Color(0xFFFF9944)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── Right: 4 skill cards in a row ────────────────────────────
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
-                      children: [
-                        Text('SKILLS',
-                            style: GoogleFonts.rajdhani(
-                                color: Colors.white54,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 2)),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.08),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: const Icon(Icons.close,
-                                size: 14, color: Colors.white54),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // 4 cards in a row
-                    Expanded(
-                      child: pet.traits.isEmpty
-                          ? const Center(
-                              child: Text('No skill data',
-                                  style: TextStyle(
-                                      color: Colors.white38, fontSize: 12)))
-                          : LayoutBuilder(
-                              builder: (_, constraints) {
-                                final availW = constraints.maxWidth;
-                                final availH = constraints.maxHeight;
-                                // 4 cards in a row, gap 8px between
-                                final cardW = (availW - 24) / 4;
-                                final cardH =
-                                    math.min(cardW / (220 / 300), availH);
-                                final cW = cardH * (220 / 300);
-
-                                return Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    for (final part in displayParts)
-                                      SizedBox(
-                                        width: cW,
-                                        height: cardH,
-                                        child: _InfoCard(
-                                          partType: part.partType,
-                                          cardArtPath: part.cardArtPath,
-                                          trait: traitMap[part.partType],
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Widget _stat(String icon, String val, String label, Color c) =>
-      Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(icon, style: const TextStyle(fontSize: 12)),
-        Text(val,
-            style:
-                TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w900)),
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white38,
-                fontSize: 7,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5)),
-      ]);
-}
-
-
-// ── Skill card (Axie card style) ──────────────────────────────────────────────
-
-class _InfoCard extends StatelessWidget {
-  final String partType;
-  final String cardArtPath;
-  final TraitViewModel? trait;
-  const _InfoCard({
-    required this.partType,
-    required this.cardArtPath,
-    this.trait,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cardEntry = trait == null ? null : _cardCatalogByTraitId[trait!.id];
-    final imageName = cardEntry?.imageName ??
-        _classicImageNameFromPath(cardArtPath) ??
-        '$partType-card';
-    final imagePath = cardEntry?.templatePath ??
-        (imageName.isNotEmpty
-            ? 'assets/images/classic-cards/$imageName.png'
-            : cardArtPath);
-
-    return ClassicTraitCardWidget(
-      imagePath: imagePath,
-      imageName: imageName,
-      name: trait?.name ?? partType.toUpperCase(),
-      energy: trait?.energyCost ?? 0,
-      attack: trait == null ? 0 : _classicCardAttack(trait!, cardEntry),
-      defense: trait == null ? 0 : _classicCardDefense(trait!, cardEntry),
-      description: trait?.description ?? '',
-      showDescription: trait != null,
-    );
-  }
-}
-
 // ── End Turn button ───────────────────────────────────────────────────────────
 
 class _EndTurnButton extends StatelessWidget {
@@ -1125,5 +808,3 @@ class _EndTurnButton extends StatelessWidget {
     );
   }
 }
-
-

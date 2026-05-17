@@ -10,6 +10,7 @@ import '../../battle/providers/battle_view_model.dart';
 import '../../battle/services/battle_asset_warmup.dart';
 import '../../battle/services/battle_audio_service.dart';
 import '../../battle/widgets/battle_background_widget.dart';
+import '../../battle/widgets/pet_detail_sheet.dart';
 import '../../battle/widgets/shared_battle_hud.dart';
 import '../providers/pvp_battle_provider.dart';
 import 'pvp_result_screen.dart';
@@ -176,6 +177,9 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
               opponentPos: _opponentPos,
               playerFlipHorizontal: true,
               opponentFlipHorizontal: false,
+              onPlayerPetTap: (pet) => BattlePetDetailsSheet.show(context, pet),
+              onOpponentPetTap: (pet) =>
+                  BattlePetDetailsSheet.show(context, pet),
               // Watch provider directly so HP bars update immediately on every
               // round:hit, even if internal setState fires before parent prop update.
               liveProvider: pvpBattleProvider,

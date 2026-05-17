@@ -997,6 +997,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
       // Build card effect map so server knows what each card does.
       final cardEffects = <String, dynamic>{};
+      final cardTraits = <String, String>{};
       for (final card in _engine.currentPlayerHand) {
         final petPending = mySelections[card.ownerPetId] ?? [];
         if (!petPending.contains(card.instanceId)) continue;
@@ -1030,6 +1031,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           'effectValue': eff.value,
           'target': eff.target,
         };
+        cardTraits[card.instanceId] = card.trait.id;
       }
 
       PvpSocket.instance.send(OutRoundSubmit(
@@ -1038,6 +1040,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         selections: mySelections,
         petStates: petStatesSnapshot,
         cardEffects: cardEffects,
+        cardTraits: cardTraits,
       ).toJson());
 
       print(

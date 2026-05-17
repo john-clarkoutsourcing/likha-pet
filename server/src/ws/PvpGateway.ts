@@ -87,6 +87,7 @@ export class PvpGateway {
               msg.selections as Record<string, string[]>,
               msg.petStates as any[] | undefined,
               msg.cardEffects as Record<string, any> | undefined,
+              msg.cardTraits as Record<string, string> | undefined,
             );
             break;
           case 'client:result':

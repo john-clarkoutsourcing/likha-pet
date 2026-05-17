@@ -1,3 +1,5 @@
+import { resolveCardEffect } from './ServerTraitCatalog';
+
 export interface PetState {
   uid: string;
   name: string;
@@ -9,6 +11,7 @@ export interface PetState {
   dex: number;
   def: number;
   shield: number;
+  energy?: number;
   isFainted: boolean;
   index: number;
   statusEffects: StatusEffect[];
@@ -30,6 +33,13 @@ export interface CardEffect {
   effectType: string;  // 'damage'|'heal'|'shield'|'buff'|'debuff'|'poison'|'burn'|'stun'|'aoe'|'shieldBreak'|...
   effectValue: number; // base numeric value from the card
   target: string;      // 'enemy'|'self'|'ally'|'all_enemies'|'back_enemy'
+  buffType?: string;
+  debuffType?: string;
+  duration?: number;
+  selfShield?: number;
+  lifeSteal?: boolean;
+  energySteal?: boolean;
+  energyDrain?: boolean;
 }
 
 export interface RoundExecutionInput {
@@ -39,6 +49,7 @@ export interface RoundExecutionInput {
   playerBTeam: PetState[];
   playerASelections: Record<string, string[]>;  // petUid -> [cardInstanceId, ...]
   playerBSelections: Record<string, string[]>;
+  cardTraits?: Record<string, string>;         // cardInstanceId -> traitId
   cardEffects?: Record<string, CardEffect>;      // cardInstanceId -> effect info
 }
 
@@ -90,7 +101,7 @@ export class ServerBattleExecutor {
 
   private _executeRoundSync(input: RoundExecutionInput): RoundExecutionResult {
     const { seed, roundNumber, playerATeam, playerBTeam,
-            playerASelections, playerBSelections, cardEffects = {} } = input;
+            playerASelections, playerBSelections, cardTraits = {}, cardEffects = {} } = input;
 
     const rng = this._makeRng(seed + roundNumber);
 
@@ -142,14 +153,15 @@ export class ServerBattleExecutor {
       if (selectedCards.length === 0) continue;
 
       const cardId   = selectedCards[0];
-      const cardFx   = cardEffects[cardId];
-      const effectType  = cardFx?.effectType ?? 'damage';
-      const effectValue = cardFx?.effectValue ?? 0;
-      const targetPref  = cardFx?.target ?? 'enemy';
+      const traitId   = cardTraits[cardId] ?? cardId;
+      const cardFx    = resolveCardEffect(traitId, cardEffects[cardId]);
+      const effectType  = cardFx.effectType;
+      const effectValue = cardFx.effectValue;
+      const targetPref  = cardFx.target;
 
       const enemyTeam = team === 'A' ? teamB : teamA;
       const allyTeam  = team === 'A' ? teamA : teamB;
-      const isSelf    = targetPref === 'self' || targetPref === 'ally';
+      const selfOrAllyTarget = allyTeam.find(p => !p.isFainted) ?? pet;
 
       let damage      = 0;
       let healAmount  = 0;
@@ -173,6 +185,24 @@ export class ServerBattleExecutor {
           enemy.shield -= shieldAbsorb;
           enemy.hp = Math.max(0, enemy.hp - (damage - shieldAbsorb));
           if (enemy.hp <= 0) enemy.isFainted = true;
+          if (cardFx.lifeSteal) {
+            const actual = Math.max(0, damage - shieldAbsorb);
+            if (actual > 0) {
+              healAmount = Math.min(actual, 50);
+              pet.hp = Math.min(pet.maxHp, pet.hp + healAmount);
+            }
+          }
+          if (cardFx.energySteal || cardFx.energyDrain) {
+            const energyTarget = enemyTeam.find(p => !p.isFainted) ?? enemy;
+            if (energyTarget && energyTarget !== pet) {
+              (energyTarget as PetState & { energy?: number }).energy =
+                Math.max(0, ((energyTarget as PetState & { energy?: number }).energy ?? 0) - 1);
+              if (cardFx.energySteal) {
+                (pet as PetState & { energy?: number }).energy =
+                  ((pet as PetState & { energy?: number }).energy ?? 0) + 1;
+              }
+            }
+          }
           break;
         }
         case 'shieldBreak': {
@@ -228,12 +258,19 @@ export class ServerBattleExecutor {
         case 'atk_down':
         case 'def_down':
         case 'spd_down': {
-          const enemy = enemyTeam.find(p => !p.isFainted);
+          const enemy = targetPref === 'self' || targetPref === 'ally'
+            ? selfOrAllyTarget
+            : enemyTeam.find(p => !p.isFainted);
           if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
-          enemy.statusEffects.push({ name: effectType, remainingRounds: 2, magnitude: effectValue });
-          statusApplied = effectType;
+          const debuffName = cardFx.debuffType ?? effectType;
+          enemy.statusEffects.push({
+            name: debuffName,
+            remainingRounds: cardFx.duration ?? 2,
+            magnitude: effectValue,
+          });
+          statusApplied = debuffName;
           break;
         }
 
@@ -241,15 +278,21 @@ export class ServerBattleExecutor {
         case 'heal':
         case 'regen': {
           healAmount = effectValue > 0 ? effectValue : 30;
-          pet.hp = Math.min(pet.maxHp, pet.hp + healAmount);
-          actionTarget = pet;
+          const targetPet = targetPref === 'self' || targetPref === 'ally'
+            ? selfOrAllyTarget
+            : pet;
+          targetPet.hp = Math.min(targetPet.maxHp, targetPet.hp + healAmount);
+          actionTarget = targetPet;
           actionTargetTeam = team;
           break;
         }
         case 'shield': {
           shieldAmount = effectValue > 0 ? effectValue : 50;
-          pet.shield += shieldAmount;
-          actionTarget = pet;
+          const targetPet = targetPref === 'self' || targetPref === 'ally'
+            ? selfOrAllyTarget
+            : pet;
+          targetPet.shield += shieldAmount;
+          actionTarget = targetPet;
           actionTargetTeam = team;
           break;
         }
@@ -258,9 +301,17 @@ export class ServerBattleExecutor {
         case 'def_up':
         case 'spd_up':
         case 'energized': {
-          pet.statusEffects.push({ name: effectType, remainingRounds: 2, magnitude: effectValue });
-          statusApplied = effectType;
-          actionTarget = pet;
+          const buffName = cardFx.buffType ?? effectType;
+          const targetPet = targetPref === 'self' || targetPref === 'ally'
+            ? selfOrAllyTarget
+            : pet;
+          targetPet.statusEffects.push({
+            name: buffName,
+            remainingRounds: cardFx.duration ?? 2,
+            magnitude: effectValue,
+          });
+          statusApplied = buffName;
+          actionTarget = targetPet;
           actionTargetTeam = team;
           break;
         }
@@ -281,6 +332,12 @@ export class ServerBattleExecutor {
       }
 
       if (!actionTarget) continue;
+
+      if (cardFx.selfShield > 0) {
+        const shieldAmt = Math.min(cardFx.selfShield, 999);
+        pet.shield += shieldAmt;
+        shieldAmount += shieldAmt;
+      }
 
       actions.push({
         uid:              pet.uid,

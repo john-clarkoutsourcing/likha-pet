@@ -324,6 +324,8 @@ class OutRoundSubmit {
   final List<Map<String, dynamic>>? petStates;
   // cardInstanceId → {effectType, effectValue, target}
   final Map<String, dynamic>? cardEffects;
+  // cardInstanceId → traitId
+  final Map<String, String>? cardTraits;
 
   const OutRoundSubmit({
     required this.matchId,
@@ -331,6 +333,7 @@ class OutRoundSubmit {
     required this.selections,
     this.petStates,
     this.cardEffects,
+    this.cardTraits,
   });
 
   Map<String, dynamic> toJson() => {
@@ -340,6 +343,7 @@ class OutRoundSubmit {
         'selections': selections,
         if (petStates    != null) 'petStates':   petStates,
         if (cardEffects  != null) 'cardEffects': cardEffects,
+        if (cardTraits   != null) 'cardTraits':  cardTraits,
       };
 }
 
