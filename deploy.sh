@@ -164,8 +164,14 @@ if $DEPLOY_WEB; then
     --release \
     --dart-define="SERVER_URL=${PAKSI_SERVER_URL}" \
     --dart-define="WS_URL=${WS_URL}"
+
+  # Patch flutter_bootstrap.js to force HTML renderer on mobile browsers.
+  # CanvasKit (WebGL) crashes on iOS Safari — the patch injects directly into
+  # the bootstrap at the exact point between buildConfig set and load() call.
+  log "Applying mobile HTML renderer patch..."
+  python3 app/patch_mobile_renderer.py
   cd ..
-  ok "Flutter web build complete"
+  ok "Flutter web build complete (mobile renderer patch applied)"
 
   log "Deploying to Firebase Hosting..."
   firebase deploy --only hosting --project "$PROJECT_ID"

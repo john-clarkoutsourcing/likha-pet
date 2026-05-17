@@ -61,12 +61,14 @@ async function renderPet(params) {
       eyes,
       colorIdx = 0,
       anim     = 'action/idle/normal',
-      figScale = 0.22,  // calibrated for 400px internal canvas (~66% fill)
+      figScale = 0.22,
       scaleMult = 1.0,
-      yOff     = 0.80,  // feet at 80% from top — body fits above within 400px
+      yOff     = 0.80,
       width    = window.innerWidth,
       height   = window.innerHeight,
     } = params;
+
+    log('renderPet START: horn=' + horn + ' back=' + back + ' tail=' + tail + ' mouth=' + mouth);
 
     const earsVal = ears || horn;
     const eyesVal = eyes || horn;
@@ -83,7 +85,6 @@ async function renderPet(params) {
       ['tail',  tail ],
     ]);
 
-    
     log('Building spine for horn=' + horn + ' back=' + back + ' tail=' + tail + ' mouth=' + mouth);
     const result = getAxieSpineFromCombo(combo, colorIdx);
     if (result.error || !result.skeletonDataAsset) {
@@ -98,37 +99,37 @@ async function renderPet(params) {
     const variant   = result.variant;
     const shift     = getAxieColorPartShift(variant);
 
+    log('Cleanup: destroying old app/figure/loader/spine');
     // ── Cleanup previous renderer resources ──────────────────────────────────
     // Must destroy in this order: figure → app → loader → atlas/spine
     if (_figure) {
-      try { _figure.destroy(true); _figure = null; } catch (_) {}
+      try { _figure.destroy(true); _figure = null; } catch (e) { log('Figure destroy error: ' + e); }
     }
     if (_app) {
-      try { _app.destroy(true); _app = null; } catch (_) {}
+      try { _app.destroy(true); _app = null; } catch (e) { log('App destroy error: ' + e); }
     }
-    // Reset Pixi loader to free texture references from GPU
     if (_loader) {
       try { 
         _loader.reset();
         _loader = null;
-      } catch (_) {}
+      } catch (e) { log('Loader reset error: ' + e); }
     }
-    // Destroy spine atlas and data explicitly
     if (_spineAtlas) {
       try { _spineAtlas = null; } catch (_) {}
     }
     if (_spineData) {
       try { _spineData = null; } catch (_) {}
     }
+    log('Cleanup complete');
 
     // ── Setup Pixi app ─────────────────────────────────────────────────────────
-    // Strategy: render at a FIXED internal resolution (400×400) and CSS-scale
-    // the canvas to the caller's display size. This decouples rendering quality
-    // from display size — the pet always looks crisp regardless of widget size.
-
+    log('Setting up Pixi app');
     PIXI.settings.PRECISION_FRAGMENT = PIXI.PRECISION.HIGH;
 
     const container = document.getElementById('container');
+    if (!container) {
+      throw new Error('Container element not found');
+    }
     
     // Remove old canvas from DOM before creating new one (prevents iOS memory leak)
     if (container && container.firstChild) {
@@ -137,8 +138,9 @@ async function renderPet(params) {
     
     const displayW = Number(width);
     const displayH = Number(height);
-    const INTERNAL = 400; // Fixed rendering canvas size
+    const INTERNAL = 400;
 
+    log('Creating Pixi Application: internal=' + INTERNAL + ' display=' + displayW + 'x' + displayH);
     _app = new PIXI.Application({
       transparent:     true,
       backgroundColor: 0,
@@ -149,21 +151,22 @@ async function renderPet(params) {
       antialias:   true,
       autoResize:  false,
     });
-    // CSS-scale the canvas element to the requested display dimensions.
-    // This lets any widget size receive a fully rendered 400×400 pet.
+    
     _app.view.style.width  = displayW + 'px';
     _app.view.style.height = displayH + 'px';
-    container.appendChild(_app.view);
+    
+    try {
+      container.appendChild(_app.view);
+    } catch (e) {
+      throw new Error('Failed to append canvas to container: ' + e);
+    }
+    
     _app.stage.position.set(INTERNAL / 2, INTERNAL * Number(yOff));
 
-    log('Renderer: ' + (_app.renderer.type === 1 ? 'WebGL' : 'Canvas2D')
-      + ' internal=' + INTERNAL + ' display=' + displayW + 'x' + displayH);
-    
+    log('Renderer: ' + (_app.renderer.type === 1 ? 'WebGL' : 'Canvas2D'));
 
     // ── Load textures ─────────────────────────────────────────────────────────
-    // window.preloadedTextures may be set by Flutter before calling render().
-    // Keys are relative paths like "beast-04/back.png" → data: URL.
-    // If not present, fall back to file-relative path (may fail on iOS file://).
+    log('Loading textures...');
     status('Loading textures…');
     const skins = Array.isArray(spineJson.skins) ? spineJson.skins : [{ attachments: spineJson.skins }];
     const preloaded = window.preloadedTextures || {};
@@ -178,14 +181,12 @@ async function renderPet(params) {
           const attPath = att.path || attName;
           if (toLoad.has(attPath)) continue;
           const relPath = getVariantAttachmentPath(slotName, attPath, variant, shift);
-          // Use preloaded data URL if available, else file-relative path
           const url = preloaded[relPath] || `mixer-stuffs/v3/${relPath}`;
           toLoad.set(attPath, url);
         }
       }
     }
-    status('S3:tex-load(' + toLoad.size + '/pre=' + Object.keys(preloaded).length + ')');
-    log('Loading ' + toLoad.size + ' textures, preloaded=' + Object.keys(preloaded).length + ', variant=' + variant);
+    log('Texture collection: ' + toLoad.size + ' needed, ' + Object.keys(preloaded).length + ' preloaded');
 
     _loader = new PIXI.loaders.Loader();
     const IMAGE_TYPE = PIXI.loaders.Resource.LOAD_TYPE.IMAGE;
@@ -193,11 +194,15 @@ async function renderPet(params) {
       _loader.add(attPath, url, { loadType: IMAGE_TYPE });
     }
 
+    log('Starting texture load...');
     await new Promise((resolve, reject) => {
-      _loader.load(() => resolve());
-      // Timeout after 15s to prevent hanging on slow mobile networks
+      _loader.load(() => {
+        log('Loader callback triggered');
+        resolve();
+      });
       setTimeout(() => reject(new Error('Texture load timeout (15s)')), 15000);
     });
+    log('Texture load complete');
 
     // ── Build texture map ──────────────────────────────────────────────────────
     const allTextures = {};
@@ -207,7 +212,6 @@ async function renderPet(params) {
       if (res?.texture) { allTextures[attPath] = res.texture; loadedCount++; }
       else if (res?.error) log('Texture fail: ' + attPath + ' → ' + res.error);
     }
-    status('S4:tex-done(' + loadedCount + '/' + toLoad.size + ')');
     log('Textures loaded: ' + loadedCount + '/' + toLoad.size);
 
     if (loadedCount === 0) {
@@ -216,33 +220,33 @@ async function renderPet(params) {
     }
 
     // ── Build spine data ───────────────────────────────────────────────────────
-    
+    log('Creating spine atlas...');
     _spineAtlas  = new PIXI.spine.core.TextureAtlas();
     _spineAtlas.addTextureHash(allTextures, false);
     
+    log('Creating atlas loader...');
     const atlasLoader = new PIXI.spine.core.AtlasAttachmentLoader(_spineAtlas);
     
+    log('Creating spine skeleton data...');
     _spineData   = new PIXI.spine.core.SkeletonJson(atlasLoader).readSkeletonData(spineJson);
 
     // ── Spawn figure ───────────────────────────────────────────────────────────
-    
+    log('Creating spine figure...');
     _figure = new PIXI.spine.Spine(_spineData);
     
     _figure.scale.set(Number(figScale) * Number(scaleMult));
     _figure.stateData.setMix('draft/run-origin',   'action/idle/normal', 0.1);
     _figure.stateData.setMix('action/idle/normal', 'draft/run-origin',   0.2);
     
-    // Loop idle/mix animations; play everything else (hit, attack, etc.) once
     const shouldLoop = anim.startsWith('action/idle') || anim.startsWith('action/mix');
     _figure.state.setAnimation(0, anim, shouldLoop);
-    // When a one-shot animation ends, auto-return to idle
     if (!shouldLoop) {
       _figure.state.addAnimation(0, 'action/idle/normal', true, 0);
     }
 
     try { const s = _figure.skeleton.findSlot('shadow'); if (s) s.attachment = null; } catch (_) {}
 
-    
+    log('Adding figure to stage...');
     _app.stage.addChild(_figure);
     log('Render complete');
     hideLoading();
@@ -250,6 +254,9 @@ async function renderPet(params) {
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
     log('renderPet ERROR: ' + msg);
+    if (err && err.stack) {
+      log('Error stack: ' + err.stack);
+    }
     hideLoading('Render error: ' + msg.substring(0, 80));
     window._renderError = msg;
   }
@@ -340,6 +347,24 @@ function log(msg) {
   console.log('[Renderer] ' + msg);
   try { if (window.FlutterLog) window.FlutterLog.postMessage(msg); } catch (_) {}
 }
+
+// Global error handler to catch uncaught exceptions
+window.onerror = function(msg, url, lineNo, colNo, error) {
+  const fullMsg = 'UNCAUGHT: ' + msg + ' at ' + url + ':' + lineNo + ':' + colNo;
+  log(fullMsg);
+  if (error && error.stack) {
+    log('Stack: ' + error.stack);
+  }
+  return false; // Don't suppress the error
+};
+
+window.onunhandledrejection = function(event) {
+  const fullMsg = 'UNHANDLED PROMISE: ' + (event.reason ? event.reason.toString() : 'unknown');
+  log(fullMsg);
+  if (event.reason && event.reason.stack) {
+    log('Stack: ' + event.reason.stack);
+  }
+};
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
