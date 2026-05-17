@@ -234,8 +234,9 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
   }
 }
 
-// ── PvP lock-in button ────────────────────────────────────────────────────────
+// ── PvP ready button ──────────────────────────────────────────────────────
 // Rectangular style distinct from PvE's circle end-turn button.
+// When both players click "Ready", the round executes simultaneously.
 
 class _LockInButton extends StatelessWidget {
   final PveBattleViewModel vm;
@@ -249,7 +250,7 @@ class _LockInButton extends StatelessWidget {
         ? 'Waiting…'
         : vm.isResolving
             ? 'Resolving…'
-            : 'Lock In';
+            : 'Ready';
 
     return SizedBox(
       width: 76,
