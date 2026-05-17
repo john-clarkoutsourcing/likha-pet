@@ -5,6 +5,7 @@ import { MmrService } from '../services/MmrService';
 export interface PetDna {
   uid: string;
   dna: string;
+  createdAtMs?: number; // Client-provided pet creation timestamp
 }
 
 export interface PlayerInfo {

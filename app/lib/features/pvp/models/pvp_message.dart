@@ -30,12 +30,21 @@ sealed class PvpMessage {
 class PetDnaRef {
   final String uid;
   final String dna;
-  const PetDnaRef({required this.uid, required this.dna});
+  final int? createdAtMs;
+  const PetDnaRef({required this.uid, required this.dna, this.createdAtMs});
 
   factory PetDnaRef.fromJson(Map<String, dynamic> j) =>
-      PetDnaRef(uid: j['uid'] as String, dna: j['dna'] as String);
+      PetDnaRef(
+        uid: j['uid'] as String,
+        dna: j['dna'] as String,
+        createdAtMs: j['createdAtMs'] as int?,
+      );
 
-  Map<String, dynamic> toJson() => {'uid': uid, 'dna': dna};
+  Map<String, dynamic> toJson() => {
+    'uid': uid,
+    'dna': dna,
+    if (createdAtMs != null) 'createdAtMs': createdAtMs,
+  };
 }
 
 class PvpPlayerInfo {

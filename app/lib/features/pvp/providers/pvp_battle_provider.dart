@@ -100,7 +100,9 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         uid: ref.uid,
         name: 'Opponent ${index + 1}', // Generic fallback name
         dna: ref.dna,
-        createdAt: DateTime.now(),
+        createdAt: ref.createdAtMs != null
+            ? DateTime.fromMillisecondsSinceEpoch(ref.createdAtMs!)
+            : DateTime.now(), // Fallback if server doesn't provide it
       );
       if (kBodyCatalogue.containsKey(owned.bodyId)) {
         final def = owned.toCreatureDefinition();

@@ -61,7 +61,11 @@ class PvpQueueNotifier extends StateNotifier<PvpQueueState> {
     _sub?.cancel();
     _sub = PvpSocket.instance.messages.listen(_onMessage);
 
-    final teamRefs = team.map((p) => PetDnaRef(uid: p.uid, dna: p.dna)).toList();
+    final teamRefs = team.map((p) => PetDnaRef(
+      uid: p.uid,
+      dna: p.dna,
+      createdAtMs: p.createdAt.millisecondsSinceEpoch,
+    )).toList();
     PvpSocket.instance.send(OutQueueJoin(team: teamRefs).toJson());
     state = state.copyWith(phase: QueuePhase.queuing);
   }
