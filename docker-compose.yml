@@ -46,6 +46,8 @@ services:
     volumes:
       # Mount only src so edits trigger hot reload without rebuilding the image
       - ./server/src:/app/src
+      # Persist PvP battle logs on the host so they can be tailed outside Docker
+      - ./pvp-logs:/tmp/likha-pvp-logs
     ports:
       - "3000:3000"
     environment:
@@ -53,6 +55,7 @@ services:
       - FIREBASE_PROJECT_ID=demo-likha-pet
       - JWT_SECRET=local-dev-secret
       - PORT=3000
+      - PVP_LOG_DIR=/tmp/likha-pvp-logs
     depends_on:
       emulator:
         condition: service_healthy

@@ -169,7 +169,7 @@ if $DEPLOY_WEB; then
   # CanvasKit (WebGL) crashes on iOS Safari — the patch injects directly into
   # the bootstrap at the exact point between buildConfig set and load() call.
   log "Applying mobile HTML renderer patch..."
-  python3 app/patch_mobile_renderer.py
+  python3 patch_mobile_renderer.py
   cd ..
   ok "Flutter web build complete (mobile renderer patch applied)"
 

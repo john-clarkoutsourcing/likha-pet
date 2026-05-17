@@ -174,8 +174,12 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
               vm: vm,
               playerPos: _playerPos,
               opponentPos: _opponentPos,
-              playerFlipHorizontal: true,     // player on left → faces right
-              opponentFlipHorizontal: false,  // opponent on right → faces left
+              playerFlipHorizontal: true,
+              opponentFlipHorizontal: false,
+              // Watch provider directly so HP bars update immediately on every
+              // round:hit, even if internal setState fires before parent prop update.
+              liveProvider: pvpBattleProvider,
+              snapHpBars: true,
             ),
           ),
 

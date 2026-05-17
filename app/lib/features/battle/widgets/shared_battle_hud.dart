@@ -30,10 +30,10 @@ import '../widgets/projectile_widget.dart';
 
 // ── Shared constants ──────────────────────────────────────────────────────────
 
-const double kBattlePanelH      = 182.0;
-const double kBattlePanelPeekH  = 32.0;
-const double kBattleSpriteBase  = 130.0;
-const _kScaleByPos   = [1.50, 1.50, 1.50];
+const double kBattlePanelH = 182.0;
+const double kBattlePanelPeekH = 32.0;
+const double kBattleSpriteBase = 130.0;
+const _kScaleByPos = [1.50, 1.50, 1.50];
 const _kOpacityByPos = [1.00, 1.00, 1.00];
 
 // ── Lazy card catalog ─────────────────────────────────────────────────────────
@@ -51,7 +51,8 @@ String? battleClassicImageNameFromPath(String? path) {
   return f.substring(0, f.length - 4);
 }
 
-int battleClassicCardAttack(TraitViewModel trait, TraitCardCatalogEntry? entry) {
+int battleClassicCardAttack(
+    TraitViewModel trait, TraitCardCatalogEntry? entry) {
   if (entry != null) return entry.attack;
   return switch (trait.effectIconKey) {
     'damage' || 'aoe' => trait.effectIconValue,
@@ -59,7 +60,8 @@ int battleClassicCardAttack(TraitViewModel trait, TraitCardCatalogEntry? entry) 
   };
 }
 
-int battleClassicCardDefense(TraitViewModel trait, TraitCardCatalogEntry? entry) {
+int battleClassicCardDefense(
+    TraitViewModel trait, TraitCardCatalogEntry? entry) {
   if (entry != null) return entry.defense;
   return switch (trait.effectIconKey) {
     'shield' || 'def_up' => trait.effectIconValue,
@@ -73,24 +75,30 @@ String battleAnimFor(PetCharacterAnimState? state, {String? attackSlot}) {
       state == PetCharacterAnimState.attackRanged;
   if (isAttack) {
     switch (attackSlot) {
-      case 'horn':  return 'attack/melee/horn-gore';
-      case 'mouth': return 'attack/melee/mouth-bite';
-      case 'tail':  return 'attack/melee/tail-roll';
-      case 'back':  return 'attack/ranged/cast-fly';
+      case 'horn':
+        return 'attack/melee/horn-gore';
+      case 'mouth':
+        return 'attack/melee/mouth-bite';
+      case 'tail':
+        return 'attack/melee/tail-roll';
+      case 'back':
+        return 'attack/ranged/cast-fly';
     }
   }
   return switch (state) {
-    PetCharacterAnimState.move             => 'action/move-forward',
+    PetCharacterAnimState.move => 'action/move-forward',
     PetCharacterAnimState.attack ||
-    PetCharacterAnimState.attackMelee      => 'attack/melee/normal-attack',
-    PetCharacterAnimState.attackRanged     => 'attack/ranged/cast-fly',
-    PetCharacterAnimState.hit              => 'defense/hit-by-normal',
+    PetCharacterAnimState.attackMelee =>
+      'attack/melee/normal-attack',
+    PetCharacterAnimState.attackRanged => 'attack/ranged/cast-fly',
+    PetCharacterAnimState.hit => 'defense/hit-by-normal',
     PetCharacterAnimState.buff ||
-    PetCharacterAnimState.heal             => 'battle/get-buff',
-    PetCharacterAnimState.debuff           => 'battle/get-debuff',
-    PetCharacterAnimState.shield           => 'defense/hit-with-shield',
-    PetCharacterAnimState.faint            => 'action/move-back',
-    _                                      => 'action/idle/normal',
+    PetCharacterAnimState.heal =>
+      'battle/get-buff',
+    PetCharacterAnimState.debuff => 'battle/get-debuff',
+    PetCharacterAnimState.shield => 'defense/hit-with-shield',
+    PetCharacterAnimState.faint => 'action/move-back',
+    _ => 'action/idle/normal',
   };
 }
 
@@ -119,10 +127,10 @@ class BattleTopHud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final leftName  = playerOnRight ? vm.enemyTeamName  : vm.playerTeamName;
+    final leftName = playerOnRight ? vm.enemyTeamName : vm.playerTeamName;
     final rightName = playerOnRight ? vm.playerTeamName : vm.enemyTeamName;
-    final leftIsPlayer  = !playerOnRight;
-    final rightIsPlayer =  playerOnRight;
+    final leftIsPlayer = !playerOnRight;
+    final rightIsPlayer = playerOnRight;
 
     return Container(
       height: 56,
@@ -140,7 +148,7 @@ class BattleTopHud extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _TeamTag(name: leftName,  isPlayer: leftIsPlayer),
+          _TeamTag(name: leftName, isPlayer: leftIsPlayer),
           Expanded(
             child: Center(
               child: FittedBox(
@@ -187,7 +195,8 @@ class _TeamTag extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = isPlayer ? AppColors.accent : AppColors.offensive;
     final avatar = Container(
-      width: 26, height: 26,
+      width: 26,
+      height: 26,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: color.withValues(alpha: 0.2),
@@ -196,7 +205,9 @@ class _TeamTag extends StatelessWidget {
       child: Center(
         child: Text(name[0],
             style: const TextStyle(
-                color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w900)),
       ),
     );
     final label = Text(name,
@@ -237,17 +248,24 @@ class _BattleRoundTimer extends StatelessWidget {
                 ? const Color(0xFFFFDD44)
                 : const Color(0xFFFF4444);
         return SizedBox(
-          width: 34, height: 34,
+          width: 34,
+          height: 34,
           child: Stack(
             alignment: Alignment.center,
             children: [
               CircularProgressIndicator(
-                  value: remaining, strokeWidth: 3,
-                  color: color, backgroundColor: Colors.white12),
+                  value: remaining,
+                  strokeWidth: 3,
+                  color: color,
+                  backgroundColor: Colors.white12),
               Text('$seconds',
                   style: TextStyle(
-                      color: color, fontSize: 11, fontWeight: FontWeight.w900,
-                      shadows: const [Shadow(blurRadius: 3, color: Colors.black)])),
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      shadows: const [
+                        Shadow(blurRadius: 3, color: Colors.black)
+                      ])),
             ],
           ),
         );
@@ -296,44 +314,61 @@ class _BattleOrderBadge extends StatelessWidget {
       children: [
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: size, height: size,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: c.withValues(alpha: isFirst ? 0.30 : 0.15),
             border: Border.all(color: c, width: isFirst ? 2.0 : 1.5),
             boxShadow: isFirst
-                ? [BoxShadow(color: c.withValues(alpha: 0.6), blurRadius: 8, spreadRadius: 2)]
+                ? [
+                    BoxShadow(
+                        color: c.withValues(alpha: 0.6),
+                        blurRadius: 8,
+                        spreadRadius: 2)
+                  ]
                 : null,
           ),
           child: ClipOval(
             child: entry.texturePath != null
                 ? Image.asset(entry.texturePath!,
-                    width: size, height: size, fit: BoxFit.cover,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Center(
-                      child: Text(entry.name[0],
-                          style: TextStyle(color: Colors.white,
-                              fontSize: isFirst ? 13 : 10,
-                              fontWeight: FontWeight.w900))))
+                        child: Text(entry.name[0],
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: isFirst ? 13 : 10,
+                                fontWeight: FontWeight.w900))))
                 : Center(
                     child: Text(entry.name[0],
-                        style: TextStyle(color: Colors.white,
+                        style: TextStyle(
+                            color: Colors.white,
                             fontSize: isFirst ? 13 : 10,
                             fontWeight: FontWeight.w900))),
           ),
         ),
         Positioned(
-          top: -4, left: -4,
+          top: -4,
+          left: -4,
           child: Container(
-            width: 14, height: 14,
+            width: 14,
+            height: 14,
             decoration: BoxDecoration(
-              shape: BoxShape.circle, color: c,
+              shape: BoxShape.circle,
+              color: c,
               border: Border.all(color: Colors.black, width: 1),
-              boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 2)],
+              boxShadow: const [
+                BoxShadow(color: Colors.black54, blurRadius: 2)
+              ],
             ),
             child: Center(
               child: Text('$number',
-                  style: const TextStyle(color: Colors.white,
-                      fontSize: 7, fontWeight: FontWeight.w900)),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 7,
+                      fontWeight: FontWeight.w900)),
             ),
           ),
         ),
@@ -364,6 +399,10 @@ class BattlefieldView extends ConsumerStatefulWidget {
   final void Function(PetViewModel)? onPlayerPetTap;
   final void Function(PetViewModel)? onPlayerPetLongPress;
   final void Function(PetViewModel)? onOpponentPetTap;
+  // When provided, build() watches this directly so HP bars always reflect
+  // the live Riverpod state — even when setState fires for internal overlays.
+  final ProviderListenable<PveBattleViewModel>? liveProvider;
+  final bool snapHpBars;
 
   const BattlefieldView({
     super.key,
@@ -375,6 +414,8 @@ class BattlefieldView extends ConsumerStatefulWidget {
     this.onPlayerPetTap,
     this.onPlayerPetLongPress,
     this.onOpponentPetTap,
+    this.liveProvider,
+    this.snapHpBars = false,
   });
 
   @override
@@ -387,8 +428,12 @@ class _BattleFloatNum {
   final Color color;
   final double x, y, jitter;
   const _BattleFloatNum({
-    required this.id, required this.text, required this.color,
-    required this.x, required this.y, this.jitter = 0.0,
+    required this.id,
+    required this.text,
+    required this.color,
+    required this.x,
+    required this.y,
+    this.jitter = 0.0,
   });
 }
 
@@ -405,7 +450,8 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     _maybeSpawnFloatNums(old.vm, widget.vm);
   }
 
-  void _maybeSpawnFloatNums(PveBattleViewModel oldVm, PveBattleViewModel newVm) {
+  void _maybeSpawnFloatNums(
+      PveBattleViewModel oldVm, PveBattleViewModel newVm) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final box = context.findRenderObject() as RenderBox?;
@@ -414,6 +460,88 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
       final h = box.size.height;
       final rng = math.Random();
       final nums = <_BattleFloatNum>[];
+
+      void spawnAt({
+        required String petId,
+        required bool isPlayerTeam,
+        required int index,
+        required String text,
+        required Color color,
+      }) {
+        final positions = isPlayerTeam ? widget.playerPos : widget.opponentPos;
+        final frac = positions[index.clamp(0, 2)];
+        final rawDash = newVm.petDashOffsets[petId] ?? Offset.zero;
+        final dashPx = _dashPixelsForPet(
+          vm: newVm,
+          actorPetId: petId,
+          isPlayerTeam: isPlayerTeam,
+          actorIndex: index,
+          rawDash: rawDash,
+          w: w,
+          h: h,
+        );
+        final pos = Offset(w * frac.dx + dashPx.dx, h * frac.dy + dashPx.dy);
+        nums.add(_BattleFloatNum(
+          id: '${_nextId++}',
+          text: text,
+          color: color,
+          x: pos.dx + 30,
+          y: pos.dy - 10,
+          jitter: (rng.nextDouble() - 0.5) * 24,
+        ));
+      }
+
+      final impact = newVm.lastImpactEvent;
+      if (impact != null && oldVm.lastImpactEvent?.id != impact.id) {
+        final petId =
+            impact.targetId.isNotEmpty ? impact.targetId : impact.actorId;
+        final isPlayerTeam = newVm.playerTeam.any((p) => p.id == petId);
+        final team = isPlayerTeam ? newVm.playerTeam : newVm.enemyTeam;
+        final index = team.indexWhere((p) => p.id == petId);
+        if (index >= 0) {
+          switch (impact.effectType) {
+            case 'heal':
+            case 'regen':
+              if (impact.healAmount > 0) {
+                spawnAt(
+                  petId: petId,
+                  isPlayerTeam: isPlayerTeam,
+                  index: index,
+                  text: '+${impact.healAmount}',
+                  color: const Color(0xFF44FF88),
+                );
+              }
+              break;
+            case 'shield':
+              if (impact.shieldAmount > 0) {
+                spawnAt(
+                  petId: petId,
+                  isPlayerTeam: isPlayerTeam,
+                  index: index,
+                  text: '+${impact.shieldAmount}',
+                  color: AppColors.shieldGold,
+                );
+              }
+              break;
+            default:
+              if (impact.damage > 0) {
+                final isPoison = impact.statusApplied == 'poisoned' ||
+                    impact.effectType == 'poison';
+                spawnAt(
+                  petId: petId,
+                  isPlayerTeam: isPlayerTeam,
+                  index: index,
+                  text: '-${impact.damage}',
+                  color: isPoison
+                      ? const Color(0xFFB44FD4)
+                      : const Color(0xFFFF3333),
+                );
+              }
+          }
+        }
+        if (nums.isNotEmpty) setState(() => _floatNums.addAll(nums));
+        return;
+      }
 
       void check(
         List<PetViewModel> oldTeam,
@@ -434,31 +562,29 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
             isPlayerTeam: isPlayerTeam,
             actorIndex: i,
             rawDash: rawDash,
-            w: w, h: h,
+            w: w,
+            h: h,
           );
           final pos = Offset(w * frac.dx + dashPx.dx, h * frac.dy + dashPx.dy);
           final x = pos.dx + 30;
           final y = pos.dy - 10;
 
           if (delta < 0) {
-            final wasPoisoned = oldTeam[i].activeDebuffs.contains('poisoned');
-            final isCrit = delta.abs() > 70 && !wasPoisoned;
-            final dmgColor = wasPoisoned
-                ? const Color(0xFFB44FD4)
-                : isCrit
-                    ? const Color(0xFFFFAA00)
-                    : const Color(0xFFFF3333);
             nums.add(_BattleFloatNum(
               id: '${_nextId++}',
-              text: isCrit ? '★$delta' : '$delta',
-              color: dmgColor, x: x, y: y,
+              text: '$delta',
+              color: const Color(0xFFFF3333),
+              x: x,
+              y: y,
               jitter: (rng.nextDouble() - 0.5) * 24,
             ));
           } else {
             nums.add(_BattleFloatNum(
               id: '${_nextId++}',
               text: '+$delta',
-              color: const Color(0xFF44FF88), x: x, y: y,
+              color: const Color(0xFF44FF88),
+              x: x,
+              y: y,
               jitter: (rng.nextDouble() - 0.5) * 24,
             ));
           }
@@ -475,7 +601,10 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
   }
 
   void _maybeSpawnProjectiles(PveBattleViewModel vm) {
-    if (vm.petAnimStates.isEmpty) { _lastAttackIds = {}; return; }
+    if (vm.petAnimStates.isEmpty) {
+      _lastAttackIds = {};
+      return;
+    }
     final attackIds = vm.petAnimStates.keys.toSet();
     if (attackIds == _lastAttackIds) return;
     _lastAttackIds = attackIds;
@@ -495,7 +624,8 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
         if (cfg == null) continue;
 
         final isPlayer = vm.playerTeam.any((p) => p.id == petId);
-        final attackerPositions = isPlayer ? widget.playerPos : widget.opponentPos;
+        final attackerPositions =
+            isPlayer ? widget.playerPos : widget.opponentPos;
         final team = isPlayer ? vm.playerTeam : vm.enemyTeam;
         final attackerIdx = team.indexWhere((p) => p.id == petId);
         if (attackerIdx < 0) continue;
@@ -507,23 +637,28 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
 
         Offset end = start;
         if (!_isSelfCenteredEffect(effectType)) {
-          final targetPositions = isPlayer ? widget.opponentPos : widget.playerPos;
+          final targetPositions =
+              isPlayer ? widget.opponentPos : widget.playerPos;
           final targetTeam = isPlayer ? vm.enemyTeam : vm.playerTeam;
           final targetIdx = targetTeam.indexWhere((p) => !p.isFainted);
           if (targetIdx < 0) continue;
           final endFrac = targetPositions[targetIdx];
-          end = Offset(w * endFrac.dx + spriteOffset, h * endFrac.dy + spriteOffset);
+          end = Offset(
+              w * endFrac.dx + spriteOffset, h * endFrac.dy + spriteOffset);
         }
 
         newProjectiles.add(ProjectileInstance(
-          id: '${_nextId++}', start: start, end: end, config: cfg));
+            id: '${_nextId++}', start: start, end: end, config: cfg));
       }
 
-      if (newProjectiles.isNotEmpty) setState(() => _projectiles.addAll(newProjectiles));
+      if (newProjectiles.isNotEmpty) {
+        setState(() => _projectiles.addAll(newProjectiles));
+      }
     });
   }
 
-  bool _isSelfCenteredEffect(String? t) => t == 'heal' || t == 'shield' || t == 'buff';
+  bool _isSelfCenteredEffect(String? t) =>
+      t == 'heal' || t == 'shield' || t == 'buff';
 
   void _removeProjectile(String id) =>
       setState(() => _projectiles.removeWhere((p) => p.id == id));
@@ -533,7 +668,12 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
 
   @override
   Widget build(BuildContext context) {
-    final vm = widget.vm;
+    // If liveProvider is set, watch it directly so HP bars always reflect the
+    // latest Riverpod state — even when internal setState fires (e.g. floating
+    // damage numbers) before the parent has propagated the new vm prop.
+    final vm = widget.liveProvider != null
+        ? ref.watch(widget.liveProvider!)
+        : widget.vm;
     return LayoutBuilder(builder: (_, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
@@ -543,7 +683,9 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
         children: [
           // Ground line
           Positioned(
-            top: h * 0.52, left: 0, right: 0,
+            top: h * 0.52,
+            left: 0,
+            right: 0,
             child: Container(
               height: 1.5,
               decoration: BoxDecoration(
@@ -558,7 +700,10 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
 
           // Opponent pets
           for (var i = 0; i < vm.enemyTeam.length; i++)
-            _placed(w, h, widget.opponentPos[i],
+            _placed(
+              w,
+              h,
+              widget.opponentPos[i],
               _BattlePet(
                 pet: vm.enemyTeam[i],
                 flipHorizontal: widget.opponentFlipHorizontal,
@@ -569,22 +714,33 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
                 onTap: widget.onOpponentPetTap != null
                     ? () => widget.onOpponentPetTap!(vm.enemyTeam[i])
                     : null,
+                snapHpBars: widget.snapHpBars,
+                displayHp: _displayHpForPet(vm, vm.enemyTeam[i]).$1,
+                displayShield: _displayHpForPet(vm, vm.enemyTeam[i]).$2,
+                shieldPreview: _previewShieldForPet(vm, vm.enemyTeam[i]),
               ),
               dash: _dashPixelsForPet(
-                vm: vm, actorPetId: vm.enemyTeam[i].id,
-                isPlayerTeam: false, actorIndex: i,
+                vm: vm,
+                actorPetId: vm.enemyTeam[i].id,
+                isPlayerTeam: false,
+                actorIndex: i,
                 rawDash: vm.petDashOffsets[vm.enemyTeam[i].id] ?? Offset.zero,
-                w: w, h: h,
+                w: w,
+                h: h,
               ),
             ),
 
           // Player pets
           for (var i = 0; i < vm.playerTeam.length; i++)
-            _placed(w, h, widget.playerPos[i],
+            _placed(
+              w,
+              h,
+              widget.playerPos[i],
               _BattlePet(
                 pet: vm.playerTeam[i],
                 flipHorizontal: widget.playerFlipHorizontal,
-                hasSkill: vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ?? false,
+                hasSkill:
+                    vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ?? false,
                 positionIndex: i,
                 animState: vm.petAnimStates[vm.playerTeam[i].id],
                 attackSlot: vm.petAttackSlots[vm.playerTeam[i].id],
@@ -594,23 +750,34 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
                 onLongPress: widget.onPlayerPetLongPress != null
                     ? () => widget.onPlayerPetLongPress!(vm.playerTeam[i])
                     : null,
+                snapHpBars: widget.snapHpBars,
+                displayHp: _displayHpForPet(vm, vm.playerTeam[i]).$1,
+                displayShield: _displayHpForPet(vm, vm.playerTeam[i]).$2,
+                shieldPreview: _previewShieldForPet(vm, vm.playerTeam[i]),
               ),
               dash: _dashPixelsForPet(
-                vm: vm, actorPetId: vm.playerTeam[i].id,
-                isPlayerTeam: true, actorIndex: i,
+                vm: vm,
+                actorPetId: vm.playerTeam[i].id,
+                isPlayerTeam: true,
+                actorIndex: i,
                 rawDash: vm.petDashOffsets[vm.playerTeam[i].id] ?? Offset.zero,
-                w: w, h: h,
+                w: w,
+                h: h,
               ),
             ),
 
           // Projectiles
           for (final p in _projectiles)
-            ProjectileWidget(key: ValueKey(p.id), data: p,
+            ProjectileWidget(
+                key: ValueKey(p.id),
+                data: p,
                 onDone: () => _removeProjectile(p.id)),
 
           // Floating numbers
           for (final n in _floatNums)
-            _BattleFloatingNumberWidget(key: ValueKey(n.id), num: n,
+            _BattleFloatingNumberWidget(
+                key: ValueKey(n.id),
+                num: n,
                 onDone: () => _removeFloatNum(n.id)),
         ],
       );
@@ -623,7 +790,8 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeInOut,
-      left: p.dx, top: p.dy,
+      left: p.dx,
+      top: p.dy,
       child: child,
     );
   }
@@ -640,14 +808,15 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     if (rawDash == Offset.zero) return Offset.zero;
 
     final actorPositions = isPlayerTeam ? widget.playerPos : widget.opponentPos;
-    final targetPositions = isPlayerTeam ? widget.opponentPos : widget.playerPos;
+    final targetPositions =
+        isPlayerTeam ? widget.opponentPos : widget.playerPos;
     final targetTeam = isPlayerTeam ? vm.enemyTeam : vm.playerTeam;
 
     final explicitTargetId = vm.petDashTargets[actorPetId];
     int targetIndex = -1;
     if (explicitTargetId != null) {
-      targetIndex = targetTeam.indexWhere(
-          (p) => p.id == explicitTargetId && !p.isFainted);
+      targetIndex = targetTeam
+          .indexWhere((p) => p.id == explicitTargetId && !p.isFainted);
       if (targetIndex < 0) return Offset.zero;
     }
     if (targetIndex < 0) {
@@ -674,8 +843,38 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     final dashDist = math.max(0.0, distance - minGap);
     if (dashDist <= 0) return Offset.zero;
 
-    return Offset(toTarget.dx / distance * dashDist,
-                  toTarget.dy / distance * dashDist);
+    return Offset(
+        toTarget.dx / distance * dashDist, toTarget.dy / distance * dashDist);
+  }
+
+  (int, int) _displayHpForPet(PveBattleViewModel vm, PetViewModel pet) {
+    if (pet.isFainted) return (0, 0);
+    final impact = vm.lastImpactEvent;
+    if (impact == null || (!vm.isResolving && !vm.awaitingOpponent)) {
+      return (pet.hp, pet.shield);
+    }
+    if (impact.targetId == pet.id) {
+      final hp = impact.targetHpAfter >= 0 ? impact.targetHpAfter : pet.hp;
+      return (hp, impact.targetShieldAfter);
+    }
+    if (impact.actorId == pet.id) {
+      final hp = impact.actorHpAfter >= 0 ? impact.actorHpAfter : pet.hp;
+      return (hp, impact.actorShieldAfter);
+    }
+    return (pet.hp, pet.shield);
+  }
+
+  int _previewShieldForPet(PveBattleViewModel vm, PetViewModel pet) {
+    var total = 0;
+    final assignedIds = vm.pendingSkills[pet.id] ?? const [];
+    for (final cardId in assignedIds) {
+      final card = vm.hand.firstWhere(
+        (c) => c.instanceId == cardId,
+        orElse: () => throw StateError('Assigned card missing from hand: $cardId'),
+      );
+      total += card.trait.shieldAmount;
+    }
+    return total;
   }
 }
 
@@ -690,6 +889,10 @@ class _BattlePet extends StatelessWidget {
   final String? attackSlot;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final bool snapHpBars;
+  final int displayHp;
+  final int displayShield;
+  final int shieldPreview;
 
   const _BattlePet({
     required this.pet,
@@ -700,6 +903,10 @@ class _BattlePet extends StatelessWidget {
     this.attackSlot,
     this.onTap,
     this.onLongPress,
+    this.snapHpBars = false,
+    required this.displayHp,
+    required this.displayShield,
+    this.shieldPreview = 0,
   });
 
   @override
@@ -708,7 +915,10 @@ class _BattlePet extends StatelessWidget {
     final opacity = _kOpacityByPos[positionIndex.clamp(0, 2)];
     final spriteSize = kBattleSpriteBase * scale;
     final barWidth = (spriteSize * 0.50).clamp(80.0, 108.0);
-    final effectiveOpacity = pet.isFainted ? 0.88 : opacity;
+    final hp = displayHp;
+    final shield = displayShield;
+    final isFainted = pet.isFainted || hp <= 0;
+    final effectiveOpacity = isFainted ? 0.88 : opacity;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -735,17 +945,30 @@ class _BattlePet extends StatelessWidget {
                       attackSlot: attackSlot,
                     ),
                   ),
-                  if (!pet.isFainted)
+                  if (!isFainted)
                     Positioned(
-                      top: 22, left: 0, right: 0,
-                      child: BattleFloatingHpBar(pet: pet, width: barWidth),
+                      top: 22,
+                      left: 0,
+                      right: 0,
+                      child: BattleFloatingHpBar(
+                        pet: pet,
+                        currentHp: hp,
+                        currentShield: shield,
+                        shieldPreview: shieldPreview,
+                        width: barWidth,
+                        hpBarDuration: snapHpBars
+                            ? Duration.zero
+                            : const Duration(milliseconds: 500),
+                      ),
                     ),
                 ],
               ),
               const SizedBox(height: 2),
               Text(pet.name,
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
                       shadows: [Shadow(blurRadius: 4, color: Colors.black87)])),
             ],
           ),
@@ -764,8 +987,12 @@ class _BattlePetSprite extends StatelessWidget {
   final String? attackSlot;
 
   const _BattlePetSprite({
-    required this.pet, required this.size, required this.hasSkill,
-    required this.flipHorizontal, this.animState, this.attackSlot,
+    required this.pet,
+    required this.size,
+    required this.hasSkill,
+    required this.flipHorizontal,
+    this.animState,
+    this.attackSlot,
   });
 
   @override
@@ -778,7 +1005,8 @@ class _BattlePetSprite extends StatelessWidget {
         Positioned(
           bottom: -4,
           child: Container(
-            width: size * 0.72, height: 16,
+            width: size * 0.72,
+            height: 16,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(50),
               gradient: RadialGradient(colors: [
@@ -789,26 +1017,36 @@ class _BattlePetSprite extends StatelessWidget {
           ),
         ),
         if (pet.isFainted)
-          SizedBox(width: size, height: size,
+          SizedBox(
+              width: size,
+              height: size,
               child: DeadPetEffect(size: size, flipHorizontal: flipHorizontal))
         else if (pet.creatureDef != null)
           SizedBox(
-            width: size, height: size,
+            width: size,
+            height: size,
             child: PetRendererWidget(
-              def: pet.creatureDef!, size: size, flipHorizontal: flipHorizontal,
+              def: pet.creatureDef!,
+              size: size,
+              flipHorizontal: flipHorizontal,
               animation: battleAnimFor(animState, attackSlot: attackSlot),
             ),
           )
         else
           PetSpriteWidget(
-            config: pet.spriteConfig, size: size, flipHorizontal: flipHorizontal,
-            petName: pet.name, petColor: color,
+            config: pet.spriteConfig,
+            size: size,
+            flipHorizontal: flipHorizontal,
+            petName: pet.name,
+            petColor: color,
           ),
         if (hasSkill && !pet.isFainted)
           Positioned(
-            top: 0, right: 0,
+            top: 0,
+            right: 0,
             child: Container(
-              width: 16, height: 16,
+              width: 16,
+              height: 16,
               decoration: const BoxDecoration(
                   shape: BoxShape.circle, color: AppColors.accent),
               child: const Icon(Icons.check, size: 10, color: Colors.white),
@@ -829,8 +1067,12 @@ class _BattlePetSprite extends StatelessWidget {
 
   static Color _petColor(String name) {
     const c = [
-      Color(0xFF6C3FA1), Color(0xFF3FCFA1), Color(0xFFE8A838),
-      Color(0xFFE53935), Color(0xFF1E88E5), Color(0xFF43A047),
+      Color(0xFF6C3FA1),
+      Color(0xFF3FCFA1),
+      Color(0xFFE8A838),
+      Color(0xFFE53935),
+      Color(0xFF1E88E5),
+      Color(0xFF43A047),
     ];
     return c[name.codeUnits.first % c.length];
   }
@@ -850,27 +1092,27 @@ class _PetStatusIconRow extends StatelessWidget {
 
   // Debuffs ordered by severity — most impactful shown first.
   static const _kDebuffIcons = {
-    'stunned':      'stun-stroke.png',
-    'poisoned':     'poison-stroke.png',
-    'burned':       'critical-stroke.png',
-    'attackDown':   'attack-down-stroke.png',
-    'attack_down':  'attack-down-stroke.png',
-    'defenseDown':  'fragile-stroke.png',
+    'stunned': 'stun-stroke.png',
+    'poisoned': 'poison-stroke.png',
+    'burned': 'critical-stroke.png',
+    'attackDown': 'attack-down-stroke.png',
+    'attack_down': 'attack-down-stroke.png',
+    'defenseDown': 'fragile-stroke.png',
     'defense_down': 'fragile-stroke.png',
-    'speedDown':    'speed-down-stroke.png',
-    'speed_down':   'speed-down-stroke.png',
+    'speedDown': 'speed-down-stroke.png',
+    'speed_down': 'speed-down-stroke.png',
   };
 
   // Buffs ordered by importance.
   static const _kBuffIcons = {
-    'attackUp':   'attack-up-stroke.png',
-    'attack_up':  'attack-up-stroke.png',
-    'defenseUp':  'raise-shield-stroke.png',
+    'attackUp': 'attack-up-stroke.png',
+    'attack_up': 'attack-up-stroke.png',
+    'defenseUp': 'raise-shield-stroke.png',
     'defense_up': 'raise-shield-stroke.png',
-    'speedUp':    'speed-up-stroke.png',
-    'speed_up':   'speed-up-stroke.png',
-    'regen':      'self-heal-stroke.png',
-    'energized':  'gain-energy-stroke.png',
+    'speedUp': 'speed-up-stroke.png',
+    'speed_up': 'speed-up-stroke.png',
+    'regen': 'self-heal-stroke.png',
+    'energized': 'gain-energy-stroke.png',
   };
 
   @override
@@ -894,16 +1136,18 @@ class _PetStatusIconRow extends StatelessWidget {
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: display.map((path) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: Image.asset(
-          path,
-          width: 22,
-          height: 22,
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-        ),
-      )).toList(),
+      children: display
+          .map((path) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Image.asset(
+                  path,
+                  width: 22,
+                  height: 22,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ))
+          .toList(),
     );
   }
 }
@@ -913,8 +1157,20 @@ class _PetStatusIconRow extends StatelessWidget {
 
 class BattleFloatingHpBar extends StatelessWidget {
   final PetViewModel pet;
+  final int currentHp;
+  final int currentShield;
+  final int shieldPreview;
   final double width;
-  const BattleFloatingHpBar({super.key, required this.pet, required this.width});
+  final Duration hpBarDuration;
+  const BattleFloatingHpBar({
+    super.key,
+    required this.pet,
+    required this.currentHp,
+    required this.currentShield,
+    this.shieldPreview = 0,
+    required this.width,
+    this.hpBarDuration = const Duration(milliseconds: 500),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -933,21 +1189,41 @@ class BattleFloatingHpBar extends StatelessWidget {
             children: [
               const Icon(Icons.favorite, size: 8, color: Color(0xFF66FF88)),
               const SizedBox(width: 1),
-              Text('${pet.hp}',
-                  style: const TextStyle(color: Color(0xFF66FF88),
-                      fontSize: 8, fontWeight: FontWeight.w800)),
+              Text('$currentHp',
+                  style: const TextStyle(
+                      color: Color(0xFF66FF88),
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800)),
               const Spacer(),
-              if (pet.shield > 0) ...[
+              if (currentShield > 0) ...[
                 const Icon(Icons.shield, size: 8, color: AppColors.shieldGold),
                 const SizedBox(width: 1),
-                Text('${pet.shield}',
-                    style: const TextStyle(color: AppColors.shieldGold,
-                        fontSize: 8, fontWeight: FontWeight.w800)),
+                Text('$currentShield',
+                    style: const TextStyle(
+                        color: AppColors.shieldGold,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800)),
+              ],
+              if (shieldPreview > 0) ...[
+                if (currentShield > 0) const SizedBox(width: 2),
+                Text(
+                  '+$shieldPreview',
+                  style: const TextStyle(
+                    color: AppColors.shieldGold,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ],
             ],
           ),
           const SizedBox(height: 1),
-          HpBar(current: pet.hp, max: pet.maxHp, height: 3),
+          HpBar(
+            current: currentHp,
+            max: pet.maxHp,
+            height: 3,
+            duration: hpBarDuration,
+          ),
         ],
       ),
     );
@@ -959,14 +1235,16 @@ class BattleFloatingHpBar extends StatelessWidget {
 class _BattleFloatingNumberWidget extends StatefulWidget {
   final _BattleFloatNum num;
   final VoidCallback onDone;
-  const _BattleFloatingNumberWidget({super.key, required this.num, required this.onDone});
+  const _BattleFloatingNumberWidget(
+      {super.key, required this.num, required this.onDone});
 
   @override
   State<_BattleFloatingNumberWidget> createState() =>
       _BattleFloatingNumberWidgetState();
 }
 
-class _BattleFloatingNumberWidgetState extends State<_BattleFloatingNumberWidget>
+class _BattleFloatingNumberWidgetState
+    extends State<_BattleFloatingNumberWidget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _rise, _fade, _scale;
@@ -978,21 +1256,26 @@ class _BattleFloatingNumberWidgetState extends State<_BattleFloatingNumberWidget
         vsync: this, duration: const Duration(milliseconds: 1300));
     _rise = Tween(begin: 0.0, end: -72.0)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    _fade = Tween(begin: 1.0, end: 0.0)
-        .animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0.5, 1.0)));
+    _fade = Tween(begin: 1.0, end: 0.0).animate(
+        CurvedAnimation(parent: _ctrl, curve: const Interval(0.5, 1.0)));
     _scale = Tween(begin: 1.6, end: 1.0).animate(CurvedAnimation(
-        parent: _ctrl, curve: const Interval(0.0, 0.4, curve: Curves.easeOutBack)));
+        parent: _ctrl,
+        curve: const Interval(0.0, 0.4, curve: Curves.easeOutBack)));
     _ctrl.forward().then((_) => widget.onDone());
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final n = widget.num;
     return Positioned(
-      left: n.x + n.jitter, top: n.y,
+      left: n.x + n.jitter,
+      top: n.y,
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) => Opacity(
@@ -1002,13 +1285,19 @@ class _BattleFloatingNumberWidgetState extends State<_BattleFloatingNumberWidget
             child: Transform.scale(
               scale: _scale.value,
               child: Stack(children: [
-                Text(n.text, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
-                    foreground: Paint()
-                      ..style = PaintingStyle.stroke
-                      ..strokeWidth = 3
-                      ..color = Colors.black87)),
-                Text(n.text, style: TextStyle(color: n.color,
-                    fontSize: 22, fontWeight: FontWeight.w900)),
+                Text(n.text,
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        foreground: Paint()
+                          ..style = PaintingStyle.stroke
+                          ..strokeWidth = 3
+                          ..color = Colors.black87)),
+                Text(n.text,
+                    style: TextStyle(
+                        color: n.color,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900)),
               ]),
             ),
           ),
@@ -1061,19 +1350,25 @@ class BattleBottomPanel extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [Color(0xB80A0E1A), Color(0xF80A0E1A)],
               ),
-              border: Border(top: BorderSide(color: Color(0xFF2A3860), width: 2)),
+              border:
+                  Border(top: BorderSide(color: Color(0xFF2A3860), width: 2)),
             ),
           ),
           // Inner shadow
           Positioned(
-            top: 2, left: 0, right: 0,
+            top: 2,
+            left: 0,
+            right: 0,
             child: Container(
               height: 18,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.black.withValues(alpha: 0.28), Colors.transparent],
+                  colors: [
+                    Colors.black.withValues(alpha: 0.28),
+                    Colors.transparent
+                  ],
                 ),
               ),
             ),
@@ -1094,7 +1389,8 @@ class BattleBottomPanel extends StatelessWidget {
               onTap: onToggleCollapse,
               child: Container(
                 margin: const EdgeInsets.only(top: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A243A),
                   borderRadius: BorderRadius.circular(10),
@@ -1104,14 +1400,17 @@ class BattleBottomPanel extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      isCollapsed
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      size: 15, color: Colors.white70),
+                        isCollapsed
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        size: 15,
+                        color: Colors.white70),
                     const SizedBox(width: 4),
                     Text(isCollapsed ? 'Show Deck' : 'Hide Deck',
-                        style: const TextStyle(color: Colors.white70,
-                            fontSize: 10, fontWeight: FontWeight.w700)),
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
@@ -1153,7 +1452,8 @@ class _BattleBottomPanelContent extends StatelessWidget {
         SizedBox(
           width: 76,
           child: Center(
-            child: BattleEnergyDisplay(energy: previewEnergy, max: kTeamEnergyCap),
+            child:
+                BattleEnergyDisplay(energy: previewEnergy, max: kTeamEnergyCap),
           ),
         ),
 
@@ -1167,7 +1467,8 @@ class _BattleBottomPanelContent extends StatelessWidget {
                   child: entries.isEmpty
                       ? const Center(
                           child: Text('No cards',
-                              style: TextStyle(color: Colors.white38, fontSize: 12)))
+                              style: TextStyle(
+                                  color: Colors.white38, fontSize: 12)))
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
@@ -1175,18 +1476,23 @@ class _BattleBottomPanelContent extends StatelessWidget {
                           itemBuilder: (_, i) {
                             final (pet, card) = entries[i];
                             final assigned = vm.pendingSkills[pet.id] ?? [];
-                            final isAssigned = assigned.contains(card.instanceId);
+                            final isAssigned =
+                                assigned.contains(card.instanceId);
                             final comboIdx = isAssigned
                                 ? assigned.indexOf(card.instanceId) + 1
                                 : null;
-                            final isNew = vm.newCardIds.contains(card.instanceId);
-                            final isFizzled = vm.fizzledCardIds.contains(card.instanceId);
+                            final isNew =
+                                vm.newCardIds.contains(card.instanceId);
+                            final isFizzled =
+                                vm.fizzledCardIds.contains(card.instanceId);
 
                             final prevPet = i > 0 ? entries[i - 1].$1 : null;
-                            final isNewPet = prevPet == null || prevPet.id != pet.id;
+                            final isNewPet =
+                                prevPet == null || prevPet.id != pet.id;
                             final petColor = _clsColor(
                                 pet.creatureDef?.bodyClass.name ?? '');
-                            final clsName = pet.creatureDef?.bodyClass.name ?? '';
+                            final clsName =
+                                pet.creatureDef?.bodyClass.name ?? '';
                             final clsLabel = clsName.isEmpty
                                 ? ''
                                 : '${clsName[0].toUpperCase()}${clsName.substring(1)}';
@@ -1202,13 +1508,17 @@ class _BattleBottomPanelContent extends StatelessWidget {
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 7, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: petColor.withValues(alpha: 0.18),
-                                            borderRadius: BorderRadius.circular(6),
+                                            color: petColor.withValues(
+                                                alpha: 0.18),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
                                             border: Border.all(
-                                                color: petColor.withValues(alpha: 0.55)),
+                                                color: petColor.withValues(
+                                                    alpha: 0.55)),
                                           ),
                                           child: Text(clsLabel,
-                                              style: TextStyle(color: petColor,
+                                              style: TextStyle(
+                                                  color: petColor,
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.w800,
                                                   letterSpacing: 0.3)),
@@ -1225,7 +1535,7 @@ class _BattleBottomPanelContent extends StatelessWidget {
                                   cardArtPath: card.cardArtPath,
                                   cardTemplatePath: card.cardTemplatePath,
                                   comboIndex: comboIdx,
-                                   petColor: card.petColor,
+                                  petColor: card.petColor,
                                   onTap: () => onAssignSkill(card.instanceId),
                                 ),
                               ],
@@ -1258,13 +1568,13 @@ class _BattleBottomPanelContent extends StatelessWidget {
   }
 
   static Color _clsColor(String name) => switch (name.toLowerCase()) {
-        'beast'   => const Color(0xFFFF9800),
-        'plant'   => const Color(0xFF4CAF50),
+        'beast' => const Color(0xFFFF9800),
+        'plant' => const Color(0xFF4CAF50),
         'aquatic' => const Color(0xFF29B6F6),
         'reptile' => const Color(0xFF66BB6A),
-        'bird'    => const Color(0xFFFF80AB),
-        'bug'     => const Color(0xFFFF5252),
-        _         => const Color(0xFF9C27B0),
+        'bird' => const Color(0xFFFF80AB),
+        'bug' => const Color(0xFFFF5252),
+        _ => const Color(0xFF9C27B0),
       };
 }
 
@@ -1273,7 +1583,8 @@ class _BattleBottomPanelContent extends StatelessWidget {
 class BattleEnergyDisplay extends StatelessWidget {
   final int energy;
   final int max;
-  const BattleEnergyDisplay({super.key, required this.energy, required this.max});
+  const BattleEnergyDisplay(
+      {super.key, required this.energy, required this.max});
 
   @override
   Widget build(BuildContext context) {
@@ -1284,12 +1595,14 @@ class BattleEnergyDisplay extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 52, height: 52,
+          width: 52,
+          height: 52,
           child: Stack(
             alignment: Alignment.center,
             children: [
               Container(
-                width: 52, height: 52,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(colors: [
@@ -1299,28 +1612,40 @@ class BattleEnergyDisplay extends StatelessWidget {
                 ),
               ),
               Container(
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     center: const Alignment(-0.3, -0.3),
                     colors: [
-                      energy > 0 ? c.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.1),
+                      energy > 0
+                          ? c.withValues(alpha: 0.9)
+                          : Colors.white.withValues(alpha: 0.1),
                       energy > 0 ? const Color(0xFF0A3A6A) : Colors.black45,
                     ],
                   ),
                   border: Border.all(
-                      color: energy > 0 ? c.withValues(alpha: 0.8) : Colors.white12,
+                      color: energy > 0
+                          ? c.withValues(alpha: 0.8)
+                          : Colors.white12,
                       width: 2),
                   boxShadow: energy > 0
-                      ? [BoxShadow(color: c.withValues(alpha: 0.6), blurRadius: 12, spreadRadius: 1)]
+                      ? [
+                          BoxShadow(
+                              color: c.withValues(alpha: 0.6),
+                              blurRadius: 12,
+                              spreadRadius: 1)
+                        ]
                       : null,
                 ),
                 child: Center(
                   child: Text('$energy',
                       style: GoogleFonts.rajdhani(
-                          color: Colors.white, fontSize: 22,
-                          fontWeight: FontWeight.w900, height: 1)),
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          height: 1)),
                 ),
               ),
             ],
@@ -1330,18 +1655,25 @@ class BattleEnergyDisplay extends StatelessWidget {
         // Gem row
         Row(
           mainAxisSize: MainAxisSize.min,
-          children: List.generate(max, (i) => AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 7, height: 7,
-                margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: i < energy ? c : Colors.white12,
-                  boxShadow: i < energy
-                      ? [BoxShadow(color: c.withValues(alpha: 0.7), blurRadius: 4)]
-                      : null,
-                ),
-              )),
+          children: List.generate(
+              max,
+              (i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 7,
+                    height: 7,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i < energy ? c : Colors.white12,
+                      boxShadow: i < energy
+                          ? [
+                              BoxShadow(
+                                  color: c.withValues(alpha: 0.7),
+                                  blurRadius: 4)
+                            ]
+                          : null,
+                    ),
+                  )),
         ),
       ],
     );
@@ -1359,8 +1691,11 @@ class BattleFeed extends StatelessWidget {
     if (log.isEmpty) return const SizedBox.shrink();
     final lines = log
         .split('\n')
-        .where((l) => l.contains('→') || l.contains('⚔') ||
-            l.contains('FAINTED') || l.contains('STUNNED'))
+        .where((l) =>
+            l.contains('→') ||
+            l.contains('⚔') ||
+            l.contains('FAINTED') ||
+            l.contains('STUNNED'))
         .map((l) => l.trim().replaceAll('  ', ' '))
         .where((l) => l.isNotEmpty)
         .toList();
@@ -1374,14 +1709,16 @@ class BattleFeed extends StatelessWidget {
     if (display.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 28, width: double.infinity,
+      height: 28,
+      width: double.infinity,
       color: Colors.black.withValues(alpha: 0.55),
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Text(display,
-          style: const TextStyle(color: Colors.white70,
-              fontSize: 10, fontFamily: 'monospace'),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
+          style: const TextStyle(
+              color: Colors.white70, fontSize: 10, fontFamily: 'monospace'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis),
     );
   }
 }
@@ -1422,7 +1759,8 @@ class BattleSkillCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final usable = discardMode || trait.isUsable;
-    final tc = discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
+    final tc =
+        discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
     final cardEntry = kBattleCardCatalogByTraitId[trait.id];
     final resolvedTemplatePath = cardTemplatePath ??
         cardEntry?.templatePath ??
@@ -1442,7 +1780,8 @@ class BattleSkillCard extends StatelessWidget {
       onTap: usable && !isFizzled ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 110),
-        width: cardW, height: cardH,
+        width: cardW,
+        height: cardH,
         transform: isSelected
             ? (Matrix4.identity()..translateByDouble(0, lift, 0, 1))
             : Matrix4.identity(),
@@ -1450,13 +1789,21 @@ class BattleSkillCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(11),
           boxShadow: [
             if (isSelected) ...[
-              BoxShadow(color: tc.withValues(alpha: 0.85), blurRadius: 20,
-                  spreadRadius: 2, offset: const Offset(0, -2)),
-              BoxShadow(color: tc.withValues(alpha: 0.4), blurRadius: 36, spreadRadius: 4),
+              BoxShadow(
+                  color: tc.withValues(alpha: 0.85),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                  offset: const Offset(0, -2)),
+              BoxShadow(
+                  color: tc.withValues(alpha: 0.4),
+                  blurRadius: 36,
+                  spreadRadius: 4),
             ],
             if (discardMode)
-              const BoxShadow(color: Color(0xFFCC2020), blurRadius: 14, spreadRadius: 3),
-            const BoxShadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
+              const BoxShadow(
+                  color: Color(0xFFCC2020), blurRadius: 14, spreadRadius: 3),
+            const BoxShadow(
+                color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
           ],
         ),
         child: Opacity(
@@ -1483,9 +1830,13 @@ class BattleSkillCard extends StatelessWidget {
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: tc.withValues(alpha: 0.9), width: 2.5),
+                        border: Border.all(
+                            color: tc.withValues(alpha: 0.9), width: 2.5),
                         gradient: LinearGradient(
-                          colors: [Colors.white.withValues(alpha: 0.14), Colors.transparent],
+                          colors: [
+                            Colors.white.withValues(alpha: 0.14),
+                            Colors.transparent
+                          ],
                           begin: Alignment.topCenter,
                           end: Alignment.center,
                         ),
@@ -1494,17 +1845,22 @@ class BattleSkillCard extends StatelessWidget {
                   ),
                 if (!trait.isReady)
                   Positioned(
-                    bottom: 4, left: 4,
+                    bottom: 4,
+                    left: 4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppColors.utility.withValues(alpha: 0.6)),
+                        border: Border.all(
+                            color: AppColors.utility.withValues(alpha: 0.6)),
                       ),
                       child: Text('CD ${trait.cooldownRemaining}',
-                          style: TextStyle(color: AppColors.utility,
-                              fontSize: 7, fontWeight: FontWeight.w700)),
+                          style: TextStyle(
+                              color: AppColors.utility,
+                              fontSize: 7,
+                              fontWeight: FontWeight.w700)),
                     ),
                   ),
                 // Pet class color badge (top-left corner)
@@ -1519,36 +1875,51 @@ class BattleSkillCard extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: petColor,
                         border: Border.all(color: Colors.white70, width: 0.5),
-                        boxShadow: [BoxShadow(color: petColor!.withValues(alpha: 0.5), blurRadius: 4)],
+                        boxShadow: [
+                          BoxShadow(
+                              color: petColor!.withValues(alpha: 0.5),
+                              blurRadius: 4)
+                        ],
                       ),
                     ),
                   ),
                 if (comboIndex != null)
                   Positioned(
-                    top: 22, right: 4,
+                    top: 22,
+                    right: 4,
                     child: Container(
-                      width: 18, height: 18,
+                      width: 18,
+                      height: 18,
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle, color: tc,
+                        shape: BoxShape.circle,
+                        color: tc,
                         border: Border.all(color: Colors.white70, width: 1),
-                        boxShadow: [BoxShadow(color: tc.withValues(alpha: 0.6), blurRadius: 6)],
+                        boxShadow: [
+                          BoxShadow(
+                              color: tc.withValues(alpha: 0.6), blurRadius: 6)
+                        ],
                       ),
                       child: Center(
                         child: Text('$comboIndex',
-                            style: const TextStyle(color: Colors.white,
-                                fontSize: 9, fontWeight: FontWeight.w900)),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900)),
                       ),
                     ),
                   ),
                 if (isPity && !discardMode)
                   Positioned(
-                    bottom: 5, left: 5,
+                    bottom: 5,
+                    left: 5,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 3, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
+                        border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.6)),
                       ),
                       child: const Text('★',
                           style: TextStyle(color: Colors.amber, fontSize: 7)),
@@ -1560,23 +1931,31 @@ class BattleSkillCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(9),
                         gradient: RadialGradient(
-                          center: Alignment.center, radius: 1.1,
-                          colors: [Colors.transparent,
-                            const Color(0xFFCC2020).withValues(alpha: 0.35)],
+                          center: Alignment.center,
+                          radius: 1.1,
+                          colors: [
+                            Colors.transparent,
+                            const Color(0xFFCC2020).withValues(alpha: 0.35)
+                          ],
                         ),
                       ),
                     ),
                   ),
                   Positioned(
-                    bottom: 5, right: 5,
+                    bottom: 5,
+                    right: 5,
                     child: Container(
-                      width: 22, height: 22,
+                      width: 22,
+                      height: 22,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: const Color(0xFFCC2020).withValues(alpha: 0.9),
-                        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black54, blurRadius: 4)
+                        ],
                       ),
-                      child: const Icon(Icons.close, size: 13, color: Colors.white),
+                      child: const Icon(Icons.close,
+                          size: 13, color: Colors.white),
                     ),
                   ),
                 ],
@@ -1586,8 +1965,10 @@ class BattleSkillCard extends StatelessWidget {
                       color: Colors.black.withValues(alpha: 0.6),
                       child: const Center(
                         child: Text('✗',
-                            style: TextStyle(color: Colors.white54,
-                                fontSize: 20, fontWeight: FontWeight.w900)),
+                            style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900)),
                       ),
                     ),
                   ),
@@ -1602,9 +1983,9 @@ class BattleSkillCard extends StatelessWidget {
   static Color _typeColor(String t) => switch (t) {
         'offensive' => AppColors.offensive,
         'defensive' => AppColors.defensive,
-        'support'   => AppColors.support,
-        'utility'   => AppColors.utility,
-        _           => AppColors.primary,
+        'support' => AppColors.support,
+        'utility' => AppColors.utility,
+        _ => AppColors.primary,
       };
 }
 
@@ -1613,7 +1994,8 @@ class BattleSkillCard extends StatelessWidget {
 class BattleCardEntrance extends StatefulWidget {
   final Widget child;
   final Duration delay;
-  const BattleCardEntrance({super.key, required this.child, required this.delay});
+  const BattleCardEntrance(
+      {super.key, required this.child, required this.delay});
 
   @override
   State<BattleCardEntrance> createState() => _BattleCardEntranceState();
@@ -1634,16 +2016,21 @@ class _BattleCardEntranceState extends State<BattleCardEntrance>
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _slide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    Future.delayed(widget.delay, () { if (mounted) _ctrl.forward(); });
+    Future.delayed(widget.delay, () {
+      if (mounted) _ctrl.forward();
+    });
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => FadeTransition(
-        opacity: _opacity,
-        child: SlideTransition(position: _slide, child: widget.child));
+      opacity: _opacity,
+      child: SlideTransition(position: _slide, child: widget.child));
 }
 
 // ── BattleLoadingScreen ───────────────────────────────────────────────────────
@@ -1669,8 +2056,10 @@ class BattleLoadingScreen extends StatelessWidget {
                     const CircularProgressIndicator(color: AppColors.accent),
                     const SizedBox(height: 14),
                     Text(message,
-                        style: const TextStyle(color: Colors.white,
-                            fontSize: 14, fontWeight: FontWeight.w700)),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),

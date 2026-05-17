@@ -59,16 +59,23 @@ export class PvpMatchmaker {
     round: number,
     selections: Record<string, string[]>,
     petStates?: any[],
+    cardEffects?: Record<string, any>,
   ): void {
     const match = this.activeMatches.get(matchId);
     if (!match) return;
-    match.handleSubmit(userId, round, selections, petStates);
+    match.handleSubmit(userId, round, selections, petStates, cardEffects);
   }
 
   handleClientResult(userId: string, matchId: string, winnerUid: string): void {
     const match = this.activeMatches.get(matchId);
     if (!match) return;
     match.handleClientResult(userId, winnerUid);
+  }
+
+  handleClientTrace(userId: string, matchId: string, event: string, details: Record<string, unknown> = {}): void {
+    const match = this.activeMatches.get(matchId);
+    if (!match) return;
+    match.handleClientTrace(userId, event, details);
   }
 
   resumeSocket(socket: AuthedSocket, matchId: string): void {

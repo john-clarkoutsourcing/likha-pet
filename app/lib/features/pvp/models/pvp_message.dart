@@ -10,6 +10,8 @@ sealed class PvpMessage {
       'queue:status'           => PvpQueueStatus.fromJson(json),
       'match:found'            => PvpMatchFound.fromJson(json),
       'round:locked'           => PvpRoundLocked.fromJson(json),
+      'round:action'           => PvpRoundAction.fromJson(json),
+      'round:hit'              => PvpRoundHit.fromJson(json),
       'round:result'           => PvpRoundResult.fromJson(json),
       'match:end'              => PvpMatchEnd.fromJson(json),
       'match:resume'           => PvpMatchResume.fromJson(json),
@@ -131,6 +133,102 @@ class PvpRoundLocked extends PvpMessage {
   }
 }
 
+// Phase 1 — dash + attack animation starts.
+class PvpRoundAction extends PvpMessage {
+  final String matchId;
+  final int    round;
+  final String actorUid;
+  final String actorTeam;
+  final String actionName;
+  final String effectType;  // 'damage'|'heal'|'shield'|'buff'|'poison'|'burn'|'stun'|...
+  final int    damage;
+  final String targetUid;
+  final String targetTeam;
+
+  const PvpRoundAction({
+    required this.matchId,
+    required this.round,
+    required this.actorUid,
+    required this.actorTeam,
+    required this.actionName,
+    required this.effectType,
+    required this.damage,
+    required this.targetUid,
+    required this.targetTeam,
+  });
+
+  factory PvpRoundAction.fromJson(Map<String, dynamic> j) => PvpRoundAction(
+    matchId:    j['matchId']    as String,
+    round:      (j['round']     as num).toInt(),
+    actorUid:   j['actorUid']   as String,
+    actorTeam:  j['actorTeam']  as String,
+    actionName: j['actionName'] as String? ?? '',
+    effectType: j['effectType'] as String? ?? 'damage',
+    damage:     (j['damage']    as num?)?.toInt() ?? 0,
+    targetUid:  j['targetUid']  as String? ?? '',
+    targetTeam: j['targetTeam'] as String? ?? '',
+  );
+}
+
+// Phase 2 — impact: HP changes, status applied, hit animation.
+class PvpRoundHit extends PvpMessage {
+  final String matchId;
+  final int    round;
+  final String actorUid;
+  final String actorTeam;
+  final String effectType;
+  final int    damage;
+  final int    healAmount;
+  final int    shieldAmount;
+  final String statusApplied; // '' if none
+  final String targetUid;
+  final String targetTeam;
+  // Authoritative post-action state from server — apply directly, no local recalc.
+  final int  targetHpAfter;
+  final int  targetShieldAfter;
+  final bool targetIsFainted;
+  final int  actorHpAfter;
+  final int  actorShieldAfter;
+
+  const PvpRoundHit({
+    required this.matchId,
+    required this.round,
+    required this.actorUid,
+    required this.actorTeam,
+    required this.effectType,
+    required this.damage,
+    required this.healAmount,
+    required this.shieldAmount,
+    required this.statusApplied,
+    required this.targetUid,
+    required this.targetTeam,
+    this.targetHpAfter    = -1,
+    this.targetShieldAfter = 0,
+    this.targetIsFainted  = false,
+    this.actorHpAfter     = -1,
+    this.actorShieldAfter  = 0,
+  });
+
+  factory PvpRoundHit.fromJson(Map<String, dynamic> j) => PvpRoundHit(
+    matchId:           j['matchId']           as String,
+    round:             (j['round']            as num).toInt(),
+    actorUid:          j['actorUid']          as String,
+    actorTeam:         j['actorTeam']         as String,
+    effectType:        j['effectType']        as String? ?? 'damage',
+    damage:            (j['damage']           as num?)?.toInt() ?? 0,
+    healAmount:        (j['healAmount']       as num?)?.toInt() ?? 0,
+    shieldAmount:      (j['shieldAmount']     as num?)?.toInt() ?? 0,
+    statusApplied:     j['statusApplied']     as String? ?? '',
+    targetUid:         j['targetUid']         as String? ?? '',
+    targetTeam:        j['targetTeam']        as String? ?? '',
+    targetHpAfter:     (j['targetHpAfter']    as num?)?.toInt() ?? -1,
+    targetShieldAfter: (j['targetShieldAfter'] as num?)?.toInt() ?? 0,
+    targetIsFainted:   (j['targetIsFainted']  as bool?) ?? false,
+    actorHpAfter:      (j['actorHpAfter']     as num?)?.toInt() ?? -1,
+    actorShieldAfter:  (j['actorShieldAfter'] as num?)?.toInt() ?? 0,
+  );
+}
+
 class PvpRoundResult extends PvpMessage {
   final String matchId;
   final int round;
@@ -222,16 +320,17 @@ class OutQueueLeave {
 class OutRoundSubmit {
   final String matchId;
   final int round;
-  // petId → [cardInstanceId, ...]
   final Map<String, List<String>> selections;
-  // Current pet state (HP, shield, status) for server sync
   final List<Map<String, dynamic>>? petStates;
+  // cardInstanceId → {effectType, effectValue, target}
+  final Map<String, dynamic>? cardEffects;
 
   const OutRoundSubmit({
     required this.matchId,
     required this.round,
     required this.selections,
     this.petStates,
+    this.cardEffects,
   });
 
   Map<String, dynamic> toJson() => {
@@ -239,7 +338,8 @@ class OutRoundSubmit {
         'matchId': matchId,
         'round': round,
         'selections': selections,
-        if (petStates != null) 'petStates': petStates,
+        if (petStates    != null) 'petStates':   petStates,
+        if (cardEffects  != null) 'cardEffects': cardEffects,
       };
 }
 

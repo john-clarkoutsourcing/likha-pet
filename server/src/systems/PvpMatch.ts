@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { WebSocket } from 'ws';
 import { AuthedSocket, send } from '../ws/PvpGateway';
 import { MmrService } from '../services/MmrService';
@@ -36,6 +38,8 @@ export class PvpMatch {
   private disconnectTimers: Map<string, NodeJS.Timeout> = new Map();
   private executor = new ServerBattleExecutor();
   private petStates: Map<string, PetState[]> = new Map(); // Track state per player
+  private readonly logRoot = process.env.PVP_LOG_DIR || path.join('/tmp', 'likha-pvp-logs');
+  private readonly matchLogDir: string;
 
   constructor(
     matchId: string,
@@ -47,6 +51,16 @@ export class PvpMatch {
     this.matchId = matchId;
     this.seed    = seed;
     this.players = [playerA, playerB];
+    this.matchLogDir = path.join(this.logRoot, this.matchId);
+    fs.mkdirSync(this.matchLogDir, { recursive: true });
+    this._trace('match:created', {
+      seed: this.seed,
+      players: this.players.map((p) => ({
+        userId: p.userId,
+        mmr: p.mmr,
+        teamSize: p.team.length,
+      })),
+    });
   }
 
   start(): void {
@@ -68,17 +82,33 @@ export class PvpMatch {
       });
     }
 
+    this._trace('match:found', {
+      deadline,
+      round: this.round,
+    });
+    this._logFiles('match:found', {
+      deadline,
+      round: this.round,
+    });
     this._startRoundTimer();
   }
 
-  handleSubmit(userId: string, round: number, selections: Record<string, string[]>, petStates?: PetState[]): void {
+  private pendingCardEffects: Map<string, Record<string, any>> = new Map();
+
+  handleSubmit(userId: string, round: number, selections: Record<string, string[]>, petStates?: PetState[], cardEffects?: Record<string, any>): void {
     if (this.status !== 'in_round' || round !== this.round) return;
-    if (this.pendingSelections.has(userId)) return; // already submitted
+    if (this.pendingSelections.has(userId)) return;
 
     this.pendingSelections.set(userId, selections);
-    if (petStates) {
-      this.pendingPetStates.set(userId, petStates);
-    }
+    if (petStates)    this.pendingPetStates.set(userId, petStates);
+    if (cardEffects)  this.pendingCardEffects.set(userId, cardEffects);
+    this._logFiles('round:submit', {
+      userId,
+      round,
+      selections,
+      petStates,
+      cardEffects,
+    }, [userId]);
 
     if (this.pendingSelections.size === 2) {
       this._lockRound();
@@ -92,6 +122,17 @@ export class PvpMatch {
     if (this.clientResults.size === 2) {
       this._resolveMatch();
     }
+  }
+
+  handleClientTrace(userId: string, event: string, details: Record<string, unknown> = {}): void {
+    this._trace(`client:${event}`, {
+      userId,
+      ...details,
+    });
+    this._logClientFiles(event, {
+      userId,
+      ...details,
+    }, userId);
   }
 
   resumeSocket(userId: string, socket: AuthedSocket): void {
@@ -150,6 +191,21 @@ export class PvpMatch {
       return;
     }
 
+    this._trace('round:lock', {
+      status: this.status,
+      selectionsA: Object.keys(selectionsA).length,
+      selectionsB: Object.keys(selectionsB).length,
+      petStatesA: statesA.length,
+      petStatesB: statesB.length,
+    });
+    this._logFiles('round:lock', {
+      round: this.round,
+      selectionsA,
+      selectionsB,
+      petStatesA: statesA,
+      petStatesB: statesB,
+    });
+
     try {
       // Execute round server-side with full selections
       const input: RoundExecutionInput = {
@@ -161,11 +217,32 @@ export class PvpMatch {
         playerBSelections: selectionsB,
       };
 
-      console.log(`[PvP] Executing round ${this.round} for match ${this.matchId}`);
+      // Merge card effects from both players
+      const mergedCardEffects: Record<string, any> = {
+        ...(this.pendingCardEffects.get(a.userId) ?? {}),
+        ...(this.pendingCardEffects.get(b.userId) ?? {}),
+      };
+      input.cardEffects = mergedCardEffects;
+
+      this._trace('round:resolve:start', {
+        teamA: statesA.length,
+        teamB: statesB.length,
+        cardEffects: Object.keys(mergedCardEffects).length,
+      });
+      this._logFiles('round:resolve:start', {
+        round: this.round,
+        teamA: statesA,
+        teamB: statesB,
+        cardEffects: mergedCardEffects,
+      });
       const result = await this.executor.executeRound(input);
 
       if (!result.success || !result.playerATeamAfter || !result.playerBTeamAfter) {
-        console.error('[PvP] Round execution failed:', result.error);
+        this._trace('round:resolve:failed', { error: result.error ?? 'unknown' });
+        this._logFiles('round:resolve:failed', {
+          round: this.round,
+          error: result.error ?? 'unknown',
+        });
         this._forfeit(a.userId);
         return;
       }
@@ -177,20 +254,14 @@ export class PvpMatch {
       this.petStates.set(a.userId, updatedStatesA);
       this.petStates.set(b.userId, updatedStatesB);
 
-      // Create pet states map for both clients (same data)
+      // Create pet states map — include statusEffects so client shows icons
       const petStatesMap: Record<string, any> = {};
-      updatedStatesA.forEach(pet => {
+      [...updatedStatesA, ...updatedStatesB].forEach(pet => {
         petStatesMap[pet.uid] = {
-          hp: pet.hp,
-          shield: pet.shield,
-          isFainted: pet.isFainted,
-        };
-      });
-      updatedStatesB.forEach(pet => {
-        petStatesMap[pet.uid] = {
-          hp: pet.hp,
-          shield: pet.shield,
-          isFainted: pet.isFainted,
+          hp:            pet.hp,
+          shield:        pet.shield,
+          isFainted:     pet.isFainted,
+          statusEffects: pet.statusEffects ?? [],
         };
       });
 
@@ -206,40 +277,150 @@ export class PvpMatch {
         nextDeadlineMs: nextDeadline,
       };
 
-      console.log(`[PvP] Broadcasting round ${this.round} result to both players`);
+      this.pendingSelections.clear();
+      this.pendingPetStates.clear();
+      this.pendingCardEffects.clear();
+
+      const actions = result.turnOrder ?? [];
+
+      for (const action of actions) {
+        const actionMsg = {
+          type:          'round:action',
+          matchId:       this.matchId,
+          round:         this.round,
+          actorUid:      action.uid,
+          actorTeam:     action.team,
+          actionName:    action.action,
+          effectType:    action.effectType,
+          damage:        action.damage,
+          targetUid:     action.target,
+          targetTeam:    action.targetTeam,
+        };
+        this._trace('round:action', {
+          actorUid: action.uid,
+          actorName: action.name,
+          targetUid: action.target,
+          targetTeam: action.targetTeam,
+          effectType: action.effectType,
+          damage: action.damage,
+        });
+        this._logFiles('round:action', {
+          round: this.round,
+          actorUid: action.uid,
+          actorName: action.name,
+          actorTeam: action.team,
+          targetUid: action.target,
+          targetTeam: action.targetTeam,
+          effectType: action.effectType,
+          damage: action.damage,
+        });
+        send(a.socket, actionMsg);
+        send(b.socket, actionMsg);
+        await new Promise(r => setTimeout(r, 1000));
+
+        const hitMsg = {
+          type:              'round:hit',
+          matchId:           this.matchId,
+          round:             this.round,
+          actorUid:          action.uid,
+          actorTeam:         action.team,
+          effectType:        action.effectType,
+          damage:            action.damage,
+          healAmount:        action.healAmount,
+          shieldAmount:      action.shieldAmount,
+          statusApplied:     action.statusApplied,
+          targetUid:         action.target,
+          targetTeam:        action.targetTeam,
+          // Authoritative post-action HP — clients apply directly (no local recalc)
+          targetHpAfter:     action.targetHpAfter,
+          targetShieldAfter: action.targetShieldAfter,
+          targetIsFainted:   action.targetIsFainted,
+          actorHpAfter:      action.actorHpAfter,
+          actorShieldAfter:  action.actorShieldAfter,
+        };
+        this._trace('round:hit', {
+          actorUid: action.uid,
+          targetUid: action.target,
+          effectType: action.effectType,
+          damage: action.damage,
+          healAmount: action.healAmount,
+          shieldAmount: action.shieldAmount,
+          targetHpAfter: action.targetHpAfter,
+          targetShieldAfter: action.targetShieldAfter,
+          targetIsFainted: action.targetIsFainted,
+        });
+        this._logFiles('round:hit', {
+          round: this.round,
+          actorUid: action.uid,
+          actorTeam: action.team,
+          targetUid: action.target,
+          targetTeam: action.targetTeam,
+          effectType: action.effectType,
+          damage: action.damage,
+          healAmount: action.healAmount,
+          shieldAmount: action.shieldAmount,
+          statusApplied: action.statusApplied,
+          targetHpAfter: action.targetHpAfter,
+          targetShieldAfter: action.targetShieldAfter,
+          targetIsFainted: action.targetIsFainted,
+          actorHpAfter: action.actorHpAfter,
+          actorShieldAfter: action.actorShieldAfter,
+          stateA: updatedStatesA,
+          stateB: updatedStatesB,
+        });
+        send(a.socket, hitMsg);
+        send(b.socket, hitMsg);
+        await new Promise(r => setTimeout(r, 800));
+      }
+
+      this._trace('round:result', {
+        battleComplete: result.battleComplete ?? false,
+        winnerTeam: result.winnerTeam ?? null,
+        actions: actions.length,
+      });
+      this._logFiles('round:result', {
+        round: this.round,
+        battleComplete: result.battleComplete ?? false,
+        winnerTeam: result.winnerTeam ?? null,
+        petStates: petStatesMap,
+        roundResult,
+      });
       send(a.socket, roundResult);
       send(b.socket, roundResult);
 
-      this.pendingSelections.clear();
-      this.pendingPetStates.clear();
-
       // Check if battle is complete
       if (result.battleComplete && result.winnerTeam) {
-        console.log(`[PvP] Battle complete! Winner: ${result.winnerTeam}`);
-        // Map winner team to player UID
-        const winnerUid = result.winnerTeam === 'A' ? a.userId : 
+        const winnerUid = result.winnerTeam === 'A' ? a.userId :
                           result.winnerTeam === 'B' ? b.userId : null;
-        
         this.status = 'ended';
-        
-        // Send final result to both players
         const matchEndMsg = {
-          type: 'match:end',
-          matchId: this.matchId,
+          type:      'match:end',
+          matchId:   this.matchId,
           winnerUid: winnerUid ?? null,
-          dispute: false,
-          mmrDelta: 0,
+          dispute:   false,
+          mmrDelta:  0,
         };
-        
+        this._trace('match:end', {
+          winnerTeam: result.winnerTeam,
+          winnerUid,
+        });
+        this._logFiles('match:end', {
+          winnerTeam: result.winnerTeam,
+          winnerUid,
+        });
         send(a.socket, matchEndMsg);
         send(b.socket, matchEndMsg);
       } else {
-        // Continue with next round
         this.round++;
         this._startRoundTimer();
       }
     } catch (error) {
-      console.error('[PvP] Failed to execute round:', error);
+      this._trace('round:execute:error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this._logFiles('round:execute:error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       this._forfeit(a.userId);
     }
   }
@@ -281,6 +462,53 @@ export class PvpMatch {
     const targetIndex = parseInt(targetIndexStr || '0', 10);
 
     return { traitName: traitName || '', targetIndex };
+  }
+
+  private _trace(event: string, details: Record<string, unknown> = {}): void {
+    console.log(
+      `[PvPTrace] ${JSON.stringify({
+        matchId: this.matchId,
+        round: this.round,
+        event,
+        ...details,
+      })}`,
+    );
+  }
+
+  private _logFiles(
+    event: string,
+    details: Record<string, unknown> = {},
+    userIds: string[] = this.players.map((p) => p.userId),
+  ): void {
+    const payload = {
+      ts: new Date().toISOString(),
+      matchId: this.matchId,
+      round: this.round,
+      event,
+      ...details,
+    };
+    const line = `${JSON.stringify(payload)}\n`;
+    fs.appendFileSync(path.join(this.matchLogDir, 'match.log'), line);
+    for (const userId of userIds) {
+      fs.appendFileSync(path.join(this.matchLogDir, `${userId}.log`), line);
+    }
+  }
+
+  private _logClientFiles(
+    event: string,
+    details: Record<string, unknown> = {},
+    userId: string,
+  ): void {
+    const payload = {
+      ts: new Date().toISOString(),
+      matchId: this.matchId,
+      round: this.round,
+      event: `client:${event}`,
+      ...details,
+    };
+    const line = `${JSON.stringify(payload)}\n`;
+    fs.appendFileSync(path.join(this.matchLogDir, 'frontend.log'), line);
+    fs.appendFileSync(path.join(this.matchLogDir, `frontend-${userId}.log`), line);
   }
 
   private _startRoundTimer(): void {

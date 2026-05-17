@@ -86,6 +86,7 @@ export class PvpGateway {
               msg.round as number,
               msg.selections as Record<string, string[]>,
               msg.petStates as any[] | undefined,
+              msg.cardEffects as Record<string, any> | undefined,
             );
             break;
           case 'client:result':
@@ -93,6 +94,14 @@ export class PvpGateway {
               socket.userId,
               msg.matchId as string,
               msg.winnerUid as string,
+            );
+            break;
+          case 'client:trace':
+            matchmaker.handleClientTrace(
+              socket.userId,
+              msg.matchId as string,
+              msg.event as string,
+              (msg.details as Record<string, unknown>) ?? {},
             );
             break;
           case 'match:resume':

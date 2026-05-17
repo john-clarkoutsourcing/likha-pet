@@ -7,12 +7,14 @@ class HpBar extends StatelessWidget {
   final int current;
   final int max;
   final double height;
+  final Duration duration;
 
   const HpBar({
     super.key,
     required this.current,
     required this.max,
     this.height = 6,
+    this.duration = const Duration(milliseconds: 500),
   });
 
   @override
@@ -21,7 +23,7 @@ class HpBar extends StatelessWidget {
 
     return TweenAnimationBuilder<double>(
       tween: Tween(end: target),
-      duration: const Duration(milliseconds: 500),
+      duration: duration,
       curve: Curves.easeOut,
       builder: (_, value, __) {
         final color = value > 0.5

@@ -21,6 +21,38 @@ class PvpMatchEndData {
       {required this.winnerUid, required this.dispute, required this.mmrDelta});
 }
 
+class BattleImpactEvent {
+  final int id;
+  final String actorId;
+  final String targetId;
+  final String effectType;
+  final int damage;
+  final int healAmount;
+  final int shieldAmount;
+  final String statusApplied;
+  final int targetHpAfter;
+  final int targetShieldAfter;
+  final bool targetIsFainted;
+  final int actorHpAfter;
+  final int actorShieldAfter;
+
+  const BattleImpactEvent({
+    required this.id,
+    required this.actorId,
+    required this.targetId,
+    required this.effectType,
+    required this.damage,
+    required this.healAmount,
+    required this.shieldAmount,
+    required this.statusApplied,
+    required this.targetHpAfter,
+    required this.targetShieldAfter,
+    required this.targetIsFainted,
+    required this.actorHpAfter,
+    required this.actorShieldAfter,
+  });
+}
+
 // ── TraitViewModel ────────────────────────────────────────────────────────────
 
 class TraitViewModel {
@@ -40,6 +72,7 @@ class TraitViewModel {
   final String
       effectIconKey; // 'damage'|'aoe'|'heal'|'shield'|'poison'|'burn'|'stun'|etc.
   final int effectIconValue; // primary numeric value shown alongside icon
+  final int shieldAmount;
 
   const TraitViewModel({
     required this.id,
@@ -57,6 +90,7 @@ class TraitViewModel {
     required this.canAfford,
     this.effectIconKey = 'damage',
     this.effectIconValue = 0,
+    this.shieldAmount = 0,
   });
 
   bool get isUsable => isReady && canAfford;
@@ -81,6 +115,7 @@ class TraitViewModel {
             : owner.canAfford(t.energyCost),
         effectIconKey: _iconKey(t),
         effectIconValue: t.effect.value,
+        shieldAmount: _shieldAmount(t),
       );
 
   static String _iconKey(Trait t) {
@@ -142,6 +177,14 @@ class TraitViewModel {
     };
   }
 
+  static int _shieldAmount(Trait t) {
+    final e = t.effect;
+    if (e.type == EffectType.shield) {
+      return (e.value + e.selfShield).clamp(0, 999);
+    }
+    return e.selfShield.clamp(0, 999);
+  }
+
   static String _targetSummary(String target) => switch (target) {
         'enemy' => 'Front',
         'lowest_hp_enemy' => 'Weakest',
@@ -201,12 +244,12 @@ const _kPetVariant = {
 
 // Pet class → color mapping for card badges and visual identity
 const _kPetClassColor = {
-  'plant': Color(0xFF2ECC71),      // Green
-  'aquatic': Color(0xFF3498DB),    // Blue
-  'beast': Color(0xFFE74C3C),      // Red/Orange-Red
-  'reptile': Color(0xFF66BB6A),    // Light Green
-  'bird': Color(0xFFFF80AB),       // Pink
-  'bug': Color(0xFFFF5252),        // Bright Red
+  'plant': Color(0xFF2ECC71), // Green
+  'aquatic': Color(0xFF3498DB), // Blue
+  'beast': Color(0xFFE74C3C), // Red/Orange-Red
+  'reptile': Color(0xFF66BB6A), // Light Green
+  'bird': Color(0xFFFF80AB), // Pink
+  'bug': Color(0xFFFF5252), // Bright Red
 };
 
 class CardViewModel {
@@ -529,6 +572,9 @@ class PveBattleViewModel {
   /// PvP only: non-null when the match has ended and the result is ready.
   final PvpMatchEndData? pvpMatchEnd;
 
+  /// Transient server-authoritative visual event used for damage/heal labels.
+  final BattleImpactEvent? lastImpactEvent;
+
   const PveBattleViewModel({
     required this.currentRound,
     required this.playerTeam,
@@ -558,6 +604,7 @@ class PveBattleViewModel {
     this.petDashTargets = const {},
     this.awaitingOpponent = false,
     this.pvpMatchEnd,
+    this.lastImpactEvent,
   });
 
   bool get allSkillsAssigned {
@@ -628,6 +675,7 @@ class PveBattleViewModel {
     Map<String, String>? petDashTargets,
     bool? awaitingOpponent,
     PvpMatchEndData? pvpMatchEnd,
+    BattleImpactEvent? lastImpactEvent,
     bool clearSelectedPet = false,
   }) =>
       PveBattleViewModel(
@@ -660,5 +708,6 @@ class PveBattleViewModel {
         petDashTargets: petDashTargets ?? this.petDashTargets,
         awaitingOpponent: awaitingOpponent ?? this.awaitingOpponent,
         pvpMatchEnd: pvpMatchEnd ?? this.pvpMatchEnd,
+        lastImpactEvent: lastImpactEvent ?? this.lastImpactEvent,
       );
 }

@@ -5,6 +5,7 @@ import 'dart:ui' show Offset;
 
 import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:likha_pet_battle_engine/action.dart';
 import 'package:likha_pet_battle_engine/battle_engine.dart' show BattleOutcome;
@@ -20,6 +21,8 @@ import '../../../features/battle/services/battle_audio_service.dart';
 import '../../../features/battle/services/mixed_skeleton_service.dart';
 import '../../../features/battle/widgets/pet_character_widget.dart'
     show PetCharacterAnimState, PetCharacterConfig;
+import '../../../features/battle/widgets/pet_sprite_widget.dart'
+    show PetSpriteConfig;
 import '../../../features/pets/models/owned_pet.dart';
 import '../models/battle_action_log.dart';
 import '../models/pvp_message.dart';
@@ -32,14 +35,20 @@ import '../services/pvp_firestore_service.dart';
 class PvpBattleArgs {
   final PvpMatchFound matchFound;
   final List<OwnedPet> myTeam;
-  const PvpBattleArgs({required this.matchFound, required this.myTeam});
+  final String myTeamName;
+  const PvpBattleArgs({
+    required this.matchFound,
+    required this.myTeam,
+    this.myTeamName = 'My Team',
+  });
 }
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   late final InteractiveBattleEngine _engine;
-  late final List<Pet> _playerPets;
+  // Built incrementally so UID→Pet mapping is always 1-to-1 (no index drift).
+  final List<Pet> _playerPets = [];
   late final List<Pet> _enemyPets;
   late final String _myUserId;
   late final String _opponentUserId;
@@ -56,9 +65,15 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     Offset(0.75, 0.48),
   ];
 
-  final Map<String, ({String petId, int amount})> _preAppliedShields = {};
   final Map<String, PetCharacterConfig> _mixedSkeletonConfigs = {};
   final Map<String, CreatureDefinition> _petDefs = {};
+  int _visualEventCounter = 0;
+
+  // Maps the UUID submitted to the server → local Pet object.
+  // This avoids ID collisions when both teams have the same creature type
+  // (e.g., both players have "aquatic-02" — CreatureDefinition.id is not unique
+  // across teams, but OwnedPet.uid always is).
+  final Map<String, Pet> _submitUidToPet = {};
 
   // ── Action logging for PvP validation ───────────────────────────────────
   final List<BattleActionLog> _actionLog = [];
@@ -66,11 +81,55 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   late final AuthenticatedPvpValidationService _validationService;
   late final PvpFirestoreService _firestoreService;
   late final int _battleSeed;
+  late final String _myTeamName;
+  late final bool _isAlpha; // true = this client is Team A on the server
+  final List<OwnedPet> _myOwnedTeam = []; // parallel to _playerPets, same order
+
+  // Buffers a match:end that arrives while round animation is still playing.
+  PvpMatchEndData? _pendingMatchEnd;
+  PvpRoundResult? _pendingRoundResult;
+  Timer? _pendingRoundResultTimer;
 
   StreamSubscription<PvpMessage>? _wsSub;
   Completer<Map<String, List<String>>>? _opponentChoicesCompleter;
   PvpRoundLocked? _pendingRoundLocked;
   int? _awaitingRound;
+
+  void _trace(String event, [Map<String, Object?> data = const {}]) {
+    final payload = {
+      'matchId': _matchId,
+      'round': _engine.round,
+      'event': event,
+      ...data,
+    };
+    print('[PvPTrace] ${jsonEncode(payload)}');
+    if (kIsWeb && _matchId.isNotEmpty) {
+      PvpSocket.instance.send({
+        'type': 'client:trace',
+        'matchId': _matchId,
+        'event': event,
+        'details': payload,
+      });
+    }
+  }
+
+  void _bufferRoundResult(PvpRoundResult result) {
+    _pendingRoundResult = result;
+    _pendingRoundResultTimer?.cancel();
+    _pendingRoundResultTimer = Timer(
+      const Duration(milliseconds: 260),
+      _flushPendingRoundResult,
+    );
+  }
+
+  void _flushPendingRoundResult() {
+    final pending = _pendingRoundResult;
+    if (!mounted || pending == null) return;
+    _pendingRoundResult = null;
+    _pendingRoundResultTimer?.cancel();
+    _pendingRoundResultTimer = null;
+    _commitServerRoundResult(pending);
+  }
 
   PvpBattleNotifier(
     PvpBattleArgs args, {
@@ -78,20 +137,25 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   }) : super(PveBattleViewModel.initial()) {
     _validationService = validationService;
     final match = args.matchFound;
+    _myTeamName = args.myTeamName;
     _myUserId = match.you.userId;
     _opponentUserId = match.opponent.userId;
     _matchId = match.matchId;
     _battleSeed = match.seed;
 
-    // Decode own team from OwnedPet list
-    _playerPets = args.myTeam
-        .where((p) => kBodyCatalogue.containsKey(p.bodyId))
-        .map((p) => p.toCreatureDefinition().toPet(displayName: p.name))
-        .toList();
-    for (final p in args.myTeam) {
-      _petDefs[p.uid] = p.toCreatureDefinition();
+    // Build _playerPets and _submitUidToPet in ONE pass so every UID maps to
+    // the exact Pet object created from it.  Using separate loops caused index
+    // drift when some OwnedPets were filtered (bodyId not in catalogue).
+    for (final owned in args.myTeam) {
+      if (!kBodyCatalogue.containsKey(owned.bodyId)) continue;
+      final def = owned.toCreatureDefinition();
+      _petDefs[owned.uid] = def;
+      final pet = def.toPet(displayName: owned.name);
+      _playerPets.add(pet);
+      _submitUidToPet[owned.uid] = pet; // guaranteed 1-to-1 mapping
+      _myOwnedTeam.add(owned); // parallel list for petStatesSnapshot
     }
-    
+
     // 🔍 DIAGNOSTIC: Log own team stats
     print('═' * 80);
     print('[PvP Match ${match.matchId}] BATTLE STARTED - Seed: ${match.seed}');
@@ -101,43 +165,47 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       print('[PvP] My Team (${_playerPets.length} pets):');
       for (var i = 0; i < _playerPets.length; i++) {
         final pet = _playerPets[i];
-        print('  ➤ Pet $i: ${pet.name} | SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+        print(
+            '  ➤ Pet $i: ${pet.name} | SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
       }
     } else {
       print('[PvP ERROR] No pets decoded! Check kBodyCatalogue');
     }
 
-    // Decode opponent team from server-provided DNA refs
-    // Note: Server doesn't send pet names, so we use generic names based on position and class
-    _enemyPets = match.opponent.team.asMap().entries.map((e) {
-      final index = e.key;
-      final ref = e.value;
+    // Decode opponent team — same 1-to-1 pass as own team.
+    final enemyList = <Pet>[];
+    for (var i = 0; i < match.opponent.team.length; i++) {
+      final ref = match.opponent.team[i];
       final owned = OwnedPet(
         uid: ref.uid,
-        name: 'Opponent ${index + 1}', // Generic fallback name
+        name: 'Opponent ${i + 1}',
         dna: ref.dna,
         createdAt: ref.createdAtMs != null
             ? DateTime.fromMillisecondsSinceEpoch(ref.createdAtMs!)
-            : DateTime.now(), // Fallback if server doesn't provide it
+            : DateTime.now(),
       );
+      final Pet pet;
       if (kBodyCatalogue.containsKey(owned.bodyId)) {
         final def = owned.toCreatureDefinition();
         _petDefs[owned.uid] = def;
-        // Use creature class name as display name for clarity
-        return def.toPet(
+        pet = def.toPet(
             displayName: '${match.opponent.displayName}\'s ${def.className}');
+      } else {
+        pet = kCreatureRegistry.values.first.toPet();
       }
-      // Fallback to a default pet if DNA is unrecognised
-      return kCreatureRegistry.values.first.toPet();
-    }).toList();
-    
+      enemyList.add(pet);
+      _submitUidToPet[ref.uid] = pet; // opponent UID → enemy Pet
+    }
+    _enemyPets = enemyList;
+
     // 🔍 DIAGNOSTIC: Log opponent team stats
     print('[PvP DEBUG] Decoded ${_enemyPets.length} pets from opponent');
     if (_enemyPets.isNotEmpty) {
       print('[PvP] Opponent Team (${_enemyPets.length} pets):');
       for (var i = 0; i < _enemyPets.length; i++) {
         final pet = _enemyPets[i];
-        print('  ➤ Pet $i: ${pet.name} | SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
+        print(
+            '  ➤ Pet $i: ${pet.name} | SPD:${pet.effectiveSpeed} HP:${pet.maxHp} SKL:${pet.skill} MOR:${pet.morale}');
       }
     } else {
       print('[PvP ERROR] No opponent pets decoded!');
@@ -155,14 +223,14 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     //
     // Result: alpha._enemyDeck and beta._playerDeck share the same seed → same
     // instance IDs for beta's cards. Likewise for alpha's cards.
-    final bool isAlpha = _myUserId.compareTo(_opponentUserId) < 0;
-    final int playerDeckSeed = isAlpha ? match.seed : match.seed ^ 0x5A3C;
-    final int enemyDeckSeed = isAlpha ? match.seed ^ 0x5A3C : match.seed;
+    _isAlpha = _myUserId.compareTo(_opponentUserId) < 0;
+    final int playerDeckSeed = _isAlpha ? match.seed : match.seed ^ 0x5A3C;
+    final int enemyDeckSeed = _isAlpha ? match.seed ^ 0x5A3C : match.seed;
 
     _engine = InteractiveBattleEngine(
       playerTeam: _playerPets,
       enemyTeam: _enemyPets,
-      playerTeamName: 'You',
+      playerTeamName: _myTeamName,
       playerDeckSeed: playerDeckSeed,
       enemyDeckSeed: enemyDeckSeed,
       enemyTeamName: match.opponent.displayName.isNotEmpty
@@ -175,6 +243,11 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     // Initialize action logging with provided validation service
     _battleStartTime = DateTime.now().millisecondsSinceEpoch;
     _firestoreService = PvpFirestoreService();
+    _trace('battle:init', {
+      'myTeam': _playerPets.length,
+      'enemyTeam': _enemyPets.length,
+      'isAlpha': _isAlpha,
+    });
 
     // Subscribe to WS messages
     _wsSub = PvpSocket.instance.messages.listen(_onWsMessage);
@@ -186,7 +259,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
         roundLog: '',
         isBattleOver: false,
-        playerTeamName: 'You',
+        playerTeamName: _myTeamName,
         enemyTeamName: match.opponent.displayName,
         turnOrder: _buildTurnOrder(),
         selectedPetId: null,
@@ -204,7 +277,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
         roundLog: '',
         isBattleOver: false,
-        playerTeamName: 'You',
+        playerTeamName: _myTeamName,
         enemyTeamName: match.opponent.displayName,
         turnOrder: _buildTurnOrder(),
         selectedPetId: null,
@@ -222,6 +295,10 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
   void _onWsMessage(PvpMessage msg) {
     if (msg is PvpRoundLocked) {
+      _trace('ws:round:locked', {
+        'round': msg.round,
+        'waitingFor': _awaitingRound,
+      });
       if (msg.matchId != _matchId) return;
       if (_awaitingRound != null && msg.round != _awaitingRound) {
         _pendingRoundLocked = msg;
@@ -237,19 +314,71 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         // round:locked can arrive before executeRound starts waiting.
         _pendingRoundLocked = msg;
       }
+    } else if (msg is PvpRoundAction) {
+      _trace('ws:round:action', {
+        'actorUid': msg.actorUid,
+        'targetUid': msg.targetUid,
+        'effectType': msg.effectType,
+        'damage': msg.damage,
+      });
+      _applyServerAction(msg);
+    } else if (msg is PvpRoundHit) {
+      _trace('ws:round:hit', {
+        'actorUid': msg.actorUid,
+        'targetUid': msg.targetUid,
+        'effectType': msg.effectType,
+        'damage': msg.damage,
+        'healAmount': msg.healAmount,
+        'shieldAmount': msg.shieldAmount,
+      });
+      _applyServerHit(msg);
     } else if (msg is PvpRoundResult) {
-      // Server-side battle result — apply to local state
-      _applyServerRoundResult(msg);
+      _trace('ws:round:result', {
+        'round': msg.round,
+        'battleComplete': msg.battleComplete,
+        'petStates': msg.petStates.length,
+      });
+      // Final HP state from server — buffer so the last hit animation can paint
+      // before we clear the playback state and advance the round bookkeeping.
+      _bufferRoundResult(msg);
     } else if (msg is PvpMatchEnd) {
-      state = state.copyWith(
-        pvpMatchEnd: PvpMatchEndData(
-          winnerUid: msg.winnerUid,
-          dispute: msg.dispute,
-          mmrDelta: msg.mmrDelta,
-        ),
-        isBattleOver: true,
-        awaitingOpponent: false,
+      _trace('ws:match:end', {
+        'winnerUid': msg.winnerUid,
+        'dispute': msg.dispute,
+        'mmrDelta': msg.mmrDelta,
+      });
+      final matchEnd = PvpMatchEndData(
+        winnerUid: msg.winnerUid,
+        dispute: msg.dispute,
+        mmrDelta: msg.mmrDelta,
       );
+      // If round animation is playing, buffer — the buffered round result will
+      // flush after the impact frame has had time to paint.
+      // But if no round:result ever arrives (server error path), apply after a short
+      // grace period so the client doesn't stay stuck forever.
+      if (state.isResolving && state.awaitingOpponent) {
+        // We're waiting for round:result that may never come — apply after 2 s.
+        _pendingMatchEnd = matchEnd;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!mounted || state.pvpMatchEnd != null) return;
+          state = state.copyWith(
+            pvpMatchEnd: _pendingMatchEnd,
+            isBattleOver: true,
+            isResolving: false,
+            awaitingOpponent: false,
+          );
+          _pendingMatchEnd = null;
+        });
+      } else if (state.isResolving) {
+        // Animation in progress — buffer normally.
+        _pendingMatchEnd = matchEnd;
+      } else {
+        state = state.copyWith(
+          pvpMatchEnd: matchEnd,
+          isBattleOver: true,
+          awaitingOpponent: false,
+        );
+      }
     } else if (msg is PvpOpponentDisconnected) {
       // Optionally show a toast — for now just update round log
       state = state.copyWith(
@@ -296,7 +425,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       } else {
         newPending[petId] = currentList;
       }
-      _removePreAppliedShield(cardInstanceId);
       state = state.copyWith(
         pendingSkills: newPending,
         playerTeam: _livePlayerTeamVMs(),
@@ -308,7 +436,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
     currentList.add(cardInstanceId);
     newPending[petId] = currentList;
-    _applyPreShield(card);
     state = state.copyWith(
       pendingSkills: newPending,
       playerTeam: _livePlayerTeamVMs(),
@@ -332,66 +459,461 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     );
   }
 
-  // ── Apply server-side battle results ────────────────────────────────────────
+  // ── Phase 1: Attack animation (dash + attack pose) ───────────────────────────
+  // Called when round:action arrives.  NO HP change yet — this is purely visual:
+  // the attacker dashes toward the target and plays their attack animation.
+  // Damage lands 700 ms later via round:hit.
 
-  void _applyServerRoundResult(PvpRoundResult result) {
-    print('[PvP] Applying server round result for round ${result.round}');
-    
-    // Update pet states from server (HP, shields, fainted status)
-    for (final petEntry in result.petStates.entries) {
-      final petUid = petEntry.key;
-      final petData = petEntry.value as Map<String, dynamic>;
+  // Finds a pet by its server submit UID (OwnedPet.uuid) or CreatureDefinition.id.
+  // Returns (pet, isPlayerTeam). Checks the submit-UID map first to avoid
+  // CreatureDefinition.id collisions between teams.
+  (Pet?, bool) _findPet(String uid) {
+    final mapped = _submitUidToPet[uid];
+    if (mapped != null) {
+      return (mapped, _playerPets.any((p) => p == mapped));
+    }
+    // Fallback: search by Pet.id (CreatureDefinition.id)
+    final p = _playerPets.firstWhereOrNull((p) => p.id == uid);
+    if (p != null) return (p, true);
+    final e = _enemyPets.firstWhereOrNull((p) => p.id == uid);
+    return (e, false);
+  }
 
-      // Find pet in our lists
-      final playerPet = _playerPets.firstWhereOrNull((p) => p.id == petUid);
-      final enemyPet = _enemyPets.firstWhereOrNull((p) => p.id == petUid);
+  void _applyServerAction(PvpRoundAction msg) {
+    if (!mounted) return;
 
-      if (playerPet != null) {
-        playerPet.hp = (petData['hp'] as num).toInt();
-        playerPet.shield = (petData['shield'] as num?)?.toInt() ?? 0;
-        playerPet.isFainted = playerPet.hp <= 0;
-      } else if (enemyPet != null) {
-        enemyPet.hp = (petData['hp'] as num).toInt();
-        enemyPet.shield = (petData['shield'] as num?)?.toInt() ?? 0;
-        enemyPet.isFainted = enemyPet.hp <= 0;
+    final effectType = msg.effectType.isNotEmpty
+        ? msg.effectType
+        : (msg.damage > 0 ? 'damage' : 'buff');
+    final damage = msg.damage;
+
+    final (actorPet, isActorPlayer) = _findPet(msg.actorUid);
+    final (targetPet, isTargetPlayer) =
+        msg.targetUid.isNotEmpty ? _findPet(msg.targetUid) : (null, false);
+
+    if (actorPet == null) {
+      print('[PvP] ⚠️ round:action — actor not found: ${msg.actorUid}');
+      state = state.copyWith(awaitingOpponent: false, isResolving: true);
+      return;
+    }
+
+    // Use Pet.id for animation state keys (UI looks up by Pet.id / CreatureDefinition.id)
+    final actorAnimId = actorPet.id;
+    final targetAnimId = targetPet?.id ?? '';
+
+    _trace('ui:round:action:apply', {
+      'actorUid': msg.actorUid,
+      'targetUid': msg.targetUid,
+      'effectType': effectType,
+      'damage': damage,
+      'actorAnimId': actorAnimId,
+      'targetAnimId': targetAnimId,
+      'actorHp': actorPet.hp,
+      'targetHp': targetPet?.hp,
+    });
+
+    // Dash toward target
+    Offset dashDir = Offset.zero;
+    String? dashTarget;
+    if (damage > 0 && targetPet != null) {
+      final actorList = isActorPlayer ? _playerPets : _enemyPets;
+      final targetList = isTargetPlayer ? _playerPets : _enemyPets;
+      final actorIdx = actorList.indexOf(actorPet).clamp(0, 2);
+      final targetIdx = targetList.indexOf(targetPet).clamp(0, 2);
+
+      final actorBase = isActorPlayer
+          ? _playerBattlePos[actorIdx]
+          : _enemyBattlePos[actorIdx];
+      final targetBase = isTargetPlayer
+          ? _playerBattlePos[targetIdx]
+          : _enemyBattlePos[targetIdx];
+
+      final toTarget = targetBase - actorBase;
+      final dist = toTarget.distance;
+      if (dist > 0.001) {
+        const maxDash = 0.20;
+        const minGap = 0.06;
+        final d = math.min(maxDash, math.max(0.0, dist - minGap));
+        dashDir = Offset(toTarget.dx / dist * d, toTarget.dy / dist * d);
+        dashTarget = targetAnimId;
       }
     }
 
-    // Build turn order string for round log
-    final turnOrderStr = result.turnOrder
-        .map((entry) {
-          final name = entry['name'] as String? ?? entry['uid'];
-          final damage = entry['damage'] as int?;
-          final damageStr = damage != null ? ' (dmg: $damage)' : '';
-          return '$name$damageStr';
-        })
-        .join(' → ');
-    
-    final newRoundLog = '${state.roundLog}\nRound ${result.round}: $turnOrderStr';
-    
-    // Update UI state
+    BattleAudioService.instance.playAttack(effectType);
+
     state = state.copyWith(
-      currentRound: result.round,
-      roundLog: newRoundLog,
-      playerTeam: _toViewModels(_playerPets, isPlayer: true),
-      enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
       awaitingOpponent: false,
-      isResolving: false, // Allow next round to execute
+      isResolving: true,
+      petAnimStates: {actorAnimId: _animStateForEffect(effectType)},
+      petEffectVfx: {actorAnimId: effectType},
+      petDashOffsets:
+          dashDir != Offset.zero ? {actorAnimId: dashDir} : const {},
+      petDashTargets: dashTarget != null ? {actorAnimId: dashTarget} : const {},
+      petAttackSlots: const {},
+    );
+  }
+
+  // ── Phase 2: Damage lands + HP reflects + hit/faint animation ────────────────
+  // Called when round:hit arrives, 700 ms after round:action.
+  // This is the "impact" moment: reduce HP now, show hit/faint reaction,
+  // rebuild HP bars so the player sees the damage immediately.
+
+  void _applyServerHit(PvpRoundHit msg) {
+    if (!mounted) return;
+
+    final effectType = msg.effectType;
+    final targetId = msg.targetUid;
+    final actorId = msg.actorUid;
+    final damage = msg.damage;
+    final healAmount = msg.healAmount;
+    final shieldAmount = msg.shieldAmount;
+    final statusApplied = msg.statusApplied;
+
+    final (targetPet, _) =
+        targetId.isNotEmpty ? _findPet(targetId) : (null, false);
+    final (actorPet, _) =
+        actorId.isNotEmpty ? _findPet(actorId) : (null, false);
+
+    _trace('ui:round:hit:before', {
+      'actorUid': actorId,
+      'targetUid': targetId,
+      'effectType': effectType,
+      'damage': damage,
+      'healAmount': healAmount,
+      'shieldAmount': shieldAmount,
+      'statusApplied': statusApplied,
+      'targetHpBefore': targetPet?.hp,
+      'targetShieldBefore': targetPet?.shield,
+      'actorHpBefore': actorPet?.hp,
+      'actorShieldBefore': actorPet?.shield,
+      'serverTargetHpAfter': msg.targetHpAfter,
+      'serverTargetShieldAfter': msg.targetShieldAfter,
+    });
+
+    if (targetPet == null && actorPet == null) {
+      print('[PvP] ⚠️ round:hit — neither found. '
+          'targetUid=${msg.targetUid} actorUid=${msg.actorUid} '
+          'submitMap=${_submitUidToPet.keys.toList()}');
+      state =
+          state.copyWith(petDashOffsets: const {}, petDashTargets: const {});
+      return;
+    }
+
+    // Use Pet.id (CreatureDefinition.id) for animation keys — the UI looks up
+    // petAnimStates by vm.playerTeam[i].id which is Pet.id, not OwnedPet.uid.
+    final targetAnimId = targetPet?.id ?? '';
+    final actorAnimId = actorPet?.id ?? '';
+
+    final animUpdates = <String, PetCharacterAnimState>{...state.petAnimStates};
+
+    // ── Apply server-authoritative HP/shield values ──────────────────────────
+    // The server sends exact post-action values — never recalculate locally.
+    // This ensures both clients show identical state throughout the animation.
+    var appliedAuthoritativeTargetState = false;
+    if (targetPet != null && msg.targetHpAfter >= 0) {
+      _applyAuthoritativePetState(
+        targetPet,
+        hpAfter: msg.targetHpAfter,
+        shieldAfter: msg.targetShieldAfter,
+        faintedAfter: msg.targetIsFainted,
+      );
+      appliedAuthoritativeTargetState = true;
+    }
+    if (actorPet != null && msg.actorHpAfter >= 0) {
+      _applyAuthoritativePetState(
+        actorPet,
+        hpAfter: msg.actorHpAfter,
+        shieldAfter: msg.actorShieldAfter,
+        faintedAfter: false,
+      );
+    }
+
+    final impactEvent = BattleImpactEvent(
+      id: ++_visualEventCounter,
+      actorId: actorId,
+      targetId: targetId.isNotEmpty ? targetId : actorId,
+      effectType: effectType,
+      damage: damage,
+      healAmount: healAmount,
+      shieldAmount: shieldAmount,
+      statusApplied: statusApplied,
+      targetHpAfter: msg.targetHpAfter,
+      targetShieldAfter: msg.targetShieldAfter,
+      targetIsFainted: msg.targetIsFainted,
+      actorHpAfter: msg.actorHpAfter,
+      actorShieldAfter: msg.actorShieldAfter,
     );
 
-    print('[PvP] Round ${result.round} applied - ready for next round');
-    
-    // If battle is complete, notify the UI
-    if (result.battleComplete) {
-      print('[PvP] Server indicates battle is complete');
-      state = state.copyWith(isBattleOver: true);
-      // PvpMatchEnd message will follow with final winner
+    // Fallback for clients still receiving a legacy hit packet without the
+    // post-action fields: apply the impact locally so HP changes on impact.
+    if (!appliedAuthoritativeTargetState && targetPet != null) {
+      switch (effectType) {
+        case 'damage':
+        case 'aoe':
+        case 'shieldBreak':
+        case 'poison':
+        case 'burn':
+        case 'stun':
+        case 'debuff':
+        case 'atk_down':
+        case 'def_down':
+        case 'spd_down':
+          if (damage > 0) {
+            final absorbed = math.min(targetPet.shield, damage);
+            targetPet.shield = (targetPet.shield - absorbed).clamp(0, 9999);
+            targetPet.hp =
+                (targetPet.hp - (damage - absorbed)).clamp(0, targetPet.maxHp);
+            targetPet.isFainted = targetPet.hp <= 0;
+          }
+        case 'heal':
+        case 'regen':
+          if (healAmount > 0) {
+            final pet = actorPet ?? targetPet;
+            pet.hp = (pet.hp + healAmount).clamp(0, pet.maxHp);
+          }
+        case 'shield':
+          if (shieldAmount > 0) {
+            final pet = actorPet ?? targetPet;
+            pet.shield = (pet.shield + shieldAmount).clamp(0, 9999);
+          }
+        case 'buff':
+        case 'atk_up':
+        case 'def_up':
+        case 'spd_up':
+        case 'energized':
+          break;
+        default:
+          if (damage > 0) {
+            final absorbed = math.min(targetPet.shield, damage);
+            targetPet.shield = (targetPet.shield - absorbed).clamp(0, 9999);
+            targetPet.hp =
+                (targetPet.hp - (damage - absorbed)).clamp(0, targetPet.maxHp);
+            targetPet.isFainted = targetPet.hp <= 0;
+          }
+      }
     }
-    
-    // Save battle log to Firestore
+
+    // ── Determine animation state from effect type ────────────────────────────
+    switch (effectType) {
+      case 'damage':
+      case 'aoe':
+      case 'shieldBreak':
+      case 'poison':
+      case 'burn':
+      case 'stun':
+      case 'debuff':
+      case 'atk_down':
+      case 'def_down':
+      case 'spd_down':
+        if (targetPet != null) {
+          final isFaint = targetPet.isFainted;
+          BattleAudioService.instance.playHit(faint: isFaint);
+          if (targetAnimId.isNotEmpty) {
+            animUpdates[targetAnimId] = isFaint
+                ? PetCharacterAnimState.faint
+                : PetCharacterAnimState.hit;
+          }
+        }
+
+      case 'heal':
+      case 'regen':
+        final pet = targetPet ?? actorPet;
+        if (pet != null) {
+          animUpdates[pet.id] = PetCharacterAnimState.heal;
+          BattleAudioService.instance.playAttack('heal');
+        }
+
+      case 'shield':
+        final pet = targetPet ?? actorPet;
+        if (pet != null) {
+          animUpdates[pet.id] = PetCharacterAnimState.shield;
+          BattleAudioService.instance.playAttack('shield');
+        }
+
+      case 'buff':
+      case 'atk_up':
+      case 'def_up':
+      case 'spd_up':
+      case 'energized':
+        final pet = targetPet ?? actorPet;
+        if (pet != null) {
+          animUpdates[pet.id] = PetCharacterAnimState.buff;
+          BattleAudioService.instance.playAttack('buff');
+        }
+
+      default:
+        if (targetPet != null) {
+          BattleAudioService.instance.playHit(faint: targetPet.isFainted);
+          if (targetAnimId.isNotEmpty) {
+            animUpdates[targetAnimId] = targetPet.isFainted
+                ? PetCharacterAnimState.faint
+                : PetCharacterAnimState.hit;
+          }
+        }
+    }
+
+    state = state.copyWith(
+      petAnimStates: animUpdates,
+      petDashOffsets: const {},
+      petDashTargets: const {},
+      lastImpactEvent: impactEvent,
+      // Rebuild HP/shield bars with updated values immediately
+      playerTeam: _toViewModels(_playerPets, isPlayer: true),
+      enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
+    );
+
+    if (_pendingRoundResult != null &&
+        _pendingRoundResult!.round == msg.round) {
+      _bufferRoundResult(_pendingRoundResult!);
+    }
+
+    _trace('ui:round:hit:after', {
+      'targetUid': targetId,
+      'targetAnimId': targetAnimId,
+      'targetHp': targetPet?.hp,
+      'targetShield': targetPet?.shield,
+      'actorUid': actorId,
+      'actorAnimId': actorAnimId,
+      'actorHp': actorPet?.hp,
+      'actorShield': actorPet?.shield,
+    });
+  }
+
+  void _applyAuthoritativePetState(
+    Pet pet, {
+    required int hpAfter,
+    required int shieldAfter,
+    required bool faintedAfter,
+  }) {
+    final isDead = pet.isFainted || faintedAfter || hpAfter <= 0;
+    if (isDead) {
+      pet.hp = 0;
+      pet.shield = 0;
+      pet.isFainted = true;
+      return;
+    }
+
+    pet.hp = hpAfter;
+    pet.shield = shieldAfter;
+    pet.isFainted = false;
+  }
+
+  // ── Apply final HP + draw cards after all actions have been streamed ────────
+  // This is the authoritative "end of round" update.  The engine is advanced
+  // locally (deterministic seed) purely for card-draw, energy reset and status
+  // tick — HP values are always overridden by the server.
+
+  void _commitServerRoundResult(PvpRoundResult result) {
+    if (!mounted) return;
+    print(
+        '[PvP] Round ${result.round} result received — applying buffered round result');
+    _trace('ui:round:result:start', {
+      'round': result.round,
+      'battleComplete': result.battleComplete,
+      'pendingSkills': state.pendingSkills.length,
+    });
+
+    final handBeforeIds = state.hand.map((c) => c.instanceId).toSet();
+
+    // ── 1. Advance local engine for deck/energy management ────────────────────
+    // Use the player's selections from this round so the right cards are
+    // discarded from the deck.  Enemy selections are empty (server-side only).
+    try {
+      _engine.setOpponentChoices({});
+      final playerPending =
+          state.pendingSkills.map((k, v) => MapEntry(k, List<String>.from(v)));
+      final started = _engine.prepareRound(playerPending);
+      if (!started.hasImmediateResult) {
+        while (_engine.hasPendingActions) {
+          _engine.executeNextAction();
+        }
+      }
+      _engine.finishRound(); // discard used cards + draw new hand
+    } catch (e) {
+      print('[PvP] ⚠️ Engine round advance failed (non-fatal): $e');
+    }
+
+    // Discard cards belonging to fainted pets.
+    final faintedIds =
+        _playerPets.where((p) => p.isFainted).map((p) => p.id).toSet();
+    for (final card in List.of(_engine.currentPlayerHand)) {
+      if (faintedIds.contains(card.ownerPetId)) {
+        _engine.discardFromPlayerHand(card.instanceId);
+      }
+    }
+
+    // ── 2. Override HP + status effects with server-authoritative values ─────
+    for (final entry in result.petStates.entries) {
+      final uid = entry.key;
+      final data = entry.value as Map<String, dynamic>;
+      final newHp = (data['hp'] as num).toInt();
+      final newShield = (data['shield'] as num?)?.toInt() ?? 0;
+      // Look up by submit UID first (OwnedPet.uid), then by Pet.id fallback
+      final pet = _submitUidToPet[uid] ??
+          _playerPets.firstWhereOrNull((p) => p.id == uid) ??
+          _enemyPets.firstWhereOrNull((p) => p.id == uid);
+      if (pet == null) continue;
+      pet.hp = newHp;
+      pet.shield = newShield;
+      pet.isFainted = newHp <= 0;
+    }
+
+    // ── 3. Build new hand + round log ─────────────────────────────────────────
+    final newHand = _buildHandVMs(_engine.currentPlayerHand, const {});
+    final newIds =
+        newHand.map((c) => c.instanceId).toSet().difference(handBeforeIds);
+
+    final turnOrderStr = result.turnOrder.map((e) {
+      final name = e['name'] as String? ?? e['actorUid'] as String? ?? '?';
+      final dmg = e['damage'] as int?;
+      return dmg != null ? '$name (dmg: $dmg)' : '$name';
+    }).join(' → ');
+
+    // ── 4. Commit state ───────────────────────────────────────────────────────
+    state = state.copyWith(
+      currentRound: result.round + 1,
+      roundLog: '${state.roundLog}\nRound ${result.round}: $turnOrderStr',
+      playerTeam: _toViewModels(_playerPets, isPlayer: true),
+      enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
+      hand: newHand,
+      newCardIds: newIds,
+      deckDrawSize: _engine.playerDeckDrawSize,
+      deckDiscardSize: _engine.playerDeckDiscardSize,
+      playerTeamEnergy: _engine.playerEnergy.energy,
+      enemyTeamEnergy: _engine.enemyEnergy.energy,
+      pendingSkills: const {},
+      selectedPetId: null,
+      awaitingOpponent: false,
+      isResolving: false,
+      petAnimStates: const {},
+      petEffectVfx: const {},
+      petAttackSlots: const {},
+      petDashOffsets: const {},
+      petDashTargets: const {},
+      lastImpactEvent: null,
+    );
+
+    print('[PvP] Round ${result.round} done — hand: ${newHand.length} cards, '
+        'energy: ${_engine.playerEnergy.energy}');
+    _trace('ui:round:result:done', {
+      'round': result.round,
+      'battleComplete': result.battleComplete,
+      'newHand': newHand.length,
+      'playerEnergy': _engine.playerEnergy.energy,
+      'enemyEnergy': _engine.enemyEnergy.energy,
+    });
+
+    if (result.battleComplete || _pendingMatchEnd != null) {
+      state = state.copyWith(isBattleOver: true);
+      if (_pendingMatchEnd != null) {
+        state = state.copyWith(pvpMatchEnd: _pendingMatchEnd);
+        _pendingMatchEnd = null;
+      }
+    }
+
     _saveBattleLogToFirestore(result);
   }
-  
+
   void _saveBattleLogToFirestore(PvpRoundResult result) {
     // Capture current team snapshots
     final playerTeamSnapshot = <String, dynamic>{};
@@ -410,7 +932,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         'isFainted': pet.isFainted,
       };
     }
-    
+
     // This is async and non-blocking
     try {
       _firestoreService.saveLiveRoundLog(
@@ -439,6 +961,96 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     final expectedRound = _engine.round + 1;
 
     state = state.copyWith(isResolving: true);
+    _trace('submit:round', {
+      'round': expectedRound,
+      'selectedPets': mySelections.length,
+      'selectedCards':
+          mySelections.values.fold<int>(0, (sum, ids) => sum + ids.length),
+    });
+
+    // ── PvP fast path: server is authoritative, no round:locked needed ────────
+    // The server now runs the battle and sends round:result directly.
+    // We just submit selections and wait — the buffered round result unblocks us.
+    if (_matchId.isNotEmpty) {
+      // Only submit OWN 3 pets. Server uses statesA as playerATeam, statesB as
+      // playerBTeam — submitting all 6 would make the server run a 6v6 battle
+      // with duplicate IDs and return UIDs that don't match either client's lists.
+      // Use OwnedPet.uid as the server-side identifier (unique across both teams).
+      // CreatureDefinition.id would collide if both players have the same creature type.
+      final petStatesSnapshot = List.generate(
+        math.min(_myOwnedTeam.length, _playerPets.length),
+        (i) => {
+          'uid': _myOwnedTeam[i].uid, // OwnedPet UUID — guaranteed unique
+          'name': _playerPets[i].name,
+          'hp': _playerPets[i].hp,
+          'maxHp': _playerPets[i].maxHp,
+          'shield': _playerPets[i].shield,
+          'isFainted': _playerPets[i].isFainted,
+          'spd': _playerPets[i].speed,
+          'skl': _playerPets[i].skill,
+          'mor': _playerPets[i].morale,
+          'dex': 0,
+          'def': 0,
+          'statusEffects': [],
+        },
+      );
+
+      // Build card effect map so server knows what each card does.
+      final cardEffects = <String, dynamic>{};
+      for (final card in _engine.currentPlayerHand) {
+        final petPending = mySelections[card.ownerPetId] ?? [];
+        if (!petPending.contains(card.instanceId)) continue;
+        final eff = card.trait.effect;
+        final effType = switch (eff.type) {
+          EffectType.damage => 'damage',
+          EffectType.aoe => 'aoe',
+          EffectType.heal => 'heal',
+          EffectType.shield => 'shield',
+          EffectType.shieldBreak => 'shieldBreak',
+          EffectType.buff => switch (eff.buffType) {
+              BuffType.regen => 'regen',
+              BuffType.energized => 'energized',
+              BuffType.attackUp => 'atk_up',
+              BuffType.defenseUp => 'def_up',
+              BuffType.speedUp => 'spd_up',
+              null => 'buff',
+            },
+          EffectType.debuff => switch (eff.debuffType) {
+              DebuffType.poisoned => 'poison',
+              DebuffType.burned => 'burn',
+              DebuffType.stunned => 'stun',
+              DebuffType.attackDown => 'atk_down',
+              DebuffType.defenseDown => 'def_down',
+              DebuffType.speedDown => 'spd_down',
+              null => 'debuff',
+            },
+        };
+        cardEffects[card.instanceId] = {
+          'effectType': effType,
+          'effectValue': eff.value,
+          'target': eff.target,
+        };
+      }
+
+      PvpSocket.instance.send(OutRoundSubmit(
+        matchId: _matchId,
+        round: expectedRound,
+        selections: mySelections,
+        petStates: petStatesSnapshot,
+        cardEffects: cardEffects,
+      ).toJson());
+
+      print(
+          '[PvP] Submitted round $expectedRound — awaiting server round:result');
+      _trace('submit:round:sent', {
+        'round': expectedRound,
+        'selectedPets': mySelections.length,
+      });
+      state = state.copyWith(awaitingOpponent: true, isResolving: true);
+      return; // _commitServerRoundResult will set awaitingOpponent: false, isResolving: false
+    }
+
+    // ── PvE path: wait for round:locked then run local engine ─────────────────
 
     // Prepare waiter before sending submit to avoid race with fast round:locked.
     final waiter = Completer<Map<String, List<String>>>();
@@ -455,21 +1067,22 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       _pendingRoundLocked = null;
     }
 
-    // Submit this player's selections to the server, including current pet states
-    final petStatesSnapshot = [..._playerPets, ..._enemyPets].map((pet) => {
-      'uid': pet.id,
-      'name': pet.name,
-      'hp': pet.hp,
-      'maxHp': pet.maxHp,
-      'shield': pet.shield,
-      'isFainted': pet.isFainted,
-      'spd': pet.speed,
-      'skl': pet.skill,
-      'mor': pet.morale,
-      'dex': 0,
-      'def': 0,
-      'statusEffects': [],
-    }).toList();
+    final petStatesSnapshot = [..._playerPets, ..._enemyPets]
+        .map((pet) => {
+              'uid': pet.id,
+              'name': pet.name,
+              'hp': pet.hp,
+              'maxHp': pet.maxHp,
+              'shield': pet.shield,
+              'isFainted': pet.isFainted,
+              'spd': pet.speed,
+              'skl': pet.skill,
+              'mor': pet.morale,
+              'dex': 0,
+              'def': 0,
+              'statusEffects': [],
+            })
+        .toList();
 
     PvpSocket.instance.send(OutRoundSubmit(
       matchId: _matchId,
@@ -478,43 +1091,29 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       petStates: petStatesSnapshot,
     ).toJson());
 
-    // Wait for the server to broadcast round:locked (opponent's selections)
     state = state.copyWith(awaitingOpponent: true);
     Map<String, List<String>> opponentSelections;
     try {
-      // 70 s timeout (server is 60 s, give 10 s slack)
       opponentSelections = await waiter.future
           .timeout(const Duration(seconds: 70), onTimeout: () {
-            print('[PvP] Round timeout - opponent did not submit in time, proceeding with empty selections');
-            return {};
-          });
+        print('[PvP] Round timeout — proceeding with empty selections');
+        return {};
+      });
     } catch (e) {
       print('[PvP] Error waiting for opponent: $e');
+      _trace('submit:round:wait:error', {'error': e.toString()});
       opponentSelections = {};
     }
     _opponentChoicesCompleter = null;
     _awaitingRound = null;
     if (!mounted) return;
-    
-    if (opponentSelections.isEmpty) {
-      print('[PvP] Opponent selections empty - proceeding with default choices');
-    }
-    
-    state = state.copyWith(awaitingOpponent: false);
 
-    // 🔐 For PvP: Server is authoritative. Skip local engine and wait for server's round:result
-    // For PvE: Run local engine for animations
-    if (_matchId.isNotEmpty) {
-      // PvP: Don't run local engine - server will send round:result
-      print('[PvP] Waiting for server-authoritative battle result for round ${_engine.round + 1}');
-      state = state.copyWith(isResolving: true);
-      return; // round:result will come via message handler and trigger _applyServerRoundResult
-    }
+    state = state.copyWith(awaitingOpponent: false);
 
     // Feed opponent choices into engine, then run round (PvE only)
     _engine.setOpponentChoices(opponentSelections);
     final started = _engine.prepareRound(mySelections);
-    
+
     // 🔍 DIAGNOSTIC: Log turn order for sync debugging
     if (started.hasImmediateResult) {
       final roundState = started.immediateResult!.state;
@@ -523,12 +1122,14 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       print('[PvP] Player Team after round:');
       for (var i = 0; i < roundState.teamA.length; i++) {
         final pet = roundState.teamA[i];
-        print('  Pet $i: ${pet.name} | HP: ${pet.hp}/${pet.maxHp} | Fainted: ${pet.isFainted}');
+        print(
+            '  Pet $i: ${pet.name} | HP: ${pet.hp}/${pet.maxHp} | Fainted: ${pet.isFainted}');
       }
       print('[PvP] Enemy Team after round:');
       for (var i = 0; i < roundState.teamB.length; i++) {
         final pet = roundState.teamB[i];
-        print('  Pet $i: ${pet.name} | HP: ${pet.hp}/${pet.maxHp} | Fainted: ${pet.isFainted}');
+        print(
+            '  Pet $i: ${pet.name} | HP: ${pet.hp}/${pet.maxHp} | Fainted: ${pet.isFainted}');
       }
       print('═' * 80);
     }
@@ -649,7 +1250,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       final preShield = <String, int>{
         for (final p in [..._playerPets, ..._enemyPets]) p.id: p.shield,
       };
-      _undoPreShieldIfNeeded(action.actor, action.trait);
+      // PvP does not mirror shield locally during card selection.
 
       final step = _engine.executeNextAction();
       state = state.copyWith(
@@ -723,7 +1324,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       if (!mounted) return;
     }
 
-    _preAppliedShields.clear();
     final result = _engine.finishRound();
 
     final faintedIds =
@@ -795,6 +1395,24 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
     // Submit battle log for server-side validation (async, don't wait)
     _submitBattleValidation(outcome);
+
+    // Fallback: if server doesn't send PvpMatchEnd within 8 s, resolve locally.
+    Future.delayed(const Duration(seconds: 8), () {
+      if (!mounted || state.pvpMatchEnd != null) return;
+      final localWinner = switch (outcome) {
+        BattleOutcome.teamAWins => _myUserId,
+        BattleOutcome.teamBWins => _opponentUserId,
+        _ => null,
+      };
+      state = state.copyWith(
+        pvpMatchEnd: PvpMatchEndData(
+          winnerUid: localWinner,
+          dispute: outcome == null,
+          mmrDelta: 0,
+        ),
+        isBattleOver: true,
+      );
+    });
   }
 
   /// Log an action during battle for validation
@@ -916,47 +1534,9 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     }
   }
 
-  // ── Shield pre-application (mirrors PvE) ───────────────────────────────────
-
-  int _shieldForCard(SkillCard card) {
-    int amount = 0;
-    if (card.trait.effect.type == EffectType.shield)
-      amount += card.trait.effect.value;
-    amount += card.trait.effect.selfShield;
-    return amount.clamp(0, 999);
-  }
-
-  void _applyPreShield(SkillCard card) {
-    final amount = _shieldForCard(card);
-    if (amount <= 0) return;
-    final pet = _playerPets.where((p) => p.id == card.ownerPetId).firstOrNull;
-    if (pet == null || pet.isFainted) return;
-    pet.applyShield(amount);
-    _preAppliedShields[card.instanceId] =
-        (petId: card.ownerPetId, amount: amount);
-  }
-
-  void _removePreAppliedShield(String instanceId) {
-    final entry = _preAppliedShields.remove(instanceId);
-    if (entry == null) return;
-    final pet = _playerPets.where((p) => p.id == entry.petId).firstOrNull;
-    if (pet != null) pet.shield = (pet.shield - entry.amount).clamp(0, 999);
-  }
-
-  void _undoPreShieldIfNeeded(Pet actor, Trait trait) {
-    final isShieldAction =
-        trait.effect.type == EffectType.shield || trait.effect.selfShield > 0;
-    if (!isShieldAction) return;
-    final keys = _preAppliedShields.entries
-        .where((e) => e.value.petId == actor.id)
-        .map((e) => e.key)
-        .toList();
-    int total = 0;
-    for (final k in keys) {
-      total += _preAppliedShields.remove(k)!.amount;
-    }
-    if (total > 0) actor.shield = (actor.shield - total).clamp(0, 999);
-  }
+  // ── Shield pre-application disabled in PvP ─────────────────────────────────
+  // PvP state must remain server-authoritative; card clicks only update pending
+  // assignments and UI selection, never local HP/shield.
 
   List<PetViewModel> _livePlayerTeamVMs() => [
         for (var i = 0; i < _playerPets.length; i++)
@@ -1050,22 +1630,34 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   PetViewModel _petVM(Pet pet, int position) {
     final def = _defFor(pet.id);
     final cfg = _mixedSkeletonConfigs[pet.id] ?? def?.spineConfig;
-    return PetViewModel.initial(
-        pet.id, pet.name, pet.speed, position, pet.traits, pet,
-        spriteConfig: def?.spriteConfig,
-        characterConfig: cfg,
-        partCardArt: def?.partCardArt ?? const {},
-        creatureDef: def);
+    return _snapVM(
+      PetSnapshot.fromLive(pet),
+      pet,
+      position,
+      spriteConfig: def?.spriteConfig,
+      characterConfig: cfg,
+      partCardArt: def?.partCardArt ?? const {},
+      creatureDef: def,
+    );
   }
 
-  PetViewModel _snapVM(PetSnapshot snap, Pet livePet, int position) {
+  PetViewModel _snapVM(
+    PetSnapshot snap,
+    Pet livePet,
+    int position, {
+    PetSpriteConfig? spriteConfig,
+    PetCharacterConfig? characterConfig,
+    Map<String, String> partCardArt = const {},
+    CreatureDefinition? creatureDef,
+  }) {
     final def = _defFor(livePet.id);
     final cfg = _mixedSkeletonConfigs[livePet.id] ?? def?.spineConfig;
     return PetViewModel.fromSnapshot(snap, livePet.traits, livePet, position,
-        spriteConfig: def?.spriteConfig,
-        characterConfig: cfg,
-        partCardArt: def?.partCardArt ?? const {},
-        creatureDef: def);
+        spriteConfig: spriteConfig ?? def?.spriteConfig,
+        characterConfig: characterConfig ?? cfg,
+        partCardArt:
+            partCardArt.isNotEmpty ? partCardArt : def?.partCardArt ?? const {},
+        creatureDef: creatureDef ?? def);
   }
 
   Future<void> _initializeMixedSkeletons() async {
@@ -1089,6 +1681,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   @override
   void dispose() {
     _wsSub?.cancel();
+    _pendingRoundResultTimer?.cancel();
     _opponentChoicesCompleter?.completeError('disposed');
     super.dispose();
   }
