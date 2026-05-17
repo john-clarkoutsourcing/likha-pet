@@ -341,13 +341,22 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     try {
       // 70 s timeout (server is 60 s, give 10 s slack)
       opponentSelections = await waiter.future
-          .timeout(const Duration(seconds: 70), onTimeout: () => {});
-    } catch (_) {
+          .timeout(const Duration(seconds: 70), onTimeout: () {
+            print('[PvP] Round timeout - opponent did not submit in time, proceeding with empty selections');
+            return {};
+          });
+    } catch (e) {
+      print('[PvP] Error waiting for opponent: $e');
       opponentSelections = {};
     }
     _opponentChoicesCompleter = null;
     _awaitingRound = null;
     if (!mounted) return;
+    
+    if (opponentSelections.isEmpty) {
+      print('[PvP] Opponent selections empty - proceeding with default choices');
+    }
+    
     state = state.copyWith(awaitingOpponent: false);
 
     // Feed opponent choices into engine, then run round
