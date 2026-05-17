@@ -27,9 +27,22 @@ class _PvpQueueScreenState extends ConsumerState<PvpQueueScreen> {
     ref.listen(pvpQueueProvider, (prev, next) {
       if (next.phase == QueuePhase.matched && next.matchFound != null) {
         final match = next.matchFound!;
+        // Find the saved team name that matches the active roster
+        final teamUids = team.map((p) => p.uid).toList();
+        final savedTeam = playerData.savedTeams.cast<dynamic>().firstWhere(
+          (t) =>
+              t.petUids.length == teamUids.length &&
+              List.generate(teamUids.length, (i) => t.petUids[i] == teamUids[i])
+                  .every((b) => b),
+          orElse: () => null,
+        );
+        final teamName = savedTeam?.name as String? ?? 'My Team';
         ref.read(pvpQueueProvider.notifier).clearMatch();
-        ref.read(pvpBattleArgsProvider.notifier).state =
-            PvpBattleArgs(matchFound: match, myTeam: team);
+        ref.read(pvpBattleArgsProvider.notifier).state = PvpBattleArgs(
+          matchFound: match,
+          myTeam: team,
+          myTeamName: teamName,
+        );
         context.go(Routes.pvpBattle);
       }
     });

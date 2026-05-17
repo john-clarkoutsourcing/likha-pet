@@ -151,62 +151,88 @@ export class PvpMatch {
     }
 
     try {
-      // Convert selections to player selections
-      const playerASelection = this._getPlayerSelection(selectionsA, statesA);
-      const playerBSelection = this._getPlayerSelection(selectionsB, statesB);
-
-      // Execute round server-side
+      // Execute round server-side with full selections
       const input: RoundExecutionInput = {
         seed: this.seed,
         roundNumber: this.round,
         playerATeam: statesA,
         playerBTeam: statesB,
-        playerASelection: playerASelection,
-        playerBSelection: playerBSelection,
+        playerASelections: selectionsA,
+        playerBSelections: selectionsB,
       };
 
+      console.log(`[PvP] Executing round ${this.round} for match ${this.matchId}`);
       const result = await this.executor.executeRound(input);
 
-      if (!result.success || !result.petStates || !result.turnOrder) {
+      if (!result.success || !result.playerATeamAfter || !result.playerBTeamAfter) {
         console.error('[PvP] Round execution failed:', result.error);
         this._forfeit(a.userId);
         return;
       }
 
       // Update pet states for next round
-      const updatedStatesA: PetState[] = statesA.map((pet) => ({
-        ...pet,
-        ...(result.petStates![pet.uid] || {}),
-      }));
-      const updatedStatesB: PetState[] = statesB.map((pet) => ({
-        ...pet,
-        ...(result.petStates![pet.uid] || {}),
-      }));
+      const updatedStatesA = result.playerATeamAfter!;
+      const updatedStatesB = result.playerBTeamAfter!;
 
       this.petStates.set(a.userId, updatedStatesA);
       this.petStates.set(b.userId, updatedStatesB);
 
-      // Broadcast round result to both clients
+      // Create pet states map for both clients (same data)
+      const petStatesMap: Record<string, any> = {};
+      updatedStatesA.forEach(pet => {
+        petStatesMap[pet.uid] = {
+          hp: pet.hp,
+          shield: pet.shield,
+          isFainted: pet.isFainted,
+        };
+      });
+      updatedStatesB.forEach(pet => {
+        petStatesMap[pet.uid] = {
+          hp: pet.hp,
+          shield: pet.shield,
+          isFainted: pet.isFainted,
+        };
+      });
+
+      // Broadcast IDENTICAL round result to both clients
       const nextDeadline = Date.now() + ROUND_TIMEOUT_MS;
       const roundResult = {
         type: 'round:result',
         matchId: this.matchId,
         round: this.round,
-        turnOrder: result.turnOrder,
-        petStates: result.petStates,
+        turnOrder: result.turnOrder || [],
+        petStates: petStatesMap,
         battleComplete: result.battleComplete ?? false,
         nextDeadlineMs: nextDeadline,
       };
 
+      console.log(`[PvP] Broadcasting round ${this.round} result to both players`);
       send(a.socket, roundResult);
       send(b.socket, roundResult);
 
       this.pendingSelections.clear();
       this.pendingPetStates.clear();
 
-      // If battle is complete, both clients will submit client:result
-      if (result.battleComplete) {
-        this.status = 'awaiting_results';
+      // Check if battle is complete
+      if (result.battleComplete && result.winnerTeam) {
+        console.log(`[PvP] Battle complete! Winner: ${result.winnerTeam}`);
+        // Map winner team to player UID
+        const winnerUid = result.winnerTeam === 'A' ? a.userId : 
+                          result.winnerTeam === 'B' ? b.userId : null;
+        
+        this.status = 'ended';
+        
+        // Send final result to both players
+        const matchEndMsg = {
+          type: 'match:end',
+          matchId: this.matchId,
+          winnerUid: winnerUid ?? null,
+          dispute: false,
+          mmrDelta: 0,
+        };
+        
+        send(a.socket, matchEndMsg);
+        send(b.socket, matchEndMsg);
       } else {
         // Continue with next round
         this.round++;

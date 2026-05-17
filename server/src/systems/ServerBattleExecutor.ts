@@ -33,22 +33,28 @@ export interface RoundExecutionInput {
   roundNumber: number;
   playerATeam: PetState[];
   playerBTeam: PetState[];
-  playerASelection: PlayerSelection;
-  playerBSelection: PlayerSelection;
+  playerASelections: Record<string, string[]>;  // petUid -> [action names]
+  playerBSelections: Record<string, string[]>;
 }
 
-export interface TurnOrderEntry {
+export interface ActionLog {
   uid: string;
   name: string;
-  index: number;
+  team: 'A' | 'B';
+  action: string;
+  damage: number;
+  target: string;
+  targetTeam: 'A' | 'B';
 }
 
 export interface RoundExecutionResult {
   success: boolean;
   roundNumber?: number;
-  turnOrder?: TurnOrderEntry[];
-  petStates?: Record<string, any>;
+  turnOrder?: ActionLog[];  // Full action details with damage
+  playerATeamAfter?: PetState[];
+  playerBTeamAfter?: PetState[];
   battleComplete?: boolean;
+  winnerTeam?: 'A' | 'B' | 'draw' | null;
   error?: string;
   stackTrace?: string;
 }

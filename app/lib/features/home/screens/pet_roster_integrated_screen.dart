@@ -848,9 +848,12 @@ class _PetCard extends StatelessWidget {
           children: [
             // ── Renderer area ──────────────────────────────────────────────
             Expanded(
-              child: Stack(children: [
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final s = constraints.maxHeight.clamp(80.0, 300.0);
+                  return Stack(children: [
                 Center(
-                  child: PetRendererWidget.fromOwned(pet, size: 110),
+                  child: PetRendererWidget.fromOwned(pet, size: s),
                 ),
                 // Position badge (FRONT / MID / BACK pill)
                 if (_inTeam)
@@ -904,7 +907,9 @@ class _PetCard extends StatelessWidget {
                             fontWeight: FontWeight.w800)),
                   ),
                 ),
-              ]),
+              ]);
+                },
+              ),
             ),
 
             // ── Info strip ─────────────────────────────────────────────────
@@ -914,25 +919,34 @@ class _PetCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name + rename icon
-                  Row(children: [
-                    Expanded(
-                      child: Text(pet.name,
-                          style: GoogleFonts.rajdhani(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800),
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    GestureDetector(
-                      onTap: onRename,
-                      child: const Padding(
-                        padding: EdgeInsets.only(left: 4),
-                        child: Icon(Icons.drive_file_rename_outline,
-                            size: 12, color: Colors.white30),
+                  // Name + rename — whole row is tappable
+                  GestureDetector(
+                    onTap: onRename,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amberAccent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                            color: Colors.amberAccent.withValues(alpha: 0.25)),
                       ),
+                      child: Row(children: [
+                        const Icon(Icons.drive_file_rename_outline,
+                            size: 11, color: Colors.amberAccent),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(pet.name,
+                              style: GoogleFonts.rajdhani(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ]),
                     ),
-                  ]),
+                  ),
                   const SizedBox(height: 3),
                   // Class badge
                   Container(

@@ -19,25 +19,29 @@ class PvpFirestoreService {
   FirebaseFirestore? _getFirestore() {
     // Skip entirely on web platform
     if (_isWeb) {
+      print('[Firestore] WARNING: Firestore disabled on web platform (JavaScript interop issues)');
       return null;
     }
 
     // Use injected instance if available
     if (_injectedFirestore != null) {
+      print('[Firestore] Using injected Firestore instance');
       return _injectedFirestore;
     }
 
     // Attempt to access shared instance with error handling
     if (_firestore != null) {
+      print('[Firestore] Using cached Firestore instance');
       return _firestore;
     }
 
     try {
       _firestore = FirebaseFirestore.instance;
+      print('[Firestore] Successfully initialized Firestore instance');
       return _firestore;
     } catch (e) {
       // If Firestore.instance throws, gracefully degrade
-      print('[Firestore] Warning: Failed to initialize Firestore: $e');
+      print('[Firestore] ERROR: Failed to initialize Firestore: $e');
       return null;
     }
   }
@@ -268,6 +272,93 @@ class PvpFirestoreService {
     } catch (e) {
       print('[Firestore] Warning: Failed to fetch validation result: $e');
       return null;
+    }
+  }
+
+  /// Saves a live battle round log to Firestore.
+  /// Called after each round completes to persist logs in real-time.
+  Future<void> saveLiveRoundLog({
+    required String matchId,
+    required int roundNumber,
+    required String roundLog,
+    required Map<String, dynamic> playerTeamState,
+    required Map<String, dynamic> opponentTeamState,
+    required List<Map<String, dynamic>> turnOrder,
+    bool isBattleComplete = false,
+  }) async {
+    final firestore = _getFirestore();
+    if (firestore == null) {
+      print('[Firestore] SKIP: Round $roundNumber not saved (Firestore unavailable)');
+      return;
+    }
+
+    try {
+      print('[Firestore] Saving round $roundNumber for match $matchId...');
+      await firestore.collection('pvpBattleLogs').doc(matchId).update({
+        'rounds': FieldValue.arrayUnion([
+          {
+            'roundNumber': roundNumber,
+            'log': roundLog,
+            'playerTeamState': playerTeamState,
+            'opponentTeamState': opponentTeamState,
+            'turnOrder': turnOrder,
+            'timestamp': FieldValue.serverTimestamp(),
+          }
+        ]),
+        'lastUpdated': FieldValue.serverTimestamp(),
+        'isComplete': isBattleComplete,
+      }).catchError((e) async {
+        // If doc doesn't exist yet, create it
+        if (e.code == 'not-found') {
+          print('[Firestore] Creating new battle log document for match $matchId');
+          await firestore.collection('pvpBattleLogs').doc(matchId).set({
+            'matchId': matchId,
+            'startTime': FieldValue.serverTimestamp(),
+            'rounds': [
+              {
+                'roundNumber': roundNumber,
+                'log': roundLog,
+                'playerTeamState': playerTeamState,
+                'opponentTeamState': opponentTeamState,
+                'turnOrder': turnOrder,
+                'timestamp': FieldValue.serverTimestamp(),
+              }
+            ],
+            'lastUpdated': FieldValue.serverTimestamp(),
+            'isComplete': isBattleComplete,
+          });
+          print('[Firestore] Battle log created successfully');
+        } else {
+          print('[Firestore] ERROR saving round $roundNumber: $e');
+        }
+      });
+      print('[Firestore] Round $roundNumber saved successfully');
+    } catch (e) {
+      print('[Firestore] ERROR: Failed to save round log: $e');
+    }
+  }
+
+  /// Marks battle as complete in Firestore.
+  Future<void> markBattleComplete({
+    required String matchId,
+    required String? winnerUserId,
+  }) async {
+    final firestore = _getFirestore();
+    if (firestore == null) {
+      print('[Firestore] SKIP: Battle completion not saved (Firestore unavailable)');
+      return;
+    }
+
+    try {
+      print('[Firestore] Marking match $matchId as complete (winner: $winnerUserId)');
+      await firestore.collection('pvpBattleLogs').doc(matchId).update({
+        'isComplete': true,
+        'winnerUserId': winnerUserId,
+        'endTime': FieldValue.serverTimestamp(),
+      });
+      print('[Firestore] Battle marked as complete successfully');
+    } catch (e) {
+      print('[Firestore] ERROR marking battle complete: $e');
     }
   }
 }

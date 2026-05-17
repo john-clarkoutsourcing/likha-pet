@@ -335,7 +335,9 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   // ── Apply server-side battle results ────────────────────────────────────────
 
   void _applyServerRoundResult(PvpRoundResult result) {
-    // Update pet states from server
+    print('[PvP] Applying server round result for round ${result.round}');
+    
+    // Update pet states from server (HP, shields, fainted status)
     for (final petEntry in result.petStates.entries) {
       final petUid = petEntry.key;
       final petData = petEntry.value as Map<String, dynamic>;
@@ -346,29 +348,82 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
       if (playerPet != null) {
         playerPet.hp = (petData['hp'] as num).toInt();
+        playerPet.shield = (petData['shield'] as num?)?.toInt() ?? 0;
         playerPet.isFainted = playerPet.hp <= 0;
       } else if (enemyPet != null) {
         enemyPet.hp = (petData['hp'] as num).toInt();
+        enemyPet.shield = (petData['shield'] as num?)?.toInt() ?? 0;
         enemyPet.isFainted = enemyPet.hp <= 0;
       }
     }
 
-    // Update round log
+    // Build turn order string for round log
     final turnOrderStr = result.turnOrder
-        .map((entry) => '${entry['name']} (${entry['uid'].toString().substring(0, 6)})')
+        .map((entry) {
+          final name = entry['name'] as String? ?? entry['uid'];
+          final damage = entry['damage'] as int?;
+          final damageStr = damage != null ? ' (dmg: $damage)' : '';
+          return '$name$damageStr';
+        })
         .join(' → ');
+    
+    final newRoundLog = '${state.roundLog}\nRound ${result.round}: $turnOrderStr';
+    
+    // Update UI state
     state = state.copyWith(
-      roundLog: '${state.roundLog}\nRound ${result.round}: $turnOrderStr',
+      currentRound: result.round,
+      roundLog: newRoundLog,
+      playerTeam: _toViewModels(_playerPets, isPlayer: true),
+      enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
       awaitingOpponent: false,
+      isResolving: false, // Allow next round to execute
     );
 
-    // If battle is complete, both clients will send client:result
+    print('[PvP] Round ${result.round} applied - ready for next round');
+    
+    // If battle is complete, notify the UI
     if (result.battleComplete) {
-      print('[PvP] Server indicates battle complete');
+      print('[PvP] Server indicates battle is complete');
       state = state.copyWith(isBattleOver: true);
-    } else {
-      // Continue to next round - auto-submit empty selections if player doesn't act
-      print('[PvP] Round ${result.round} result applied, ready for next round');
+      // PvpMatchEnd message will follow with final winner
+    }
+    
+    // Save battle log to Firestore
+    _saveBattleLogToFirestore(result);
+  }
+  
+  void _saveBattleLogToFirestore(PvpRoundResult result) {
+    // Capture current team snapshots
+    final playerTeamSnapshot = <String, dynamic>{};
+    for (final pet in _playerPets) {
+      playerTeamSnapshot[pet.id] = {
+        'hp': pet.hp,
+        'shield': pet.shield,
+        'isFainted': pet.isFainted,
+      };
+    }
+    final opponentTeamSnapshot = <String, dynamic>{};
+    for (final pet in _enemyPets) {
+      opponentTeamSnapshot[pet.id] = {
+        'hp': pet.hp,
+        'shield': pet.shield,
+        'isFainted': pet.isFainted,
+      };
+    }
+    
+    // This is async and non-blocking
+    try {
+      _firestoreService.saveLiveRoundLog(
+        matchId: _matchId,
+        roundNumber: result.round,
+        roundLog: state.roundLog,
+        playerTeamState: playerTeamSnapshot,
+        opponentTeamState: opponentTeamSnapshot,
+        turnOrder: result.turnOrder,
+        isBattleComplete: result.battleComplete,
+      );
+    } catch (e) {
+      print('[PvP] Failed to save battle log: $e');
     }
   }
 
@@ -447,7 +502,16 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     
     state = state.copyWith(awaitingOpponent: false);
 
-    // Feed opponent choices into engine, then run round
+    // 🔐 For PvP: Server is authoritative. Skip local engine and wait for server's round:result
+    // For PvE: Run local engine for animations
+    if (_matchId.isNotEmpty) {
+      // PvP: Don't run local engine - server will send round:result
+      print('[PvP] Waiting for server-authoritative battle result for round ${_engine.round + 1}');
+      state = state.copyWith(isResolving: true);
+      return; // round:result will come via message handler and trigger _applyServerRoundResult
+    }
+
+    // Feed opponent choices into engine, then run round (PvE only)
     _engine.setOpponentChoices(opponentSelections);
     final started = _engine.prepareRound(mySelections);
     

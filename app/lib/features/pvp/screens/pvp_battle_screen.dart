@@ -113,7 +113,10 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
     _ensureWarmup(vm);
 
     if (!_battleReady) {
-      return const BattleLoadingScreen(message: 'Preparing battle assets…');
+      return _PvpPrepScreen(
+        myTeamName: vm.playerTeamName.isEmpty ? 'My Team' : vm.playerTeamName,
+        opponentName: vm.enemyTeamName.isEmpty ? 'Opponent' : vm.enemyTeamName,
+      );
     }
 
     ref.listen(pvpBattleProvider, (prev, next) {
@@ -267,6 +270,168 @@ class _LockInButton extends StatelessWidget {
         child: Text(label,
             style: const TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+      ),
+    );
+  }
+}
+
+// ── PvP prep / loading screen ─────────────────────────────────────────────────
+
+class _PvpPrepScreen extends StatefulWidget {
+  final String myTeamName;
+  final String opponentName;
+  const _PvpPrepScreen({required this.myTeamName, required this.opponentName});
+
+  @override
+  State<_PvpPrepScreen> createState() => _PvpPrepScreenState();
+}
+
+class _PvpPrepScreenState extends State<_PvpPrepScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0E1A),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background radial glow
+          Center(
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x1FEF5350), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+
+          SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'BATTLE STARTING',
+                  style: GoogleFonts.rajdhani(
+                    color: Colors.white38,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 3,
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // TeamName  VS  OpponentName
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(children: [
+                        Text('YOU',
+                            style: GoogleFonts.rajdhani(
+                              color: const Color(0xFF69F0AE),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
+                            )),
+                        const SizedBox(height: 6),
+                        Text(widget.myTeamName,
+                            style: GoogleFonts.rajdhani(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      ]),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: AnimatedBuilder(
+                        animation: _pulse,
+                        builder: (_, __) => Opacity(
+                          opacity: 0.6 + _pulse.value * 0.4,
+                          child: Text('VS',
+                              style: GoogleFonts.rajdhani(
+                                color: const Color(0xFFEF5350),
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 2,
+                              )),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(children: [
+                        Text('OPPONENT',
+                            style: GoogleFonts.rajdhani(
+                              color: const Color(0xFFFF5252),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
+                            )),
+                        const SizedBox(height: 6),
+                        Text(widget.opponentName,
+                            style: GoogleFonts.rajdhani(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      ]),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 48),
+
+                // Animated loading bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 48),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: AnimatedBuilder(
+                      animation: _pulse,
+                      builder: (_, __) => LinearProgressIndicator(
+                        backgroundColor: Colors.white10,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color.lerp(const Color(0xFFEF5350),
+                              const Color(0xFFFF8A65), _pulse.value)!,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('Preparing battle assets…',
+                    style: GoogleFonts.rajdhani(
+                        color: Colors.white38, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
