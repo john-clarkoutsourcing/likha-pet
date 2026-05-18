@@ -63,14 +63,14 @@ class TraitViewModel {
   final String partName;
   final String effectSummary;
   final String targetSummary;
-  final String targetingMode; // 'front' | 'pierce' | 'aoe' | 'ally'
+  final String targetingMode; // 'front' | 'pierce' | 'ally'
   final int energyCost;
   final int cooldownMax;
   final int cooldownRemaining;
   final bool isReady;
   final bool canAfford;
   final String
-      effectIconKey; // 'damage'|'aoe'|'heal'|'shield'|'poison'|'burn'|'stun'|etc.
+      effectIconKey; // 'damage'|'heal'|'shield'|'poison'|'burn'|'stun'|etc.
   final int effectIconValue; // primary numeric value shown alongside icon
   final int shieldAmount;
 
@@ -122,7 +122,7 @@ class TraitViewModel {
     final e = t.effect;
     return switch (e.type) {
       EffectType.damage => 'damage',
-      EffectType.aoe => 'aoe',
+
       EffectType.heal => 'heal',
       EffectType.shield => 'shield',
       EffectType.shieldBreak => 'shield_break',
@@ -166,7 +166,7 @@ class TraitViewModel {
     final shd = e.selfShield > 0 ? ' +${e.selfShield}SHD' : '';
     return switch (e.type) {
       EffectType.damage => '${e.value} DMG$shd',
-      EffectType.aoe => '${e.value} AoE$shd',
+
       EffectType.heal => 'HEAL ${e.value}',
       EffectType.shield => 'SHIELD ${e.value}',
       EffectType.shieldBreak =>
@@ -227,7 +227,7 @@ class TraitViewModel {
       };
 
   static String _targetingMode(String target) => switch (target) {
-        'all_enemies' => 'aoe',
+
         'lowest_hp_enemy' || 'back_enemy' => 'pierce',
         'all_allies' || 'lowest_hp_ally' => 'ally',
         _ => 'front',
@@ -582,6 +582,7 @@ class PveBattleViewModel {
 
   final int playerTeamEnergy;
   final int enemyTeamEnergy;
+  final bool isBloodMoon;
 
   final bool needsDiscard;
   final int excessDiscards;
@@ -606,6 +607,21 @@ class PveBattleViewModel {
   /// Used by the battlefield to keep dash landing on the correct enemy slot
   /// (front/mid/back) for pierce/back-row skills.
   final Map<String, String> petDashTargets;
+
+  // ── Ranged projectile ───────────────────────────────────────────────────────
+
+  /// Incremented each time a new ranged projectile is fired. The HUD watches
+  /// this token to spawn exactly one ProjectileWidget per new value.
+  final int pendingProjectileToken;
+
+  /// Non-null while a ranged card is animating — the HUD uses these three
+  /// fields to position and colour the in-flight projectile widget.
+  final String? pendingProjectileActorId;
+  final String? pendingProjectileTargetId;
+
+  /// Creature class name ('aquatic'|'beast'|'bird'|'plant'|'reptile'|'bug')
+  /// used to pick the placeholder orb colour until real VFX sprites exist.
+  final String? pendingProjectileClass;
 
   // ── PvP extras ──────────────────────────────────────────────────────────────
 
@@ -636,6 +652,7 @@ class PveBattleViewModel {
     this.deckDiscardSize = 0,
     this.playerTeamEnergy = kTeamEnergyStart,
     this.enemyTeamEnergy = kTeamEnergyStart,
+    this.isBloodMoon = false,
     this.needsDiscard = false,
     this.excessDiscards = 0,
     this.petAnimStates = const {},
@@ -645,6 +662,10 @@ class PveBattleViewModel {
     this.fizzledCardIds = const {},
     this.petDashOffsets = const {},
     this.petDashTargets = const {},
+    this.pendingProjectileToken = 0,
+    this.pendingProjectileActorId,
+    this.pendingProjectileTargetId,
+    this.pendingProjectileClass,
     this.awaitingOpponent = false,
     this.pvpMatchEnd,
     this.lastImpactEvent,
@@ -707,6 +728,7 @@ class PveBattleViewModel {
     int? deckDiscardSize,
     int? playerTeamEnergy,
     int? enemyTeamEnergy,
+    bool? isBloodMoon,
     bool? needsDiscard,
     int? excessDiscards,
     Map<String, PetCharacterAnimState>? petAnimStates,
@@ -716,6 +738,11 @@ class PveBattleViewModel {
     Set<String>? fizzledCardIds,
     Map<String, Offset>? petDashOffsets,
     Map<String, String>? petDashTargets,
+    int? pendingProjectileToken,
+    bool clearPendingProjectile = false,
+    String? pendingProjectileActorId,
+    String? pendingProjectileTargetId,
+    String? pendingProjectileClass,
     bool? awaitingOpponent,
     PvpMatchEndData? pvpMatchEnd,
     BattleImpactEvent? lastImpactEvent,
@@ -740,6 +767,7 @@ class PveBattleViewModel {
         deckDiscardSize: deckDiscardSize ?? this.deckDiscardSize,
         playerTeamEnergy: playerTeamEnergy ?? this.playerTeamEnergy,
         enemyTeamEnergy: enemyTeamEnergy ?? this.enemyTeamEnergy,
+        isBloodMoon: isBloodMoon ?? this.isBloodMoon,
         needsDiscard: needsDiscard ?? this.needsDiscard,
         excessDiscards: excessDiscards ?? this.excessDiscards,
         petAnimStates: petAnimStates ?? this.petAnimStates,
@@ -749,6 +777,17 @@ class PveBattleViewModel {
         fizzledCardIds: fizzledCardIds ?? this.fizzledCardIds,
         petDashOffsets: petDashOffsets ?? this.petDashOffsets,
         petDashTargets: petDashTargets ?? this.petDashTargets,
+        pendingProjectileToken:
+            pendingProjectileToken ?? this.pendingProjectileToken,
+        pendingProjectileActorId: clearPendingProjectile
+            ? null
+            : (pendingProjectileActorId ?? this.pendingProjectileActorId),
+        pendingProjectileTargetId: clearPendingProjectile
+            ? null
+            : (pendingProjectileTargetId ?? this.pendingProjectileTargetId),
+        pendingProjectileClass: clearPendingProjectile
+            ? null
+            : (pendingProjectileClass ?? this.pendingProjectileClass),
         awaitingOpponent: awaitingOpponent ?? this.awaitingOpponent,
         pvpMatchEnd: pvpMatchEnd ?? this.pvpMatchEnd,
         lastImpactEvent: lastImpactEvent ?? this.lastImpactEvent,

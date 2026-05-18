@@ -252,8 +252,9 @@ class Pet {
       bool forceLastStand = false}) {
     if (isFainted) return 0;
 
+    // If already in Last Stand, consume ticks instead of taking normal damage
     if (lastStandTicks > 0 && !ignoreLastStand) {
-      lastStandTicks = (lastStandTicks - 1).clamp(0, 999);
+      lastStandTicks = (lastStandTicks - 2).clamp(0, 999); // -2 ticks for incoming hit
       if (lastStandTicks <= 0) {
         hp = 0;
         isFainted = true;
@@ -272,15 +273,25 @@ class Pet {
     final actual = remaining.clamp(0, 999);
     hp -= actual;
     if (hp <= 0) {
-      // lethal debuff: target bypasses Last Stand (treated same as ignoreLastStand).
+      // Check lethal debuff (bypasses Last Stand)
       final hasLethal = debuffs.any((d) => d.type == DebuffType.lethal);
-      if ((!ignoreLastStand && canEnterLastStand && !hasLethal) || forceLastStand) {
+      
+      // Try Last Stand trigger if not forced, not ignoring, and no lethal
+      if (!ignoreLastStand && !hasLethal && !forceLastStand) {
+        if (checkLastStandTrigger(finalDamage)) {
+          hp = 1;
+          lastStandTicks = _computeLastStandTicks();
+          return actual;
+        }
+      } else if (forceLastStand && !hasLethal) {
         hp = 1;
         lastStandTicks = _computeLastStandTicks();
-      } else {
-        hp = 0;
-        isFainted = true;
+        return actual;
       }
+      
+      // No Last Stand: faint normally
+      hp = 0;
+      isFainted = true;
     }
     return actual;
   }
@@ -341,7 +352,30 @@ class Pet {
   int get ownEnergy => _ownEnergy;
 
   int _computeLastStandTicks() {
-    final ticks = 1 + (morale ~/ 15);
-    return ticks.clamp(1, 3);
+    // Last Stand Ticks are determined by Morale brackets (Axie Infinity Classic):
+    // 0–29 morale    → 1 tick  (very low morale Aquas/Birds)
+    // 30–50 morale   → 2 ticks (standard Aquas, Birds, Plants, Reptiles)
+    // 51–70 morale   → 3 ticks (pure Beasts, Mechs, Bugs)
+    // 71+ morale     → 4 ticks (requires morale buffs like Self-Harm or Purify)
+    return switch (morale) {
+      < 30 => 1,
+      < 51 => 2,
+      < 71 => 3,
+      _ => 4,
+    };
+  }
+
+  /// Check if this pet would survive a fatal blow via Last Stand.
+  /// Returns true if the morale modifier exceeds overkill damage.
+  /// Overkill = damage - remainingHp
+  /// Morale Modifier = (100 / remainingHp) * morale
+  /// Triggers if: Morale Modifier > Overkill
+  bool checkLastStandTrigger(int damageAmount) {
+    if (!canEnterLastStand || hp <= 0) return false;
+    
+    final overkill = (damageAmount - hp).clamp(0, 9999);
+    final moraleModifier = ((100.0 / hp) * morale).round();
+    
+    return moraleModifier > overkill;
   }
 }

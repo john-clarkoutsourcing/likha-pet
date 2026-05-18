@@ -55,8 +55,6 @@ class TraitSystem {
     return switch (e.type) {
       EffectType.damage =>
         '${prefix}Deal ${e.value} damage to ${_targetLabel(e.target)}.',
-      EffectType.aoe =>
-        '${prefix}Deal ${e.value} AoE damage to ${_targetLabel(e.target)}.',
       EffectType.heal =>
         '${prefix}Restore ${e.value} HP to ${_targetLabel(e.target)}.',
       EffectType.shield =>

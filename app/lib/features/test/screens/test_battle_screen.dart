@@ -616,8 +616,7 @@ class _CharacterPreviewPanel extends ConsumerWidget {
         final trait = notifier.getTraitByName(traitName);
         if (trait != null) {
           if (statType == 'attack' &&
-              (trait.effect.type == EffectType.damage ||
-                  trait.effect.type == EffectType.aoe)) {
+              trait.effect.type == EffectType.damage) {
             total += (trait.effect.value ~/ 3).clamp(0, 10);
           } else if (statType == 'defense' &&
               (trait.effect.type == EffectType.shield ||
@@ -636,7 +635,6 @@ class _CharacterPreviewPanel extends ConsumerWidget {
   Color _getEffectTypeColor(EffectType type) {
     switch (type) {
       case EffectType.damage:
-      case EffectType.aoe:
         return Colors.red.shade500;
       case EffectType.heal:
         return Colors.green.shade500;

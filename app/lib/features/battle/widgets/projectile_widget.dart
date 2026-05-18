@@ -7,32 +7,54 @@ import 'package:flutter/material.dart';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 class ProjectileConfig {
-  final String sheetFile;   // filename under assetPrefix
-  final String assetPrefix; // e.g. assets/sprites/
+  final String sheetFile;    // filename under assetPrefix; empty = use fallbackColor
+  final String assetPrefix;
   final int    frameCount;
   final int?   amountPerRow;
-  final double frameSize;   // px per frame (square)
-  final double textureSize; // source frame size in sprite sheet
-  final double stepTime;    // seconds per frame
-  final double scale;       // visual scale on screen
+  final double frameSize;
+  final double textureSize;
+  final double stepTime;
+  final double scale;
   final bool   useScreenBlend;
 
+  /// When [sheetFile] is empty, the projectile renders as a glowing orb of
+  /// this colour — a placeholder until real VFX sprite sheets are available.
+  final Color? fallbackColor;
+
   const ProjectileConfig({
-    required this.sheetFile,
+    this.sheetFile = '',
     this.assetPrefix = 'assets/sprites/',
-    required this.frameCount,
+    this.frameCount = 1,
     this.amountPerRow,
     this.frameSize = 120,
     this.textureSize = 120,
     this.stepTime  = 0.10,
     this.scale     = 1.0,
     this.useScreenBlend = false,
+    this.fallbackColor,
   });
 }
 
-// Heal effect removed — no sprite sheet asset exists for it yet.
-// The heal animation is handled by PetCharacterAnimState.heal + floating +HP
-// text in shared_battle_hud.dart. Add an entry here when the sprite sheet is ready.
+// ── Placeholder colours by creature class ─────────────────────────────────────
+
+const kProjectileClassColors = <String, Color>{
+  'aquatic': Color(0xFF4ECBF5),
+  'beast':   Color(0xFFF5A623),
+  'bird':    Color(0xFFFFF176),
+  'plant':   Color(0xFF66BB6A),
+  'reptile': Color(0xFFBA68C8),
+  'bug':     Color(0xFFAA8855),
+};
+
+/// Returns a config that renders the rune-arrow SVG tinted with the class colour.
+/// The arrow automatically faces the travel direction (ProjectileWidget rotates it).
+ProjectileConfig configForCreatureClass(String className) => ProjectileConfig(
+      fallbackColor:
+          kProjectileClassColors[className] ?? const Color(0xFFFFFFFF),
+      frameSize: 48,
+    );
+
+// Sprite-sheet entries go here when assets are ready.
 const kEffectProjectiles = <String, ProjectileConfig>{};
 
 ProjectileConfig? resolveProjectileConfig({required String effectType}) =>
@@ -85,7 +107,7 @@ class _ProjectileWidgetState extends State<ProjectileWidget>
 
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 650),
     );
     _pos = Tween<Offset>(begin: widget.data.start, end: widget.data.end)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeIn));
@@ -118,26 +140,133 @@ class _ProjectileWidgetState extends State<ProjectileWidget>
         ),
       ),
       child: SizedBox(
-        width: size, height: size,
-        child: SpriteAnimationWidget.asset(
-          path:   cfg.sheetFile,
-          images: _imagesForPrefix(cfg.assetPrefix),
-          data: SpriteAnimationData.sequenced(
-            amount:      cfg.frameCount,
-            amountPerRow: cfg.amountPerRow ?? cfg.frameCount,
-            stepTime:    cfg.stepTime,
-            textureSize: Vector2(cfg.textureSize, cfg.textureSize),
-            loop: true,
-          ),
-          paint: cfg.useScreenBlend
-              ? (Paint()
-                ..isAntiAlias = true
-                ..filterQuality = FilterQuality.high
-                ..blendMode = BlendMode.screen)
-              : null,
-          errorBuilder: (_) => const SizedBox.shrink(),
-        ),
+        width: size,
+        height: size,
+        child: cfg.fallbackColor != null
+            ? _OrbWidget(color: cfg.fallbackColor!, size: size)
+            : SpriteAnimationWidget.asset(
+                path: cfg.sheetFile,
+                images: _imagesForPrefix(cfg.assetPrefix),
+                data: SpriteAnimationData.sequenced(
+                  amount: cfg.frameCount,
+                  amountPerRow: cfg.amountPerRow ?? cfg.frameCount,
+                  stepTime: cfg.stepTime,
+                  textureSize: Vector2(cfg.textureSize, cfg.textureSize),
+                  loop: true,
+                ),
+                paint: cfg.useScreenBlend
+                    ? (Paint()
+                      ..isAntiAlias = true
+                      ..filterQuality = FilterQuality.high
+                      ..blendMode = BlendMode.screen)
+                    : null,
+                errorBuilder: (_) => const SizedBox.shrink(),
+              ),
       ),
     );
   }
+}
+
+// ── Prototype rock projectile (CustomPaint — no asset needed) ─────────────────
+
+class _OrbWidget extends StatelessWidget {
+  final Color color;
+  final double size;
+  const _OrbWidget({required this.color, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _RockPainter(color),
+    );
+  }
+}
+
+class _RockPainter extends CustomPainter {
+  final Color tint;
+  _RockPainter(this.tint);
+
+  // Irregular stone polygon — points in normalized -0.5..0.5 coordinates.
+  static const _pts = [
+    Offset( 0.05, -0.46),
+    Offset( 0.32, -0.38),
+    Offset( 0.46, -0.10),
+    Offset( 0.42,  0.22),
+    Offset( 0.16,  0.46),
+    Offset(-0.14,  0.44),
+    Offset(-0.42,  0.26),
+    Offset(-0.46, -0.06),
+    Offset(-0.28, -0.38),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final s  = size.shortestSide;
+
+    final rock = Color.lerp(const Color(0xFF7A7A7A), tint, 0.30)!;
+    final dark = Color.lerp(const Color(0xFF383838), tint, 0.15)!;
+    final lite = Color.lerp(const Color(0xFFCCCCCC), tint, 0.18)!;
+
+    final path = _buildPath(cx, cy, s);
+
+    // Drop shadow
+    canvas.drawPath(
+      path.shift(const Offset(1.5, 2.0)),
+      Paint()
+        ..color = Colors.black45
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+
+    // Rock body — top-left lighter, bottom-right darker
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [lite, rock, dark],
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(Rect.fromCenter(
+          center: Offset(cx, cy),
+          width: s,
+          height: s,
+        )),
+    );
+
+    // Small highlight spot (upper-left face)
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx - s * 0.10, cy - s * 0.12),
+        width:  s * 0.26,
+        height: s * 0.16,
+      ),
+      Paint()..color = Colors.white.withValues(alpha: 0.22),
+    );
+
+    // Outline
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = dark.withValues(alpha: 0.65)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+  }
+
+  Path _buildPath(double cx, double cy, double s) {
+    final path = Path();
+    final first = Offset(cx + _pts[0].dx * s, cy + _pts[0].dy * s);
+    path.moveTo(first.dx, first.dy);
+    for (final p in _pts.skip(1)) {
+      path.lineTo(cx + p.dx * s, cy + p.dy * s);
+    }
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldRepaint(_RockPainter old) => old.tint != tint;
 }

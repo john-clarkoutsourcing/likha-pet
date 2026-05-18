@@ -16,7 +16,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:likha_pet_battle_engine/energy_pool.dart';
 
-import '../../../shared/widgets/hp_bar.dart';
 import '../../../core/theme/app_colors.dart';
 import '../data/trait_card_catalog.dart';
 import '../providers/battle_view_model.dart';
@@ -55,7 +54,7 @@ int battleClassicCardAttack(
     TraitViewModel trait, TraitCardCatalogEntry? entry) {
   if (entry != null) return entry.attack;
   return switch (trait.effectIconKey) {
-    'damage' || 'aoe' => trait.effectIconValue,
+    'damage' => trait.effectIconValue,
     _ => 0,
   };
 }
@@ -172,6 +171,37 @@ class BattleTopHud extends StatelessWidget {
                         _BattleRoundTimer(timer: timer),
                       ],
                     ),
+                    if (vm.isBloodMoon) ...[
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          color: const Color(0xFF6A0F16).withValues(alpha: 0.92),
+                          border: Border.all(
+                            color: const Color(0xFFFF5A67).withValues(alpha: 0.95),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  const Color(0xFFFF2D3F).withValues(alpha: 0.42),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          'BLOOD MOON',
+                          style: GoogleFonts.rajdhani(
+                            color: const Color(0xFFFFD6DB),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 3),
                     _BattleAttackOrderStrip(vm: vm),
                   ],
@@ -446,7 +476,7 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
   final List<ProjectileInstance> _projectiles = [];
   final List<_BattleFloatNum> _floatNums = [];
   int _nextId = 0;
-  Set<String> _lastAttackIds = {};
+  int _lastProjectileToken = -1;
 
   // Accumulated shield amounts per petId since the last non-shield event.
   // Lets consecutive shield floats for the same pet merge into one display.
@@ -455,12 +485,12 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
   @override
   void didUpdateWidget(BattlefieldView old) {
     super.didUpdateWidget(old);
-    // Clear per-round shield accumulators when a new round begins
-    // (lastImpactEvent resets to null between rounds).
     if (old.vm.lastImpactEvent != null && widget.vm.lastImpactEvent == null) {
       _shieldAccum.clear();
     }
-    _maybeSpawnProjectiles(widget.vm);
+    // Float nums compare old vs new vm — must stay in didUpdateWidget.
+    // Projectile spawning is handled in build() so it fires for both
+    // prop-driven and Riverpod-driven rebuilds.
     _maybeSpawnFloatNums(old.vm, widget.vm);
   }
 
@@ -627,13 +657,12 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
   }
 
   void _maybeSpawnProjectiles(PveBattleViewModel vm) {
-    if (vm.petAnimStates.isEmpty) {
-      _lastAttackIds = {};
-      return;
-    }
-    final attackIds = vm.petAnimStates.keys.toSet();
-    if (attackIds == _lastAttackIds) return;
-    _lastAttackIds = attackIds;
+    final token = vm.pendingProjectileToken;
+    final actorId = vm.pendingProjectileActorId;
+    final targetId = vm.pendingProjectileTargetId;
+    if (actorId == null || targetId == null || targetId.isEmpty) return;
+    if (token == _lastProjectileToken) return;
+    _lastProjectileToken = token;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -641,50 +670,34 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
       if (box == null) return;
       final w = box.size.width;
       final h = box.size.height;
-      final newProjectiles = <ProjectileInstance>[];
 
-      for (final petId in vm.petAnimStates.keys) {
-        final effectType = vm.petEffectVfx[petId];
-        if (effectType == null) continue;
-        final cfg = resolveProjectileConfig(effectType: effectType);
-        if (cfg == null) continue;
+      final isPlayerActor = vm.playerTeam.any((p) => p.id == actorId);
+      final actorTeam = isPlayerActor ? vm.playerTeam : vm.enemyTeam;
+      final targetTeam = isPlayerActor ? vm.enemyTeam : vm.playerTeam;
+      final actorPositions = isPlayerActor ? widget.playerPos : widget.opponentPos;
+      final targetPositions = isPlayerActor ? widget.opponentPos : widget.playerPos;
 
-        final isPlayer = vm.playerTeam.any((p) => p.id == petId);
-        final attackerPositions =
-            isPlayer ? widget.playerPos : widget.opponentPos;
-        final team = isPlayer ? vm.playerTeam : vm.enemyTeam;
-        final attackerIdx = team.indexWhere((p) => p.id == petId);
-        if (attackerIdx < 0) continue;
+      final actorIdx = actorTeam.indexWhere((p) => p.id == actorId);
+      final targetIdx = targetTeam.indexWhere((p) => p.id == targetId);
+      // Fall back to first alive enemy if target not found.
+      final resolvedTargetIdx = targetIdx >= 0
+          ? targetIdx
+          : targetTeam.indexWhere((p) => !p.isFainted);
+      if (actorIdx < 0 || resolvedTargetIdx < 0) return;
 
-        const spriteOffset = 29.0;
-        final startFrac = attackerPositions[attackerIdx];
-        final start = Offset(
-            w * startFrac.dx + spriteOffset, h * startFrac.dy + spriteOffset);
+      const spriteOffset = 29.0;
+      final startFrac = actorPositions[actorIdx.clamp(0, actorPositions.length - 1)];
+      final endFrac = targetPositions[resolvedTargetIdx.clamp(0, targetPositions.length - 1)];
+      final start = Offset(w * startFrac.dx + spriteOffset, h * startFrac.dy + spriteOffset);
+      final end   = Offset(w * endFrac.dx   + spriteOffset, h * endFrac.dy   + spriteOffset);
 
-        Offset end = start;
-        if (!_isSelfCenteredEffect(effectType)) {
-          final targetPositions =
-              isPlayer ? widget.opponentPos : widget.playerPos;
-          final targetTeam = isPlayer ? vm.enemyTeam : vm.playerTeam;
-          final targetIdx = targetTeam.indexWhere((p) => !p.isFainted);
-          if (targetIdx < 0) continue;
-          final endFrac = targetPositions[targetIdx];
-          end = Offset(
-              w * endFrac.dx + spriteOffset, h * endFrac.dy + spriteOffset);
-        }
-
-        newProjectiles.add(ProjectileInstance(
-            id: '${_nextId++}', start: start, end: end, config: cfg));
-      }
-
-      if (newProjectiles.isNotEmpty) {
-        setState(() => _projectiles.addAll(newProjectiles));
-      }
+      final cfg = configForCreatureClass(vm.pendingProjectileClass ?? '');
+      setState(() => _projectiles.add(
+            ProjectileInstance(id: '${_nextId++}', start: start, end: end, config: cfg),
+          ));
     });
   }
 
-  bool _isSelfCenteredEffect(String? t) =>
-      t == 'heal' || t == 'shield' || t == 'buff';
 
   void _removeProjectile(String id) =>
       setState(() => _projectiles.removeWhere((p) => p.id == id));
@@ -700,6 +713,11 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     final vm = widget.liveProvider != null
         ? ref.watch(widget.liveProvider!)
         : widget.vm;
+
+    // Always check for pending projectiles here — didUpdateWidget only fires
+    // for prop changes, missing Riverpod-driven rebuilds when liveProvider is set.
+    _maybeSpawnProjectiles(vm);
+
     return LayoutBuilder(builder: (_, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
@@ -815,7 +833,7 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     final p = Offset(w * pos.dx + dash.dx, h * pos.dy + dash.dy);
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
+      curve: Curves.easeOut,
       left: p.dx,
       top: p.dy,
       child: child,
@@ -973,7 +991,7 @@ class _BattlePet extends StatelessWidget {
                   ),
                   if (!isFainted)
                     Positioned(
-                      top: 22,
+                      top: 0,
                       left: 0,
                       right: 0,
                       child: BattleFloatingHpBar(
@@ -1079,14 +1097,6 @@ class _BattlePetSprite extends StatelessWidget {
             ),
           ),
 
-        // Status stroke icons — floats at bottom of sprite, above ground shadow
-        if (!pet.isFainted)
-          Positioned(
-            bottom: 4,
-            left: 0,
-            right: 0,
-            child: Center(child: _PetStatusIconRow(pet: pet)),
-          ),
       ],
     );
   }
@@ -1102,130 +1112,6 @@ class _BattlePetSprite extends StatelessWidget {
     ];
     return c[name.codeUnits.first % c.length];
   }
-}
-
-// ── _PetStatusIconRow ─────────────────────────────────────────────────────────
-//
-// Shows up to 4 status-effect stroke icons overlaid at the bottom of the
-// pet sprite. Debuffs are shown first (higher urgency), then buffs.
-// Icon filenames match assets/images/status/classic/*.png.
-
-class _PetStatusIconRow extends StatelessWidget {
-  final PetViewModel pet;
-  const _PetStatusIconRow({required this.pet});
-
-  static const _kBase = 'assets/images/status/classic/';
-
-  // Debuffs ordered by severity — most impactful shown first.
-  static const _kDebuffIcons = {
-      'stunned': 'stun-stroke.png',
-      'poisoned': 'poison-stroke.png',
-      'burned': 'critical-stroke.png',
-      'stench': 'stench-stroke.png',
-      'attackDown': 'attack-down-stroke.png',
-      'attack_down': 'attack-down-stroke.png',
-      'defenseDown': 'fragile-stroke.png',
-    'defense_down': 'fragile-stroke.png',
-    'speedDown': 'speed-down-stroke.png',
-    'speed_down': 'speed-down-stroke.png',
-  };
-
-  // Buffs ordered by importance.
-  static const _kBuffIcons = {
-    'attackUp': 'attack-up-stroke.png',
-    'attack_up': 'attack-up-stroke.png',
-    'defenseUp': 'raise-shield-stroke.png',
-    'defense_up': 'raise-shield-stroke.png',
-    'speedUp': 'speed-up-stroke.png',
-    'speed_up': 'speed-up-stroke.png',
-    'regen': 'self-heal-stroke.png',
-    'energized': 'gain-energy-stroke.png',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final seen = <String>{};
-    final icons = <_StatusIconEntry>[];
-
-    for (final d in pet.activeDebuffs) {
-      final icon = _kDebuffIcons[d];
-      if (icon != null && seen.add(icon)) {
-        icons.add(_StatusIconEntry(
-          assetPath: '$_kBase$icon',
-          roundsRemaining: d == 'stench' ? pet.debuffRoundsFor(d) : 0,
-        ));
-      }
-    }
-    for (final b in pet.activeBuffs) {
-      final icon = _kBuffIcons[b];
-      if (icon != null && seen.add(icon)) {
-        icons.add(_StatusIconEntry(
-          assetPath: '$_kBase$icon',
-        ));
-      }
-    }
-
-    if (icons.isEmpty) return const SizedBox.shrink();
-
-    final display = icons.take(4).toList();
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: display
-          .map(
-            (entry) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Image.asset(
-                    entry.assetPath,
-                    width: 22,
-                    height: 22,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                  ),
-                  if (entry.roundsRemaining > 0)
-                    Positioned(
-                      right: -2,
-                      top: -3,
-                      child: Container(
-                        constraints: const BoxConstraints(minWidth: 12),
-                        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.82),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFB44FD4), width: 1),
-                        ),
-                        child: Text(
-                          '${entry.roundsRemaining}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 8,
-                            height: 1,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _StatusIconEntry {
-  final String assetPath;
-  final int roundsRemaining;
-
-  const _StatusIconEntry({
-    required this.assetPath,
-    this.roundsRemaining = 0,
-  });
 }
 
 // ── BattleFloatingHpBar ───────────────────────────────────────────────────────
@@ -1250,51 +1136,304 @@ class BattleFloatingHpBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width.clamp(80.0, 108.0),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.76),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.white12),
-      ),
+    final hpRatio = pet.maxHp > 0
+        ? (currentHp / pet.maxHp).clamp(0.0, 1.0)
+        : 0.0;
+    final className = pet.creatureDef?.bodyClass.name.toLowerCase() ?? '';
+    final classColor = _classColor(className);
+    final hpColor = hpRatio > 0.5
+        ? const Color(0xFFC0EB4B)
+        : hpRatio > 0.25
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFFE53935);
+    final statuses = _allStatuses(pet);
+    final showShield = currentShield > 0;
+    final effectiveHpDuration = hpBarDuration == Duration.zero
+      ? const Duration(milliseconds: 260)
+      : hpBarDuration;
+
+    return SizedBox(
+      width: width.clamp(82.0, 108.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (statuses.isNotEmpty)
+            SizedBox(
+              height: 16,
+              child: Align(
+                alignment: Alignment.center,
+                child: Wrap(
+                  spacing: 3,
+                  runSpacing: 0,
+                  alignment: WrapAlignment.center,
+                  children: statuses.map((status) {
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Image.asset(
+                          status.assetPath,
+                          width: 14,
+                          height: 14,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.bolt_rounded,
+                            size: 10,
+                            color: Colors.white,
+                          ),
+                        ),
+                        if (status.stacksOrRounds > 1)
+                          Positioned(
+                            right: -5,
+                            top: -3,
+                            child: Text(
+                              '${status.stacksOrRounds}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                height: 1,
+                                fontWeight: FontWeight.w900,
+                                shadows: [
+                                  Shadow(color: Colors.black87, blurRadius: 2),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  }).toList(growable: false),
+                ),
+              ),
+            )
+          else
+            const SizedBox(height: 2),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(Icons.favorite, size: 8, color: Color(0xFF66FF88)),
-              const SizedBox(width: 1),
-              Text('$currentHp',
-                  style: const TextStyle(
-                      color: Color(0xFF66FF88),
-                      fontSize: 8,
-                      fontWeight: FontWeight.w800)),
-              const Spacer(),
-              // Show the total shield in one place.
-              // currentShield already includes pre-applied shields from
-              // selected cards, so shieldPreview would double-count them.
-              if (currentShield > 0) ...[
-                const Icon(Icons.shield, size: 8, color: AppColors.shieldGold),
-                const SizedBox(width: 1),
-                Text('$currentShield',
-                    style: const TextStyle(
-                        color: AppColors.shieldGold,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w800)),
-              ],
+              if (showShield)
+                CustomPaint(
+                  size: const Size(20, 20),
+                  painter: _ShieldPainter(shieldValue: currentShield),
+                )
+              else
+                const SizedBox(width: 20, height: 20),
+              const SizedBox(width: 3),
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: classColor,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  _classIcon(className),
+                  size: 11,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Expanded(
+                child: Container(
+                  height: 18,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF111111).withValues(alpha: 0.58),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '$currentHp',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          shadows: [
+                            Shadow(color: Colors.black87, blurRadius: 2),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            Container(
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.55),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                return AnimatedContainer(
+                                  duration: effectiveHpDuration,
+                                  curve: Curves.easeOutCubic,
+                                  width: constraints.maxWidth * hpRatio,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: hpColor,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
-          ),
-          const SizedBox(height: 1),
-          HpBar(
-            current: currentHp,
-            max: pet.maxHp,
-            height: 3,
-            duration: hpBarDuration,
           ),
         ],
       ),
     );
+  }
+
+  static Color _classColor(String className) => switch (className) {
+        'plant' => const Color(0xFF56A54A),
+        'aquatic' => const Color(0xFF2699F1),
+        'beast' => const Color(0xFFDA8A2A),
+        'reptile' => const Color(0xFF5DA468),
+        'bird' => const Color(0xFFE85D8A),
+        'bug' => const Color(0xFFCC4F4F),
+        _ => const Color(0xFF6B7280),
+      };
+
+  static List<_HudStatus> _allStatuses(PetViewModel pet) {
+    const base = 'assets/images/status/classic/';
+    final out = <_HudStatus>[];
+
+    if (pet.isStunned) {
+      out.add(const _HudStatus(assetPath: '${base}stun-stroke.png', stacksOrRounds: 1));
+    }
+    if (pet.poisonStacks > 0) {
+      out.add(_HudStatus(
+        assetPath: '${base}poison-stroke.png',
+        stacksOrRounds: pet.poisonStacks,
+      ));
+    }
+
+    for (final d in pet.activeDebuffs) {
+      final map = {
+        'burned': '${base}critical-stroke.png',
+        'stench': '${base}stench-stroke.png',
+        'attackDown': '${base}attack-down-stroke.png',
+        'attack_down': '${base}attack-down-stroke.png',
+        'defenseDown': '${base}fragile-stroke.png',
+        'defense_down': '${base}fragile-stroke.png',
+        'speedDown': '${base}speed-down-stroke.png',
+        'speed_down': '${base}speed-down-stroke.png',
+      };
+      final icon = map[d] ?? '${base}debuff-stroke.png';
+      out.add(_HudStatus(
+        assetPath: icon,
+        stacksOrRounds: pet.debuffRoundsFor(d).clamp(1, 99),
+      ));
+    }
+
+    for (final b in pet.activeBuffs) {
+      final map = {
+        'attackUp': '${base}attack-up-stroke.png',
+        'attack_up': '${base}attack-up-stroke.png',
+        'defenseUp': '${base}raise-shield-stroke.png',
+        'defense_up': '${base}raise-shield-stroke.png',
+        'speedUp': '${base}speed-up-stroke.png',
+        'speed_up': '${base}speed-up-stroke.png',
+        'regen': '${base}self-heal-stroke.png',
+        'energized': '${base}gain-energy-stroke.png',
+      };
+      out.add(_HudStatus(
+        assetPath: map[b] ?? '${base}buff-stroke.png',
+        stacksOrRounds: 1,
+      ));
+    }
+
+    return out;
+  }
+
+  static IconData _classIcon(String className) => switch (className) {
+        'plant' => Icons.local_florist_rounded,
+        'aquatic' => Icons.water_drop_rounded,
+        'beast' => Icons.pets_rounded,
+        'reptile' => Icons.forest_rounded,
+        'bird' => Icons.flutter_dash_rounded,
+        'bug' => Icons.bug_report_rounded,
+        _ => Icons.adjust_rounded,
+      };
+}
+
+class _HudStatus {
+  final String assetPath;
+  final int stacksOrRounds;
+
+  const _HudStatus({required this.assetPath, required this.stacksOrRounds});
+}
+
+// ── _ShieldPainter ───────────────────────────────────────────────────────────
+// Custom painter to draw a shield shape with the shield value inside
+
+class _ShieldPainter extends CustomPainter {
+  final int shieldValue;
+  _ShieldPainter({required this.shieldValue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final width = size.width;
+    final height = size.height;
+    
+    // Shield path (diamond-like shape)
+    final path = Path();
+    path.moveTo(width / 2, 0); // top point
+    path.lineTo(width, height * 0.4); // right upper
+    path.lineTo(width * 0.85, height); // right lower
+    path.lineTo(width / 2, height * 0.85); // bottom point
+    path.lineTo(width * 0.15, height); // left lower
+    path.lineTo(0, height * 0.4); // left upper
+    path.close();
+
+    // Draw shield fill
+    final paint = Paint()
+      ..color = const Color(0xFF2B6CB0)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, paint);
+
+    // Draw shield border
+    final borderPaint = Paint()
+      ..color = const Color(0xFF4A9FD8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawPath(path, borderPaint);
+
+    // Draw shield value text
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '$shieldValue',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          height: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        (width - textPainter.width) / 2,
+        (height - textPainter.height) / 2,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ShieldPainter oldDelegate) {
+    return oldDelegate.shieldValue != shieldValue;
   }
 }
 

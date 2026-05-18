@@ -46,6 +46,12 @@ class PvpBattleArgs {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
+  static const String _audioOwner = 'pvp_battle';
+  static const String _normalBgm = 'audio/battle/battle_sound.ogg';
+  static const String _bloodMoonBgm = 'audio/battle/blood_moon_bg.ogg';
+  static const double _normalBgmVolume = 0.22;
+  static const double _bloodMoonBgmVolume = 0.24;
+
   late final InteractiveBattleEngine _engine;
   // Built incrementally so UID→Pet mapping is always 1-to-1 (no index drift).
   final List<Pet> _playerPets = [];
@@ -113,6 +119,77 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     }
   }
 
+  void _syncBloodMoonAudio(bool nextIsBloodMoon) {
+    if (state.isBloodMoon == nextIsBloodMoon) return;
+    BattleAudioService.instance.playOwnedBgm(
+      _audioOwner,
+      nextIsBloodMoon ? _bloodMoonBgm : _normalBgm,
+      baseVolume: nextIsBloodMoon ? _bloodMoonBgmVolume : _normalBgmVolume,
+    );
+  }
+
+  Future<void> _animateDrawnCards(
+    Set<String> handBeforeIds,
+    List<CardViewModel> fullHand,
+  ) async {
+    final newIds = fullHand
+        .map((c) => c.instanceId)
+        .where((id) => !handBeforeIds.contains(id))
+        .toList();
+
+    if (newIds.isEmpty) {
+      state = state.copyWith(
+        hand: fullHand,
+        deckDrawSize: _engine.playerDeckDrawSize,
+        deckDiscardSize: _engine.playerDeckDiscardSize,
+        newCardIds: const {},
+      );
+      return;
+    }
+
+    final indexById = <String, int>{
+      for (var i = 0; i < fullHand.length; i++) fullHand[i].instanceId: i,
+    };
+    final cardById = {for (final c in fullHand) c.instanceId: c};
+
+    final visible = fullHand
+        .where((c) => !newIds.contains(c.instanceId))
+        .toList(growable: true);
+
+    state = state.copyWith(
+      hand: List<CardViewModel>.from(visible),
+      deckDrawSize: _engine.playerDeckDrawSize,
+      deckDiscardSize: _engine.playerDeckDiscardSize,
+      newCardIds: const {},
+    );
+
+    for (final id in newIds) {
+      if (!mounted) return;
+      final card = cardById[id];
+      if (card == null) continue;
+
+      final targetIndex = indexById[id] ?? visible.length;
+      final insertIndex = visible
+          .where((c) => (indexById[c.instanceId] ?? 9999) < targetIndex)
+          .length;
+      visible.insert(insertIndex, card);
+
+      state = state.copyWith(
+        hand: List<CardViewModel>.from(visible),
+        deckDrawSize: _engine.playerDeckDrawSize,
+        deckDiscardSize: _engine.playerDeckDiscardSize,
+        newCardIds: {id},
+      );
+      BattleAudioService.instance.playCardDraw();
+      await Future.delayed(const Duration(milliseconds: 190));
+    }
+
+    if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 260));
+    if (!mounted) return;
+    state = state.copyWith(newCardIds: const {});
+  }
+
   void _bufferRoundResult(PvpRoundResult result) {
     _pendingRoundResult = result;
     _pendingRoundResultTimer?.cancel();
@@ -128,7 +205,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     _pendingRoundResult = null;
     _pendingRoundResultTimer?.cancel();
     _pendingRoundResultTimer = null;
-    _commitServerRoundResult(pending);
+    unawaited(_commitServerRoundResult(pending));
   }
 
   PvpBattleNotifier(
@@ -479,6 +556,10 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     return (e, false);
   }
 
+  // Ranged cards identified by their trait display name — these fire a projectile
+  // instead of a melee dash. Kept in sync with _kRangedTraitIds in pve_battle_provider.
+  static const _kRangedActionNames = {'All-out Shot', 'Smart Shot', 'Turnip Rocket'};
+
   void _applyServerAction(PvpRoundAction msg) {
     if (!mounted) return;
 
@@ -497,7 +578,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       return;
     }
 
-    // Use Pet.id for animation state keys (UI looks up by Pet.id / CreatureDefinition.id)
     final actorAnimId = actorPet.id;
     final targetAnimId = targetPet?.id ?? '';
 
@@ -506,16 +586,17 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       'targetUid': msg.targetUid,
       'effectType': effectType,
       'damage': damage,
+      'actionName': msg.actionName,
       'actorAnimId': actorAnimId,
-      'targetAnimId': targetAnimId,
-      'actorHp': actorPet.hp,
-      'targetHp': targetPet?.hp,
     });
 
-    // Dash toward target
-    Offset dashDir = Offset.zero;
-    String? dashTarget;
-    if (damage > 0 && targetPet != null) {
+    BattleAudioService.instance.playAttack(effectType);
+
+    final isDamage = effectType == 'damage' || effectType == 'aoe';
+    final isRanged = isDamage && _kRangedActionNames.contains(msg.actionName);
+
+    if (isDamage && !isRanged && damage > 0 && targetPet != null) {
+      // ── MELEE: dash toward target ──────────────────────────────────────────
       final actorList = isActorPlayer ? _playerPets : _enemyPets;
       final targetList = isTargetPlayer ? _playerPets : _enemyPets;
       final actorIdx = actorList.indexOf(actorPet).clamp(0, 2);
@@ -530,6 +611,8 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
       final toTarget = targetBase - actorBase;
       final dist = toTarget.distance;
+      Offset dashDir = Offset.zero;
+      String? dashTarget;
       if (dist > 0.001) {
         const maxDash = 0.20;
         const minGap = 0.06;
@@ -537,20 +620,45 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         dashDir = Offset(toTarget.dx / dist * d, toTarget.dy / dist * d);
         dashTarget = targetAnimId;
       }
+
+      state = state.copyWith(
+        awaitingOpponent: false,
+        isResolving: true,
+        petAnimStates: {actorAnimId: PetCharacterAnimState.attackMelee},
+        petEffectVfx: {actorAnimId: effectType},
+        petDashOffsets:
+            dashDir != Offset.zero ? {actorAnimId: dashDir} : const {},
+        petDashTargets:
+            dashTarget != null ? {actorAnimId: dashTarget} : const {},
+        petAttackSlots: const {},
+      );
+    } else if (isRanged && targetPet != null) {
+      // ── RANGED: stay in place, spawn projectile ────────────────────────────
+      state = state.copyWith(
+        awaitingOpponent: false,
+        isResolving: true,
+        petAnimStates: {actorAnimId: PetCharacterAnimState.attackRanged},
+        petEffectVfx: {actorAnimId: effectType},
+        petDashOffsets: const {},
+        petDashTargets: const {},
+        petAttackSlots: const {},
+        pendingProjectileToken: state.pendingProjectileToken + 1,
+        pendingProjectileActorId: actorAnimId,
+        pendingProjectileTargetId: targetAnimId,
+        pendingProjectileClass: actorPet.creatureClass.name,
+      );
+    } else {
+      // ── SUPPORT / AoE / no target ──────────────────────────────────────────
+      state = state.copyWith(
+        awaitingOpponent: false,
+        isResolving: true,
+        petAnimStates: {actorAnimId: _animStateForEffect(effectType)},
+        petEffectVfx: {actorAnimId: effectType},
+        petDashOffsets: const {},
+        petDashTargets: const {},
+        petAttackSlots: const {},
+      );
     }
-
-    BattleAudioService.instance.playAttack(effectType);
-
-    state = state.copyWith(
-      awaitingOpponent: false,
-      isResolving: true,
-      petAnimStates: {actorAnimId: _animStateForEffect(effectType)},
-      petEffectVfx: {actorAnimId: effectType},
-      petDashOffsets:
-          dashDir != Offset.zero ? {actorAnimId: dashDir} : const {},
-      petDashTargets: dashTarget != null ? {actorAnimId: dashTarget} : const {},
-      petAttackSlots: const {},
-    );
   }
 
   // ── Phase 2: Damage lands + HP reflects + hit/faint animation ────────────────
@@ -727,7 +835,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       case 'spd_down':
         if (targetPet != null) {
           final isFaint = targetPet.isFainted;
-          BattleAudioService.instance.playHit(faint: isFaint);
           if (targetAnimId.isNotEmpty) {
             animUpdates[targetAnimId] = isFaint
                 ? PetCharacterAnimState.faint
@@ -763,7 +870,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
       default:
         if (targetPet != null) {
-          BattleAudioService.instance.playHit(faint: targetPet.isFainted);
           if (targetAnimId.isNotEmpty) {
             animUpdates[targetAnimId] = targetPet.isFainted
                 ? PetCharacterAnimState.faint
@@ -776,6 +882,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       petAnimStates: animUpdates,
       petDashOffsets: const {},
       petDashTargets: const {},
+      clearPendingProjectile: true,
       lastImpactEvent: impactEvent,
       // Rebuild HP/shield bars with updated values immediately
       playerTeam: _toViewModels(_playerPets, isPlayer: true),
@@ -823,7 +930,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   // locally (deterministic seed) purely for card-draw, energy reset and status
   // tick — HP values are always overridden by the server.
 
-  void _commitServerRoundResult(PvpRoundResult result) {
+  Future<void> _commitServerRoundResult(PvpRoundResult result) async {
     if (!mounted) return;
     print(
         '[PvP] Round ${result.round} result received — applying buffered round result');
@@ -880,8 +987,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
     // ── 3. Build new hand + round log ─────────────────────────────────────────
     final newHand = _buildHandVMs(_engine.currentPlayerHand, const {});
-    final newIds =
-        newHand.map((c) => c.instanceId).toSet().difference(handBeforeIds);
 
     final turnOrderStr = result.turnOrder.map((e) {
       final name = e['name'] as String? ?? e['actorUid'] as String? ?? '?';
@@ -895,12 +1000,14 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       roundLog: '${state.roundLog}\nRound ${result.round}: $turnOrderStr',
       playerTeam: _toViewModels(_playerPets, isPlayer: true),
       enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
-      hand: newHand,
-      newCardIds: newIds,
+      hand: state.hand,
+      newCardIds: const {},
       deckDrawSize: _engine.playerDeckDrawSize,
       deckDiscardSize: _engine.playerDeckDiscardSize,
       playerTeamEnergy: _engine.playerEnergy.energy,
       enemyTeamEnergy: _engine.enemyEnergy.energy,
+      isBloodMoon:
+          (result.round + 1) >= InteractiveBattleEngine.bloodMoonStartRound,
       pendingSkills: const {},
       selectedPetId: null,
       awaitingOpponent: false,
@@ -912,6 +1019,9 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       petDashTargets: const {},
       lastImpactEvent: null,
     );
+    await _animateDrawnCards(handBeforeIds, newHand);
+    if (!mounted) return;
+    _syncBloodMoonAudio(state.isBloodMoon);
 
     print('[PvP] Round ${result.round} done — hand: ${newHand.length} cards, '
         'energy: ${_engine.playerEnergy.energy}');
@@ -1024,7 +1134,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         final eff = card.trait.effect;
         final effType = switch (eff.type) {
           EffectType.damage => 'damage',
-          EffectType.aoe => 'aoe',
           EffectType.heal => 'heal',
           EffectType.shield => 'shield',
           EffectType.shieldBreak => 'shieldBreak',
@@ -1184,138 +1293,48 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         turnOrder: _buildTurnOrder(),
         playerTeamEnergy: _engine.playerEnergy.energy,
         enemyTeamEnergy: _engine.enemyEnergy.energy,
+        isBloodMoon: _engine.isBloodMoonRound,
         pendingSkills: const {},
         petAnimStates: const {},
         petEffectVfx: const {},
         isResolving: false,
       );
+      _syncBloodMoonAudio(_engine.isBloodMoonRound);
       if (immediate.isBattleOver)
         _sendClientResult(immediate.log, immediate.outcome);
       return;
     }
 
-    // Resolve each action with the same animation pacing as PvE
+    // Resolve each action in strict turn order — Axie-style animation pacing.
     for (final action in started.actionQueue) {
       if (!mounted) return;
       final actorId = action.actor.id;
 
-      // Log action for validation
       _logAction(
         round: _engine.round,
         actorId: actorId,
         actionName: action.trait.name,
         targetId: action.primaryTarget?.id,
         energyUsed: action.trait.energyCost,
-        damageDealt: null, // Will be updated if damage is dealt
+        damageDealt: null,
       );
 
-      final isNoTargetDamageAction =
-          action.trait.effect.type == EffectType.damage &&
-              action.primaryTarget != null &&
-              action.primaryTarget!.isFainted;
-      final effectType = (action.trait.effect.type == EffectType.buff &&
-              action.trait.effect.buffType == BuffType.regen)
-          ? 'heal'
-          : action.trait.effect.type.name;
+      final isNoTarget = action.trait.effect.type == EffectType.damage &&
+          action.primaryTarget != null &&
+          action.primaryTarget!.isFainted;
       final partSlot = action.trait.part.name;
 
-      if (!action.actor.isFainted && !isNoTargetDamageAction) {
-        final isPlayerActor = _playerPets.any((p) => p.id == actorId);
-        final opposingTeam = isPlayerActor ? _enemyPets : _playerPets;
-        final isMeleeDash = action.trait.effect.type == EffectType.damage;
-        Offset dashDir = Offset.zero;
-        String? dashTargetId;
-
-        if (isMeleeDash) {
-          final actorIdx = (isPlayerActor
-                  ? _playerPets.indexWhere((p) => p.id == actorId)
-                  : _enemyPets.indexWhere((p) => p.id == actorId))
-              .clamp(0, 2);
-          final targetPet = _resolveEnemyTargetForDash(action, opposingTeam);
-          final targetIdx = targetPet != null
-              ? opposingTeam.indexWhere((p) => p.id == targetPet.id)
-              : -1;
-          if (targetIdx >= 0 && targetPet != null) {
-            dashTargetId = targetPet.id;
-            final actorBase = isPlayerActor
-                ? _playerBattlePos[actorIdx]
-                : _enemyBattlePos[actorIdx];
-            final targetBase = isPlayerActor
-                ? _enemyBattlePos[targetIdx]
-                : _playerBattlePos[targetIdx];
-            final toTarget = Offset(
-                targetBase.dx - actorBase.dx, targetBase.dy - actorBase.dy);
-            final distance = toTarget.distance;
-            if (distance > 0.0001) {
-              const minGap = 0.06;
-              const maxDash = 0.22;
-              final dashDistance =
-                  math.min(maxDash, math.max(0.0, distance - minGap));
-              dashDir = Offset(toTarget.dx / distance * dashDistance,
-                  toTarget.dy / distance * dashDistance);
-            }
-            state = state.copyWith(
-              petAnimStates: {actorId: PetCharacterAnimState.move},
-              petAttackSlots: {actorId: partSlot},
-              petDashOffsets: {actorId: dashDir},
-              petDashTargets: {actorId: dashTargetId},
-            );
-            await Future.delayed(const Duration(milliseconds: 600));
-            if (!mounted) return;
-          }
-        }
-
+      // Actor fainted or target fizzled — execute silently.
+      if (action.actor.isFainted || isNoTarget) {
+        final step = _engine.executeNextAction();
         state = state.copyWith(
-          petAnimStates: {actorId: _animStateForEffect(effectType)},
-          petEffectVfx: {actorId: effectType},
-          petAttackSlots: {actorId: partSlot},
-          petDashOffsets: isMeleeDash && dashDir != Offset.zero
-              ? {actorId: dashDir}
-              : const {},
-          petDashTargets:
-              isMeleeDash && dashDir != Offset.zero && dashTargetId != null
-                  ? {actorId: dashTargetId}
-                  : const {},
-        );
-        BattleAudioService.instance.playAttack(effectType);
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (!mounted) return;
-      }
-
-      final preHp = <String, int>{
-        for (final p in [..._playerPets, ..._enemyPets]) p.id: p.hp,
-      };
-      final preShield = <String, int>{
-        for (final p in [..._playerPets, ..._enemyPets]) p.id: p.shield,
-      };
-      // PvP does not mirror shield locally during card selection.
-
-      final step = _engine.executeNextAction();
-      state = state.copyWith(
-        currentRound: step.state.round,
-        playerTeam: _snapshotsToVMs(step.state.teamA, _playerPets),
-        enemyTeam: _snapshotsToVMs(step.state.teamB, _enemyPets),
-        roundLog: step.log,
-        turnOrder: _buildTurnOrder(),
-        playerTeamEnergy: _engine.playerEnergy.energy,
-        enemyTeamEnergy: _engine.enemyEnergy.energy,
-      );
-
-      final battleFinishedNow = _playerPets.every((p) => p.isFainted) ||
-          _enemyPets.every((p) => p.isFainted);
-      if (battleFinishedNow) {
-        state = state.copyWith(
-          petAnimStates: const {},
-          petEffectVfx: const {},
-          petAttackSlots: const {},
-          petDashOffsets: const {},
-          petDashTargets: const {},
-        );
-        break;
-      }
-
-      if (isNoTargetDamageAction) {
-        state = state.copyWith(
+          currentRound: step.state.round,
+          playerTeam: _snapshotsToVMs(step.state.teamA, _playerPets),
+          enemyTeam: _snapshotsToVMs(step.state.teamB, _enemyPets),
+          roundLog: step.log,
+          turnOrder: _buildTurnOrder(),
+          playerTeamEnergy: _engine.playerEnergy.energy,
+          enemyTeamEnergy: _engine.enemyEnergy.energy,
           petAnimStates: const {},
           petEffectVfx: const {},
           petAttackSlots: const {},
@@ -1325,41 +1344,209 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         continue;
       }
 
-      final targetAnims = <String, PetCharacterAnimState>{};
-      for (final p in [..._playerPets, ..._enemyPets]) {
-        if (p.id == actorId) continue;
-        final hpDelta = p.hp - (preHp[p.id] ?? p.hp);
-        final shieldDelta = p.shield - (preShield[p.id] ?? p.shield);
-        if (hpDelta < 0 || shieldDelta < 0) {
-          targetAnims[p.id] = p.isFainted
-              ? PetCharacterAnimState.faint
-              : PetCharacterAnimState.hit;
+      final isPlayerActor = _playerPets.any((p) => p.id == actorId);
+      final opposingTeam = isPlayerActor ? _enemyPets : _playerPets;
+      final isDamage = action.trait.effect.type == EffectType.damage;
+      final isRanged = isDamage && _isRangedCard(action.trait);
+      final isMelee = isDamage && !isRanged;
+
+      if (isMelee) {
+        // ── MELEE ─────────────────────────────────────────────────────────
+        final targetPet = _resolveAnimTarget(action, opposingTeam);
+        Offset dashDir = Offset.zero;
+        String? dashTargetId;
+
+        if (targetPet != null) {
+          dashTargetId = targetPet.id;
+          final actorIdx = (isPlayerActor
+                  ? _playerPets.indexWhere((p) => p.id == actorId)
+                  : _enemyPets.indexWhere((p) => p.id == actorId))
+              .clamp(0, 2);
+          final targetIdx =
+              opposingTeam.indexWhere((p) => p.id == targetPet.id).clamp(0, 2);
+          final actorBase = isPlayerActor
+              ? _playerBattlePos[actorIdx]
+              : _enemyBattlePos[actorIdx];
+          final targetBase = isPlayerActor
+              ? _enemyBattlePos[targetIdx]
+              : _playerBattlePos[targetIdx];
+          final toTarget = Offset(
+            targetBase.dx - actorBase.dx,
+            targetBase.dy - actorBase.dy,
+          );
+          final distance = toTarget.distance;
+          if (distance > 0.0001) {
+            const minGap = 0.06;
+            const maxDash = 0.22;
+            final d = math.min(maxDash, math.max(0.0, distance - minGap));
+            dashDir = Offset(
+                toTarget.dx / distance * d, toTarget.dy / distance * d);
+          }
         }
-      }
-      if (targetAnims.isNotEmpty) {
-        final hasFaint =
-            targetAnims.values.any((s) => s == PetCharacterAnimState.faint);
-        BattleAudioService.instance.playHit(faint: hasFaint);
+
         state = state.copyWith(
-          petAnimStates:
-              Map<String, PetCharacterAnimState>.from(state.petAnimStates)
-                ..addAll(targetAnims),
+          petAnimStates: {actorId: PetCharacterAnimState.move},
+          petAttackSlots: {actorId: partSlot},
+          petDashOffsets:
+              dashDir != Offset.zero ? {actorId: dashDir} : const {},
+          petDashTargets:
+              dashTargetId != null ? {actorId: dashTargetId} : const {},
         );
+        await Future.delayed(const Duration(milliseconds: 550));
+        if (!mounted) return;
+
+        final preHp = {
+          for (final p in [..._playerPets, ..._enemyPets]) p.id: p.hp
+        };
+        final preShield = {
+          for (final p in [..._playerPets, ..._enemyPets]) p.id: p.shield
+        };
+        final step = _engine.executeNextAction();
+        final targetAnims = _pvpBuildTargetAnims(actorId, preHp, preShield);
+        BattleAudioService.instance.playAttack('damage');
+
+        state = state.copyWith(
+          currentRound: step.state.round,
+          playerTeam: _snapshotsToVMs(step.state.teamA, _playerPets),
+          enemyTeam: _snapshotsToVMs(step.state.teamB, _enemyPets),
+          roundLog: step.log,
+          turnOrder: _buildTurnOrder(),
+          playerTeamEnergy: _engine.playerEnergy.energy,
+          enemyTeamEnergy: _engine.enemyEnergy.energy,
+          petAnimStates: {
+            actorId: PetCharacterAnimState.attackMelee,
+            ...targetAnims,
+          },
+          petAttackSlots: {actorId: partSlot},
+          petDashOffsets:
+              dashDir != Offset.zero ? {actorId: dashDir} : const {},
+        );
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+
+        if (_playerPets.every((p) => p.isFainted) ||
+            _enemyPets.every((p) => p.isFainted)) {
+          state = state.copyWith(
+              petAnimStates: const {}, petEffectVfx: const {},
+              petAttackSlots: const {}, petDashOffsets: const {},
+              petDashTargets: const {});
+          break;
+        }
+
+        state = state.copyWith(
+          petAnimStates: {actorId: PetCharacterAnimState.idle},
+          petDashOffsets: const {},
+          petDashTargets: const {},
+        );
+        await Future.delayed(const Duration(milliseconds: 450));
+        if (!mounted) return;
+        state = state.copyWith(
+            petAnimStates: const {}, petEffectVfx: const {}, petAttackSlots: const {});
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (!mounted) return;
+      } else if (isRanged) {
+        // ── RANGED ────────────────────────────────────────────────────────
+        final targetPet = _resolveAnimTarget(action, opposingTeam);
+
+        state = state.copyWith(
+          petAnimStates: {actorId: PetCharacterAnimState.attackRanged},
+          petAttackSlots: {actorId: partSlot},
+          petEffectVfx: {actorId: 'damage'},
+          pendingProjectileToken: state.pendingProjectileToken + 1,
+          pendingProjectileActorId: actorId,
+          pendingProjectileTargetId: targetPet?.id ?? '',
+          pendingProjectileClass: action.actor.creatureClass.name,
+        );
+        BattleAudioService.instance.playAttack('damage');
+        await Future.delayed(const Duration(milliseconds: 700));
+        if (!mounted) return;
+
+        final preHp = {
+          for (final p in [..._playerPets, ..._enemyPets]) p.id: p.hp
+        };
+        final preShield = {
+          for (final p in [..._playerPets, ..._enemyPets]) p.id: p.shield
+        };
+        final step = _engine.executeNextAction();
+        final targetAnims = _pvpBuildTargetAnims(actorId, preHp, preShield);
+
+        state = state.copyWith(
+          currentRound: step.state.round,
+          playerTeam: _snapshotsToVMs(step.state.teamA, _playerPets),
+          enemyTeam: _snapshotsToVMs(step.state.teamB, _enemyPets),
+          roundLog: step.log,
+          turnOrder: _buildTurnOrder(),
+          playerTeamEnergy: _engine.playerEnergy.energy,
+          enemyTeamEnergy: _engine.enemyEnergy.energy,
+          petAnimStates: {actorId: PetCharacterAnimState.idle, ...targetAnims},
+          petAttackSlots: const {},
+          petEffectVfx: const {},
+          clearPendingProjectile: true,
+        );
+        await Future.delayed(const Duration(milliseconds: 450));
+        if (!mounted) return;
+
+        if (_playerPets.every((p) => p.isFainted) ||
+            _enemyPets.every((p) => p.isFainted)) {
+          state = state.copyWith(
+              petAnimStates: const {}, petEffectVfx: const {}, petAttackSlots: const {});
+          break;
+        }
+        state = state.copyWith(petAnimStates: const {}, petEffectVfx: const {});
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (!mounted) return;
+      } else {
+        // ── AOE / SUPPORT ─────────────────────────────────────────────────
+        final effectType = (action.trait.effect.type == EffectType.buff &&
+                action.trait.effect.buffType == BuffType.regen)
+            ? 'heal'
+            : action.trait.effect.type.name;
+
+        state = state.copyWith(
+          petAnimStates: {actorId: _animStateForEffect(effectType)},
+          petEffectVfx: {actorId: effectType},
+          petAttackSlots: {actorId: partSlot},
+        );
+        BattleAudioService.instance.playAttack(effectType);
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+
+        final preHp = {
+          for (final p in [..._playerPets, ..._enemyPets]) p.id: p.hp
+        };
+        final preShield = {
+          for (final p in [..._playerPets, ..._enemyPets]) p.id: p.shield
+        };
+        final step = _engine.executeNextAction();
+        final targetAnims = _pvpBuildTargetAnims(actorId, preHp, preShield);
+
+        state = state.copyWith(
+          currentRound: step.state.round,
+          playerTeam: _snapshotsToVMs(step.state.teamA, _playerPets),
+          enemyTeam: _snapshotsToVMs(step.state.teamB, _enemyPets),
+          roundLog: step.log,
+          turnOrder: _buildTurnOrder(),
+          playerTeamEnergy: _engine.playerEnergy.energy,
+          enemyTeamEnergy: _engine.enemyEnergy.energy,
+          petAnimStates: {actorId: _animStateForEffect(effectType), ...targetAnims},
+          petAttackSlots: {actorId: partSlot},
+        );
+        await Future.delayed(const Duration(milliseconds: 400));
+        if (!mounted) return;
+
+        if (_playerPets.every((p) => p.isFainted) ||
+            _enemyPets.every((p) => p.isFainted)) {
+          state = state.copyWith(
+              petAnimStates: const {}, petEffectVfx: const {},
+              petAttackSlots: const {}, petDashOffsets: const {},
+              petDashTargets: const {});
+          break;
+        }
+        state = state.copyWith(
+            petAnimStates: const {}, petEffectVfx: const {}, petAttackSlots: const {});
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (!mounted) return;
       }
-
-      await Future.delayed(
-          Duration(milliseconds: action.actor.isFainted ? 250 : 700));
-      if (!mounted) return;
-
-      state = state.copyWith(
-        petAnimStates: const {},
-        petEffectVfx: const {},
-        petAttackSlots: const {},
-        petDashOffsets: const {},
-        petDashTargets: const {},
-      );
-      await Future.delayed(const Duration(milliseconds: 200));
-      if (!mounted) return;
     }
 
     final result = _engine.finishRound();
@@ -1381,10 +1568,12 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       turnOrder: _buildTurnOrder(),
       playerTeamEnergy: _engine.playerEnergy.energy,
       enemyTeamEnergy: _engine.enemyEnergy.energy,
+      isBloodMoon: _engine.isBloodMoonRound,
       pendingSkills: const {},
       petAnimStates: const {},
       petEffectVfx: const {},
     );
+    _syncBloodMoonAudio(_engine.isBloodMoonRound);
 
     if (result.isBattleOver) {
       _sendClientResult(result.log, result.outcome);
@@ -1396,16 +1585,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     if (!mounted) return;
 
     final newHand = _buildHandVMs(_engine.currentPlayerHand, const {});
-    final newIds =
-        newHand.map((c) => c.instanceId).toSet().difference(handBeforeIds);
-    state = state.copyWith(
-      hand: newHand,
-      deckDrawSize: _engine.playerDeckDrawSize,
-      deckDiscardSize: _engine.playerDeckDiscardSize,
-      newCardIds: newIds,
-    );
-    if (newIds.isNotEmpty) BattleAudioService.instance.playCardDraw();
-    await Future.delayed(const Duration(milliseconds: 900));
+    await _animateDrawnCards(handBeforeIds, newHand);
     if (!mounted) return;
 
     final excess = (_engine.currentPlayerHand.length - 10).clamp(0, 100);
@@ -1625,23 +1805,45 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     return all;
   }
 
-  Pet? _resolveEnemyTargetForDash(Action action, List<Pet> opposingTeam) {
+  static const _kRangedTraitIds = {'bird_tail', 'bird_horn'};
+
+  bool _isRangedCard(Trait trait) =>
+      trait.part == TraitPart.back || _kRangedTraitIds.contains(trait.id);
+
+  Pet? _resolveAnimTarget(Action action, List<Pet> opposingTeam) {
     if (action.primaryTarget != null) {
       return action.primaryTarget!.isFainted ? null : action.primaryTarget;
     }
-
     final alive = opposingTeam.where((p) => !p.isFainted).toList();
     if (alive.isEmpty) return null;
-
-    final targetSpec = action.trait.effect.target;
-    if (targetSpec == 'back_enemy') {
-      return alive.last;
-    }
-    if (targetSpec == 'lowest_hp_enemy') {
+    final spec = action.trait.effect.target;
+    if (spec == 'furthest_enemy' || spec == 'back_enemy') return alive.last;
+    if (spec == 'lowest_hp_enemy') {
       alive.sort((a, b) => a.hp.compareTo(b.hp));
       return alive.first;
     }
+    if (spec == 'fastest_enemy') {
+      alive.sort((a, b) => b.speed.compareTo(a.speed));
+      return alive.first;
+    }
     return alive.first;
+  }
+
+  Map<String, PetCharacterAnimState> _pvpBuildTargetAnims(
+    String actorId,
+    Map<String, int> preHp,
+    Map<String, int> preShield,
+  ) {
+    final anims = <String, PetCharacterAnimState>{};
+    for (final p in [..._playerPets, ..._enemyPets]) {
+      if (p.id == actorId) continue;
+      if (p.hp < (preHp[p.id] ?? p.hp) ||
+          p.shield < (preShield[p.id] ?? p.shield)) {
+        anims[p.id] =
+            p.isFainted ? PetCharacterAnimState.faint : PetCharacterAnimState.hit;
+      }
+    }
+    return anims;
   }
 
   PetCharacterAnimState _animStateForEffect(String effectType) =>
@@ -1718,6 +1920,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
   @override
   void dispose() {
+    BattleAudioService.instance.stopOwnedBgm(_audioOwner);
     _wsSub?.cancel();
     _pendingRoundResultTimer?.cancel();
     _opponentChoicesCompleter?.completeError('disposed');

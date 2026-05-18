@@ -188,7 +188,7 @@ export class ServerBattleExecutor {
         // ── Offensive ───────────────────────────────────────────────────────
         case 'damage':
         case 'aoe': {
-           const enemy = this._selectTarget(enemyTeam);
+           const enemy = this._selectTarget(enemyTeam, targetPref);
            if (!enemy) continue;
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
@@ -480,12 +480,30 @@ export class ServerBattleExecutor {
     };
   }
 
-  private _selectTarget(team: PetState[]): PetState | null {
-    const alive = team.filter((p) => !p.isFainted);
+  private _selectTarget(team: PetState[], targetSpec?: string): PetState | null {
+    const alive = team.filter(p => !p.isFainted);
     if (alive.length === 0) return null;
-    const aroma = alive.find((p) => p.statusEffects.some((s) => s.name === 'aroma'));
+
+    // Build a sorted candidate list based on the card's target spec.
+    let candidates: PetState[];
+    if (targetSpec === 'furthest_enemy' || targetSpec === 'back_enemy') {
+      // Back row first (highest index alive).
+      candidates = [...alive].reverse();
+    } else if (targetSpec === 'lowest_hp_enemy') {
+      candidates = [...alive].sort((a, b) => a.hp - b.hp);
+    } else if (targetSpec === 'fastest_enemy') {
+      candidates = [...alive].sort((a, b) => b.spd - a.spd);
+    } else {
+      // Default: front-most alive.
+      candidates = alive;
+    }
+
+    // Aroma overrides position preference (forces targeting the aroma pet).
+    const aroma = candidates.find(p => p.statusEffects.some(s => s.name === 'aroma'));
     if (aroma) return aroma;
-    const visible = alive.find((p) => !p.statusEffects.some((s) => s.name === 'stench'));
-    return visible ?? alive[0];
+
+    // Stench makes a pet untargetable unless it's the only option.
+    const visible = candidates.find(p => !p.statusEffects.some(s => s.name === 'stench'));
+    return visible ?? candidates[0];
   }
 }

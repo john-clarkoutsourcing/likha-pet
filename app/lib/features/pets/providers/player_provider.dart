@@ -33,11 +33,12 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   /// Call after auth resolves to wire Firestore sync and force re-init.
-  /// Resets _initialized so the next initialize() loads THIS user's data,
-  /// not the stale cold-start state from a previous session or empty start.
+  /// Switches the repository to the user's own storage key so data is
+  /// never shared between accounts on the same device.
   void setUserId(String uid) {
     if (_uid == uid) return; // same session, nothing to reset
     _uid = uid;
+    _repo.setUid(uid); // point storage at this user's isolated key
     _initialized = false; // force full reload on next initialize()
   }
 
@@ -74,9 +75,10 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
     _initialized = true;
   }
 
-  /// Wipe all local data — called on logout so the next user starts clean.
+  /// Reset in-memory session state on logout.
+  /// Does NOT clear local storage — data is stored per-user via setUserId,
+  /// so this user's pets are restored on the next login.
   Future<void> reset() async {
-    await _repo.clear();
     _uid = null;
     _initialized = false;
     state = PlayerData.empty();

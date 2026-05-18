@@ -45,7 +45,7 @@ import 'battle_logger.dart';
 // │                                                                          │
 // │  EffectType.damage    → single-target hit. Target resolved by           │
 // │                         effect.target string. See TARGET STRINGS below. │
-// │  EffectType.aoe       → hits all alive enemies (or all allies).         │
+
 // │  EffectType.heal      → restores HP. Capped by kMaxFlatHealing (50).    │
 // │  EffectType.shield    → grants shield. Cleared at round end.            │
 // │  EffectType.buff      → applies a BuffType for N rounds.                │
@@ -102,7 +102,19 @@ import 'battle_logger.dart';
 // │    shield_equal_to_damage        actor shield += actual damage dealt     │
 // │    apply_lethal_if_low_hp        target HP≤50% → apply Lethal           │
 // │    apply_fear_if_shielded        shieldBefore>0 → apply Fear on target  │
+// │    energy_if_target_faster       target faster → actor gains 1 energy   │
+// │    stun_on_combo_3_total         actorComboSize>=3 → stun target        │
+// │    self_damage_30pct_max_hp      deal 30% maxHP self-damage (no shield) │
 // └─────────────────────────────────────────────────────────────────────────┘
+//
+// REDIRECT TAGS (fire before damage, override the resolved target):
+//   target_aquatic_if_low_hp   actor HP≤50% → prefer Aquatic enemy
+//   target_bug_if_low_hp       actor HP≤50% → prefer Bug enemy
+//   target_injured_if_low_hp   actor HP≤50% → prefer lowest-HP enemy
+//   target_bird_on_combo       comboIndex>=1 → prefer Bird enemy
+//
+// DAMAGE BOOST TAGS (in damageBoost block, before the hit loop):
+//   bonus_if_acts_last         isLastActor → +20% damage (Prickly Trap)
 //
 // ┌─────────────────────────────────────────────────────────────────────────┐
 // │  STAGE 5 — Post-switch shared effects  (after the switch, any type)     │
@@ -153,7 +165,7 @@ import 'battle_logger.dart';
 //  'furthest_enemy'  Same as back_enemy
 //  'lowest_hp_enemy' Enemy with least remaining HP
 //  'fastest_enemy'   Fastest enemy (highest effectiveSpeed)
-//  'all_enemies'     Every alive enemy (AoE — use EffectType.aoe instead)
+
 //  'self'            The card user themselves
 //  'lowest_hp_ally'  Teammate with least HP
 //  'front_ally'      First alive teammate (index 0)
@@ -207,9 +219,7 @@ import 'battle_logger.dart';
 // them server-side during resolveTurn to ensure client and server produce
 // identical results.
 
-const int kMaxSingleHitDamage = 90; // Single-target damage ceiling
-const int kMaxAoeDamagePerHit =
-    30; // Per-target AoE ceiling (3 hits max = 90 total)
+const int kMaxSingleHitDamage = 90; // Single-target damage ceiling (no AoE in Axie)
 const int kMaxFlatHealing = 50; // Largest single heal
 const int kMaxShield = 999; // Classic-style accumulated shield per round
 
@@ -223,7 +233,7 @@ const int kMaxShield = 999; // Classic-style accumulated shield per round
 /// Damage formula:
 ///   net = clamp(attacker.effectiveAttack + traitBaseValue
 ///               - defender.effectiveDefense, 1, 999)
-///   actual = clamp(net, 1, cap)   ← cap is kMaxSingleHitDamage or kMaxAoeDamagePerHit
+///   actual = clamp(net, 1, cap)   ← cap is kMaxSingleHitDamage
 ///
 /// Defense is subtracted HERE (not inside Pet.takeDamage) so that balance caps
 /// are applied to the post-defense value the HP pool actually sees.
@@ -232,7 +242,32 @@ const int kMaxShield = 999; // Classic-style accumulated shield per round
 /// Flutter integration:
 ///   ActionResolver writes to [BattleLogger]. The logger's [events] stream
 ///   drives animations in the BattleScreen widget tree.
+///
+/// Combo target lock (Axie rule):
+///   All cards played by one pet in a round attack the same target.
+///   BattleEngine calls [precomputeComboTargets] before the resolution loop,
+///   then passes the result as [comboTarget] per card. See [resolve].
 class ActionResolver {
+  /// Target specs that can lock the combo target for an actor's full round.
+  /// Excludes the default 'enemy' (front-targeting) — only non-default enemy
+  /// specs qualify as combo-lock triggers.
+  static const _kComboLockSpecs = {
+    'furthest_enemy',
+    'back_enemy',
+    'lowest_hp_enemy',
+    'fastest_enemy',
+  };
+
+  /// All enemy-facing single-target specs. When a pre-computed [comboTarget]
+  /// is available, it is used for cards whose spec is one of these — so that
+  /// "normal" cards attack the same target as the special one in the combo.
+  static const _kEnemySingleTargetSpecs = {
+    'enemy',
+    'furthest_enemy',
+    'back_enemy',
+    'lowest_hp_enemy',
+    'fastest_enemy',
+  };
   final BattleLogger log;
   final math.Random _rng;
   final Map<String, Trait> _roundTraitsByPetId;
@@ -248,8 +283,69 @@ class ActionResolver {
   })  : _rng = rng,
         _roundTraitsByPetId = roundTraitsByPetId ?? const {};
 
-  void resolve(Action action, List<Pet> actorTeam, List<Pet> enemyTeam,
-      {int comboIndex = 0, Map<String, Trait>? roundTraitsByPetId}) {
+  // ── Combo target pre-computation ───────────────────────────────────────────
+
+  /// Pre-compute the locked combo target for every actor in [ordered].
+  ///
+  /// Axie rule: all cards played by one pet in a single round attack the same
+  /// target. If any card in the combo has a non-default enemy target spec
+  /// (furthest, lowest HP, fastest), that spec sets the target for ALL of
+  /// that actor's enemy-facing damage cards this round. The first special spec
+  /// encountered (in card order) wins.
+  ///
+  /// Returns petId → locked combo target. An absent entry means no special spec
+  /// was found; [resolve] falls back to per-card [_resolveTarget] for those.
+  Map<String, Pet?> precomputeComboTargets(
+    List<Action> ordered,
+    List<Pet> teamA,
+    List<Pet> teamB,
+  ) {
+    final teamAIds = {for (final p in teamA) p.id};
+
+    // Group actions by actor, preserving card (resolution) order.
+    final actionsByActor = <String, List<Action>>{};
+    for (final a in ordered) {
+      (actionsByActor[a.actor.id] ??= []).add(a);
+    }
+
+    final result = <String, Pet?>{};
+    for (final entry in actionsByActor.entries) {
+      final actorId = entry.key;
+      final actions = entry.value;
+      final actor   = actions.first.actor;
+      if (actor.isFainted) continue;
+
+      final isOnTeamA = teamAIds.contains(actorId);
+      final actorTeam = isOnTeamA ? teamA : teamB;
+      final enemyTeam = isOnTeamA ? teamB : teamA;
+
+      // Scan cards in order; first special enemy-target spec wins.
+      for (final a in actions) {
+        final spec = a.trait.effect.target;
+        if (_kComboLockSpecs.contains(spec)) {
+          result[actorId] = _resolveTarget(spec, actor, actorTeam, enemyTeam);
+          break;
+        }
+      }
+      // No special spec → actor absent from result → per-card fallback in resolve().
+    }
+    return result;
+  }
+
+  void resolve(
+    Action action,
+    List<Pet> actorTeam,
+    List<Pet> enemyTeam, {
+    int comboIndex = 0,
+    Map<String, Trait>? roundTraitsByPetId,
+    Pet? comboTarget,
+    /// Total number of cards this actor plays in this round.
+    /// Used for "comboed with N+ cards" conditions (e.g. Chomp stun on 3+ combo).
+    int actorComboSize = 1,
+    /// True when this actor is the last to fire in the round (lowest speed).
+    /// Used for 'bonus_if_acts_last' (Prickly Trap).
+    bool isLastActor = false,
+  }) {
     final traitsByPetId = roundTraitsByPetId ?? _roundTraitsByPetId;
     final actor = action.actor;
     final trait = action.trait;
@@ -281,6 +377,17 @@ class ActionResolver {
     actor.spendEnergy(trait.energyCost);
     trait.triggerCooldown();
 
+    // If actor is in Last Stand, consume 1 tick per action
+    if (actor.isInLastStand) {
+      actor.lastStandTicks = (actor.lastStandTicks - 1).clamp(0, 999);
+      if (actor.lastStandTicks <= 0) {
+        actor.hp = 0;
+        actor.isFainted = true;
+        log.action(actor.name, '${trait.name} (Last Stand ended)');
+        return; // Skip rest of resolution, pet fainted
+      }
+    }
+
     log.action(actor.name, trait.name);
 
     if (trait.tags.contains('cleanse') && actor.debuffs.isNotEmpty) {
@@ -291,15 +398,28 @@ class ActionResolver {
     switch (effect.type) {
       // ── Single-target damage ──────────────────────────────────────────────
       case EffectType.damage:
-        var target = action.primaryTarget != null
-            ? (action.primaryTarget!.isFainted ? null : action.primaryTarget)
-            : _resolveTarget(
-                effect.target,
-                actor,
-                actorTeam,
-                enemyTeam,
-              );
-        // If the primary target is dead, try to find a backup target for certain tags.
+        // Target resolution priority (Axie combo-lock model):
+        //  1. Explicit primaryTarget — if alive AND not Stench.
+        //     (Stench = skip this pet; fall through to re-resolve.)
+        //  2. Pre-computed comboTarget — if alive, not Stench, and enemy spec.
+        //  3. Per-card _resolveTarget fallback → _preferredTarget respects
+        //     Stench and Aroma correctly.
+        var target = action.primaryTarget != null &&
+                    !action.primaryTarget!.isFainted &&
+                    !action.primaryTarget!.isStenched
+            ? action.primaryTarget
+            : comboTarget != null &&
+                      !comboTarget.isFainted &&
+                      !comboTarget.isStenched &&
+                      _kEnemySingleTargetSpecs.contains(effect.target)
+                  ? comboTarget
+                  : _resolveTarget(
+                      effect.target,
+                      actor,
+                      actorTeam,
+                      enemyTeam,
+                    );
+        // No valid target found — skip this card silently.
         if (target == null || target.isFainted) {
           log.noTarget();
           return;
@@ -333,6 +453,13 @@ class ActionResolver {
         if (trait.tags.contains('target_injured_if_low_hp') &&
             actor.hp <= actor.maxHp ~/ 2) {
           final alt = _lowestHp(enemyTeam);
+          if (alt != null) target = alt;
+        }
+        // Turnip Rocket: redirect to a Bird enemy when in a 2+ card combo.
+        if (trait.tags.contains('target_bird_on_combo') && comboIndex >= 1) {
+          final alt = _preferredTarget(_aliveCandidates(enemyTeam)
+              .where((p) => p.creatureClass == CreatureClass.bird)
+              .toList());
           if (alt != null) target = alt;
         }
 
@@ -393,6 +520,10 @@ class ActionResolver {
         // Revenge Arrow / similar: ×2 when actor is in Last Stand
         if (trait.tags.contains('double_damage_last_stand') && actor.isInLastStand)
           damageBoost = math.max(damageBoost, 2.0);
+
+        // Prickly Trap: +20% when this Axie acts last in the round.
+        if (trait.tags.contains('bonus_if_acts_last') && isLastActor)
+          damageBoost = math.max(damageBoost, 1.2);
 
         var actual = 0;
         for (var hit = 0; hit < hitCount; hit++) {
@@ -608,20 +739,25 @@ class ActionResolver {
           target.applyDebuff(DebuffType.fear, 0, 1);
           log.debuff(target.name, 'fear', 0, 1);
         }
-
-      // ── AoE damage ────────────────────────────────────────────────────────
-      case EffectType.aoe:
-        final targets =
-            _resolveMultiple(effect.target, actor, actorTeam, enemyTeam);
-        for (final t in targets) {
-          if (t.isFainted) continue;
-          final net = _computeDamage(actor, t, effect.value, trait,
-              comboIndex: comboIndex);
-          final isCrit = _rollCrit(actor, t);
-          final dmg = _clamp(isCrit ? net * 2 : net, kMaxAoeDamagePerHit);
-          final actual = t.takeDamage(dmg);
-          log.damage(t.name, actual, t.hp, isAoe: true, isCrit: isCrit);
-          if (t.isFainted) log.fainted(t.name);
+        // Kotaro Bite: gain 1 energy when the target is faster than this Axie.
+        if (trait.tags.contains('energy_if_target_faster') &&
+            target.effectiveSpeed > actor.effectiveSpeed) {
+          actor.receiveEnergy(1);
+          log.energySteal(actor.name, actor.name, 1);
+        }
+        // Chomp: apply Stun when this Axie plays 3 or more cards this round.
+        if (trait.tags.contains('stun_on_combo_3_total') &&
+            actorComboSize >= 3 &&
+            !target.isFainted) {
+          target.applyDebuff(DebuffType.stunned, 0, 1);
+          log.stun(target.name);
+        }
+        // All-out Shot: deal self-damage equal to 30% of own max HP (ignores shield).
+        if (trait.tags.contains('self_damage_30pct_max_hp') && !actor.isFainted) {
+          final selfDmg = (actor.maxHp * 0.3).round();
+          actor.takeDamage(selfDmg, ignoreShield: true);
+          log.damage(actor.name, selfDmg, actor.hp);
+          if (actor.isFainted) log.fainted(actor.name);
         }
 
       // ── Healing ───────────────────────────────────────────────────────────
@@ -696,7 +832,6 @@ class ActionResolver {
     }
 
     if (effect.type == EffectType.damage ||
-        effect.type == EffectType.aoe ||
         effect.type == EffectType.shieldBreak) {
       actor.consumeAttackModifiers();
     }
@@ -931,7 +1066,7 @@ class ActionResolver {
   // _resolveTarget   → returns a single Pet or null
   // _resolveMultiple → returns a list (may be length 1 for single-target specs)
   //
-  // All multi-effect types (heal, buff, debuff, aoe) go through _resolveMultiple
+  // All multi-effect types (heal, buff, debuff) go through _resolveMultiple
   // so that specs like 'all_allies' work without special-casing at the call site.
 
   // ── Formation targeting ────────────────────────────────────────────────────

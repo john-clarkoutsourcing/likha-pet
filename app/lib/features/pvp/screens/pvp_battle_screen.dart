@@ -47,6 +47,7 @@ class PvpBattleScreen extends ConsumerStatefulWidget {
 
 class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
     with TickerProviderStateMixin {
+  static const String _audioOwner = 'pvp_battle';
   late final AnimationController _timer;
   bool _battleReady = false;
   bool _isDeckCollapsed = false;
@@ -58,7 +59,13 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
   @override
   void initState() {
     super.initState();
-    BattleAudioService.instance.init();
+    BattleAudioService.instance.init().then((_) {
+      BattleAudioService.instance.playOwnedBgm(
+        _audioOwner,
+        'audio/battle/battle_sound.ogg',
+        baseVolume: 0.22,
+      );
+    });
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -81,6 +88,7 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
 
   @override
   void dispose() {
+    BattleAudioService.instance.stopOwnedBgm(_audioOwner);
     _timer.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();

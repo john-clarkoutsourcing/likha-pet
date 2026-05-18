@@ -41,15 +41,14 @@ class BattleLogger {
   void noTarget() => _line('     → No valid target.');
 
   void damage(String target, int amount, int newHp,
-      {bool isAoe = false, bool isCrit = false}) {
-    final tag = isAoe ? 'AoE ' : '';
+      {bool isCrit = false}) {
+    final tag = isCrit ? 'Crit ' : '';
     final crit = isCrit ? ' ★CRIT★' : '';
     _line('     → $target takes $amount ${tag}damage. HP: $newHp$crit');
     events.add(DamageEvent(
       targetName: target,
       amount: amount,
       newHp: newHp,
-      isAoe: isAoe,
       isCrit: isCrit,
     ));
   }
@@ -106,7 +105,6 @@ class BattleLogger {
       targetName: petName,
       amount: dmg,
       newHp: newHp,
-      isAoe: false,
       isPoisonTick: true,
     ));
   }
@@ -117,7 +115,6 @@ class BattleLogger {
       targetName: petName,
       amount: dmg,
       newHp: newHp,
-      isAoe: false,
       isBurnTick: true,
     ));
   }
@@ -140,6 +137,11 @@ class BattleLogger {
   void discardCard(String targetName, int amount) {
     _line('     → $targetName discards $amount card(s).');
     events.add(CardDiscardEvent(targetName: targetName, amount: amount));
+  }
+
+  void bloodMoon(int round, int damage) {
+    _line('│ [Blood Moon] Round $round — all living pets take $damage true damage.');
+    events.add(BloodMoonEvent(round: round, damage: damage));
   }
 
   void energySteal(String actorName, String targetName, int amount) {
@@ -225,7 +227,6 @@ class DamageEvent extends BattleEvent {
   final String targetName;
   final int    amount;
   final int    newHp;
-  final bool   isAoe;
   final bool   isPoisonTick;
   final bool   isBurnTick;
   final bool   isCrit;
@@ -233,7 +234,6 @@ class DamageEvent extends BattleEvent {
     required this.targetName,
     required this.amount,
     required this.newHp,
-    required this.isAoe,
     this.isPoisonTick = false,
     this.isBurnTick   = false,
     this.isCrit       = false,
@@ -333,4 +333,10 @@ class EnergyStealEvent extends BattleEvent {
     required this.amount,
     required this.stolen,
   });
+}
+
+class BloodMoonEvent extends BattleEvent {
+  final int round;
+  final int damage;
+  const BloodMoonEvent({required this.round, required this.damage});
 }

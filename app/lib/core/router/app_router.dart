@@ -7,6 +7,7 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/home/screens/pet_roster_integrated_screen.dart';
 import '../../features/home/screens/pet_detail_screen.dart';
+import '../../features/home/screens/game_mechanics_screen.dart';
 import '../../features/pve/screens/world_map_screen.dart';
 import '../../features/pve/screens/stage_preview_screen.dart';
 import '../../features/battle/screens/battle_screen.dart';
@@ -19,6 +20,7 @@ import '../../features/onboarding/screens/starter_pack_screen.dart';
 import '../../features/pvp/screens/pvp_queue_screen.dart';
 import '../../features/pvp/screens/pvp_battle_screen.dart';
 import '../../features/pvp/screens/pvp_result_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
 
 class Routes {
   static const login         = '/login';
@@ -35,9 +37,11 @@ class Routes {
   static const battleResult  = '/battle/result';
   static const testBattle    = '/test-battle';
   static const library       = '/library';
+  static const mechanics     = '/mechanics';
   static const pvpQueue      = '/pvp';
   static const pvpBattle     = '/pvp/battle';
   static const pvpResult     = '/pvp/result';
+  static const settings      = '/settings';
 }
 
 /// A plain ChangeNotifier that RouterGuard pings whenever auth state changes.
@@ -139,6 +143,10 @@ GoRouter createGoRouter({
         builder: (_, __) => const LibraryScreen(),
       ),
       GoRoute(
+        path: Routes.mechanics,
+        builder: (_, __) => const GameMechanicsScreen(),
+      ),
+      GoRoute(
         path: Routes.pvpQueue,
         builder: (_, __) => const PvpQueueScreen(),
       ),
@@ -152,6 +160,10 @@ GoRouter createGoRouter({
           final extra = state.extra! as PvpResultArgs;
           return PvpResultScreen(args: extra);
         },
+      ),
+      GoRoute(
+        path: Routes.settings,
+        builder: (_, __) => const SettingsScreen(),
       ),
     ],
   );

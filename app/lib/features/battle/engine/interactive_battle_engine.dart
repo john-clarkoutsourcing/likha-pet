@@ -89,6 +89,10 @@ class _RoundExecution {
 ///   Replace [_buildAiActions] with submitted Firestore actions.
 ///   The deck system remains identical for both sides.
 class InteractiveBattleEngine {
+  static const int bloodMoonStartRound = 10;
+  static const int bloodMoonBaseDamage = 20;
+  static const int bloodMoonDamageStep = 10;
+
   final List<Pet> playerTeam;
   final List<Pet> enemyTeam;
   final String playerTeamName;
@@ -153,6 +157,9 @@ class InteractiveBattleEngine {
 
   int get round => _round;
   bool get isOver => _checkWin() != null || _round >= maxRounds;
+  bool get isBloodMoonRound => _round >= bloodMoonStartRound;
+  int get currentBloodMoonDamage =>
+      bloodMoonBaseDamage + ((_round - bloodMoonStartRound) * bloodMoonDamageStep);
 
   /// Current player hand — cards the UI should display this turn.
   List<SkillCard> get currentPlayerHand => _playerDeck.hand;
@@ -328,6 +335,17 @@ class InteractiveBattleEngine {
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
 
     // ── Round-end status + shield cleanup ──────────────────────────────────
+    if (_round >= bloodMoonStartRound) {
+      final damage = currentBloodMoonDamage;
+      logger.bloodMoon(_round, damage);
+      for (final pet in [...playerTeam, ...enemyTeam]) {
+        if (pet.isFainted) continue;
+        pet.takeDamage(damage, ignoreShield: true, ignoreLastStand: true);
+        logger.damage(pet.name, damage, pet.hp);
+        if (pet.isFainted) logger.fainted(pet.name);
+      }
+    }
+
     for (final pet in [...playerTeam, ...enemyTeam]) {
       if (!pet.isFainted) pet.tickRoundDurations();
     }
@@ -408,18 +426,30 @@ class InteractiveBattleEngine {
 
     if (trait.tags.contains('target_fastest_enemy')) {
       final fastest = [...alive]..sort((a, b) => b.effectiveSpeed.compareTo(a.effectiveSpeed));
-      return fastest.first;
+      return _visibleFirst(fastest);
     }
     if (trait.tags.contains('skip_targets_in_last_stand')) {
       final filtered = alive.where((p) => !p.isInLastStand).toList();
-      if (filtered.isNotEmpty) return filtered.first;
+      if (filtered.isNotEmpty) return _visibleFirst(filtered);
     }
     return switch (trait.effect.target) {
-      'back_enemy' => alive.last,
-      'lowest_hp_enemy' => (alive..sort((a, b) => a.hp.compareTo(b.hp))).first,
-      'enemy' => alive.first,
+      'back_enemy'      => alive.last,
+      'furthest_enemy'  => alive.last,
+      'lowest_hp_enemy' => _visibleFirst(
+          [...alive]..sort((a, b) => a.hp.compareTo(b.hp)),
+        ),
+      'enemy'           => _visibleFirst(alive),
       _ => null,
     };
+  }
+
+  /// Returns the first non-Stench, non-Fainted pet; Aroma pets take priority.
+  /// Falls back to first alive pet if all are Stench (target must be someone).
+  Pet _visibleFirst(List<Pet> alive) {
+    final aroma = alive.where((p) => p.isAromatized && !p.isFainted).toList();
+    if (aroma.isNotEmpty) return aroma.first;
+    final visible = alive.where((p) => !p.isStenched && !p.isFainted).toList();
+    return visible.isNotEmpty ? visible.first : alive.first;
   }
 
   List<Action> _buildPlayerActions(Map<String, List<String>> cardChoices) {
@@ -561,9 +591,6 @@ class InteractiveBattleEngine {
       return playerTeam.any((p) => !p.isFainted && !p.isStunned) ? 80 : 5;
     }
     if (e.type == EffectType.shield && actor.hp < kBaseHp * 0.4) return 75;
-    if (e.type == EffectType.aoe) {
-      return playerTeam.where((p) => !p.isFainted).length >= 2 ? 65 : 30;
-    }
     if (e.type == EffectType.buff && e.target == 'all_allies') {
       return enemyTeam.any((p) => p.buffs.isNotEmpty) ? 15 : 55;
     }

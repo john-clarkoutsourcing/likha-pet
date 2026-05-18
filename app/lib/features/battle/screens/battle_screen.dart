@@ -60,6 +60,7 @@ class BattleScreen extends ConsumerStatefulWidget {
 
 class _BattleScreenState extends ConsumerState<BattleScreen>
     with TickerProviderStateMixin {
+  static const String _audioOwner = 'pve_battle';
   late final AnimationController _timer;
   late List<Offset> _playerPos;
   late List<Offset> _enemyPos;
@@ -71,7 +72,13 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
   @override
   void initState() {
     super.initState();
-    BattleAudioService.instance.init();
+    BattleAudioService.instance.init().then((_) {
+      BattleAudioService.instance.playOwnedBgm(
+        _audioOwner,
+        'audio/battle/battle_sound.ogg',
+        baseVolume: 0.22,
+      );
+    });
     _playerPos = List<Offset>.from(_kPlayerPos);
     _enemyPos = List<Offset>.from(_kEnemyPos);
     // Publish args so pveBattleProvider can read stageId before building.
@@ -99,6 +106,7 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
 
   @override
   void dispose() {
+    BattleAudioService.instance.stopOwnedBgm(_audioOwner);
     _timer.dispose();
     super.dispose();
   }

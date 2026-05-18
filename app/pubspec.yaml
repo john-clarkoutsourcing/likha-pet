@@ -244,6 +244,7 @@ flutter:
     - assets/audio/battle/
     - assets/audio/card/
     - assets/audio/ui/
+    - assets/audio/main_menu/
   fonts:
     - family: LilitaOne
       fonts:

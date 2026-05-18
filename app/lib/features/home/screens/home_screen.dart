@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/app_router.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../battle/screens/battle_screen.dart';
+import '../../battle/services/battle_audio_service.dart';
 import '../../battle/widgets/pet_renderer_widget.dart';
 import '../../pets/models/owned_pet.dart';
 import '../../pets/models/player_data.dart';
@@ -35,7 +36,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     // Defer to post-frame so context.go / setState are never called
     // during the initial build — avoids "setState called during build".
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initPlayer());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      BattleAudioService.instance.init().then((_) {
+        BattleAudioService.instance.playBgm(
+          'audio/main_menu/main_menu.ogg',
+          baseVolume: 0.55,
+        );
+      });
+      _initPlayer();
+    });
   }
 
   Future<void> _initPlayer() async {
@@ -65,6 +74,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   void dispose() {
+    BattleAudioService.instance.stopBgm();
     _sceneController.dispose();
     super.dispose();
   }
@@ -144,6 +154,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     _buildRightTotem(player, layout),
                     _buildBottomLeftNav(layout),
                   ],
+                ),
+              ),
+              // Settings gear — top-right corner, always accessible
+              Positioned(
+                top: mediaQuery.padding.top + 10,
+                right: 14,
+                child: SafeArea(
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.settings_rounded,
+                      color: Colors.white54,
+                      size: 22,
+                    ),
+                    onPressed: () => context.push(Routes.settings),
+                    tooltip: 'Settings',
+                  ),
                 ),
               ),
             ],
@@ -426,6 +452,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             svgIcon: 'assets/images/ui/traits-icon.svg',
             size: buttonSize,
             onTap: () => context.push(Routes.library),
+          ),
+          SizedBox(width: gap),
+          _NavAssetButton(
+            label: 'MECHANICS',
+            icon: Icons.info_rounded,
+            size: buttonSize,
+            onTap: () => context.push(Routes.mechanics),
           ),
         ],
       ),

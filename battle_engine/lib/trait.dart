@@ -78,7 +78,7 @@ extension CreatureClassStats on CreatureClass {
 
 enum TraitType { offensive, defensive, support, utility }
 
-enum EffectType { damage, shield, heal, buff, debuff, aoe, shieldBreak }
+enum EffectType { damage, shield, heal, buff, debuff, shieldBreak }
 
 enum BuffType {
   attackUp,   // +X% attack for N rounds (consumed on attack)
@@ -507,6 +507,21 @@ class TraitLibrary {
             target: 'enemy',
           ),
         );
+      case 'aquatic-tail-12':
+        // Chitin Jump: targets the furthest (back-row) enemy instead of front.
+        // When in a combo, the combo-lock mechanic makes all subsequent cards
+        // from the same pet also chase the back-row target this round.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type:        trait.effect.type,
+            value:       trait.effect.value,
+            target:      'furthest_enemy',
+            selfShield:  trait.effect.selfShield,
+            lifeSteal:   trait.effect.lifeSteal,
+            energySteal: trait.effect.energySteal,
+            energyDrain: trait.effect.energyDrain,
+          ),
+        );
       case 'beast-back-02':
         // Single Combat: guaranteed crit when played as 3rd+ card in combo.
         // Was wrongly 'crit_if_first' (fires on 1st card — opposite of intent).
@@ -555,6 +570,22 @@ class TraitLibrary {
         return trait.copyWith(tags: [...trait.tags, 'force_last_stand_if_killed']);
       case 'beast-tail-08':
         return trait.copyWith(tags: [...trait.tags, 'draw_if_attack_first']);
+      case 'beast-tail-12':
+        // Gerbil Jump: skip the front enemy and target the back row.
+        // 'back_enemy' falls back to any alive pet when only one remains.
+        // Also clears the base energySteal=true that beastTail inherits from
+        // Night Steal (beast-tail-04) — Gerbil Jump has no energy steal.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type:        trait.effect.type,
+            value:       trait.effect.value,
+            target:      'back_enemy',
+            selfShield:  trait.effect.selfShield,
+            lifeSteal:   trait.effect.lifeSteal,
+            energySteal: false,
+            energyDrain: trait.effect.energyDrain,
+          ),
+        );
       case 'bird-back-02':
         return trait.copyWith(
           effect: const TraitEffect(
@@ -611,7 +642,20 @@ class TraitLibrary {
       case 'bird-horn-08':
         return trait.copyWith(tags: [...trait.tags, 'disable_horn_next']);
       case 'bird-mouth-10':
-        return trait.copyWith(tags: [...trait.tags, 'target_fastest_enemy']);
+        // Dark Swoop: always seeks the fastest enemy (highest speed).
+        // Was wrongly adding an unhandled 'target_fastest_enemy' tag.
+        // Resolver routes via effect.target string, not tags.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type:        trait.effect.type,
+            value:       trait.effect.value,
+            target:      'fastest_enemy',
+            selfShield:  trait.effect.selfShield,
+            lifeSteal:   trait.effect.lifeSteal,
+            energySteal: trait.effect.energySteal,
+            energyDrain: trait.effect.energyDrain,
+          ),
+        );
       case 'bird-mouth-02':
         return trait.copyWith(
           effect: const TraitEffect(
@@ -652,6 +696,22 @@ class TraitLibrary {
         return trait.copyWith(tags: [...trait.tags, 'target_bug_if_low_hp']);
       case 'bird-tail-08':
         return trait.copyWith(tags: [...trait.tags, 'skip_targets_in_last_stand']);
+      case 'bird-horn-10':
+        // Smart Shot: skip the front enemy and target the back row when 2+ enemies remain.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type:        trait.effect.type,
+            value:       trait.effect.value,
+            target:      'back_enemy',
+            selfShield:  trait.effect.selfShield,
+            lifeSteal:   trait.effect.lifeSteal,
+            energySteal: trait.effect.energySteal,
+            energyDrain: trait.effect.energyDrain,
+          ),
+        );
+      case 'bird-tail-12':
+        // All-out Shot: deal damage then inflict 30% of own max HP back on self.
+        return trait.copyWith(tags: [...trait.tags, 'self_damage_30pct_max_hp']);
       case 'bug-back-02':
         // Primary: stun the enemy when played.
         // Reaction: stun the attacker when this pet's shield is broken (Sticky Goo).
@@ -672,7 +732,7 @@ class TraitLibrary {
         return trait.copyWith(
           effect: const TraitEffect(
             type: EffectType.debuff,
-            value: 1,
+            value: 2,
             debuffType: DebuffType.poisoned,
             duration: 2,
             target: 'enemy',
@@ -720,6 +780,18 @@ class TraitLibrary {
         return trait.copyWith(tags: [...trait.tags, 'force_last_stand_if_killed']);
       case 'bug-tail-12':
         return trait.copyWith(tags: [...trait.tags, 'bonus_damage_if_debuffed']);
+      case 'plant-back-02':
+        // Turnip Rocket: damage card that redirects to a Bird enemy when in a
+        // 2+ card combo. Base plantBack is a shield type, so override entirely.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type:       EffectType.damage,
+            value:      60,   // spec.attack
+            target:     'enemy',
+            selfShield: 80,   // spec.defense
+          ),
+          tags: [...trait.tags, 'target_bird_on_combo'],
+        );
       case 'plant-back-04':
         // Shroom Spite: heal self 240 HP. Base plantBack is shield type.
         return trait.copyWith(
@@ -758,6 +830,9 @@ class TraitLibrary {
             selfShield: trait.effect.selfShield, // 40 from spec
           ),
         );
+      case 'plant-horn-10':
+        // Prickly Trap: deal 120% damage if this Axie acts last in the round.
+        return trait.copyWith(tags: [...trait.tags, 'bonus_if_acts_last']);
       case 'plant-mouth-02':
         // Vegetal Bite: steal energy ONLY when comboed (not unconditionally).
         // Base plantMouthVegetalBite has energySteal=true — override to remove it.
@@ -794,6 +869,26 @@ class TraitLibrary {
             selfShield: trait.effect.selfShield, // 40 from spec
           ),
         );
+      case 'reptile-mouth-02':
+        // Sneaky Raid: targets the furthest (back-row) enemy instead of front.
+        // Missing from _classicOverride — base reptileMouth had target: 'enemy'.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type:        trait.effect.type,
+            value:       trait.effect.value,
+            target:      'furthest_enemy',
+            selfShield:  trait.effect.selfShield,
+            lifeSteal:   trait.effect.lifeSteal,
+            energySteal: trait.effect.energySteal,
+            energyDrain: trait.effect.energyDrain,
+          ),
+        );
+      case 'reptile-mouth-04':
+        // Kotaro Bite: gain 1 energy when the target is faster than this Axie.
+        return trait.copyWith(tags: [...trait.tags, 'energy_if_target_faster']);
+      case 'reptile-mouth-10':
+        // Chomp: apply Stun to target when this Axie plays 3 or more cards this round.
+        return trait.copyWith(tags: [...trait.tags, 'stun_on_combo_3_total']);
       case 'reptile-horn-02':
         return trait.copyWith(
           effect: const TraitEffect(
@@ -929,6 +1024,13 @@ class TraitLibrary {
   static Trait get aquaticTail => withClassicCardStats(
         baseTrait: _base(id: 'aquatic_tail', type: TraitType.offensive, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy')),
         traitId: 'aquatic_tail', cardId: 'aquatic-tail-04');
+
+  /// Chitin Jump — aquatic-tail-12: targets the furthest (back-row) enemy.
+  /// When played in a combo, the combo-lock makes all subsequent enemy-facing
+  /// damage cards from the same pet also attack the back-row target.
+  static Trait get chitinJump => withClassicCardStats(
+        baseTrait: _base(id: 'aquatic_tail', type: TraitType.offensive, part: TraitPart.tail, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'furthest_enemy')),
+        traitId: 'aquatic_tail', cardId: 'aquatic-tail-12');
 
   static Trait get aquaticMouth => withClassicCardStats(
         baseTrait: _base(id: 'aquatic_mouth', type: TraitType.offensive, part: TraitPart.mouth, effect: const TraitEffect(type: EffectType.damage, value: 0, target: 'enemy', lifeSteal: true)),

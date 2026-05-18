@@ -54,7 +54,7 @@ class TraitCardCatalog {
       final effect = trait.effect;
 
       final attack =
-          (effect.type == EffectType.damage || effect.type == EffectType.aoe)
+          (effect.type == EffectType.damage)
               ? effect.value
               : 0;
       final defense =
@@ -71,7 +71,7 @@ class TraitCardCatalog {
               ? 'AttackRanged'
               : 'AttackMelee';
         }
-        if (effect.type == EffectType.aoe) return 'AttackAoE';
+
         if (effect.type == EffectType.heal ||
             effect.type == EffectType.shield ||
             effect.type == EffectType.buff) {

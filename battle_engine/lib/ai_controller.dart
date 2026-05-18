@@ -7,7 +7,7 @@ import 'trait.dart';
 ///   1. Heal an ally at critical HP (< 40%)
 ///   2. Stun an enemy — powerful CC that wastes their turn
 ///   3. Shield self at critical HP (< 40%) with no current shield
-///   4. AoE attack or AoE debuff when 2+ enemies are alive
+///   4. Team buff when team is unbuffed
 ///   5. Team-wide buff when the team isn't already buffed
 ///   6. Highest-damage single-target offensive trait
 ///   7. Any affordable, ready trait (fallback)
@@ -51,20 +51,13 @@ class AiController {
       if (t != null) return t;
     }
 
-    // ── Priority 4: AoE when it hits multiple targets ─────────────────────────
-    final aliveEnemyCount = enemyTeam.where((p) => !p.isFainted).length;
-    if (aliveEnemyCount >= 2) {
-      final t = _findAoe(available);
-      if (t != null) return t;
-    }
-
-    // ── Priority 5: Team buff when team is unbuffed ───────────────────────────
+    // ── Priority 4: Team buff when team is unbuffed ───────────────────────────
     final teamBuff = _findTeamBuff(available);
     if (teamBuff != null && !_teamHasBuff(allyTeam, teamBuff)) {
       return teamBuff;
     }
 
-    // ── Priority 6: Best single-target offensive trait ────────────────────────
+    // ── Priority 5: Best single-target offensive trait ────────────────────────
     final offensive = _findBestOffensive(available);
     if (offensive != null) return offensive;
 
@@ -110,17 +103,6 @@ class AiController {
     return matches.reduce((a, b) => a.effect.value >= b.effect.value ? a : b);
   }
 
-  Trait? _findAoe(List<Trait> traits) {
-    // Includes AoE attacks (EffectType.aoe) AND AoE debuffs targeting all_enemies
-    final matches = traits.where(
-      (t) =>
-          t.effect.type == EffectType.aoe ||
-          (t.effect.type == EffectType.debuff &&
-              t.effect.target == 'all_enemies'),
-    );
-    return matches.isEmpty ? null : matches.first;
-  }
-
   Trait? _findTeamBuff(List<Trait> traits) {
     final matches = traits.where(
       (t) =>
@@ -131,8 +113,7 @@ class AiController {
 
   Trait? _findBestOffensive(List<Trait> traits) {
     final offensive = traits.where(
-      (t) =>
-          t.effect.type == EffectType.damage || t.effect.type == EffectType.aoe,
+      (t) => t.effect.type == EffectType.damage,
     ).toList();
     if (offensive.isEmpty) return null;
     return offensive.reduce(

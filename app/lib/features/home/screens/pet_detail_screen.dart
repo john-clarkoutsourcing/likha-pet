@@ -435,7 +435,6 @@ class _PartCard extends StatelessWidget {
     final e = t.effect;
     return switch (e.type) {
       EffectType.damage    => 'Deal ${e.value} damage.',
-      EffectType.aoe       => 'Deal ${e.value} AoE damage.',
       EffectType.heal      => 'Restore ${e.value} HP.',
       EffectType.shield    => 'Grant ${e.value} shield.',
       EffectType.shieldBreak => 'Break enemy shield.',
@@ -466,7 +465,7 @@ class _CardStatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = trait.effect;
-    final atk = e.type == EffectType.damage || e.type == EffectType.aoe
+    final atk = e.type == EffectType.damage
         ? e.value
         : 0;
     final def = e.selfShield > 0 ? e.selfShield : 0;

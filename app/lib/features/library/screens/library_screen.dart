@@ -622,7 +622,6 @@ class _CardDetail extends StatelessWidget {
 
   IconData _effectIcon(EffectType t) => switch (t) {
         EffectType.damage     => Icons.flash_on,
-        EffectType.aoe        => Icons.radar,
         EffectType.heal       => Icons.favorite,
         EffectType.shield     => Icons.shield,
         EffectType.buff       => Icons.arrow_upward,
@@ -632,7 +631,6 @@ class _CardDetail extends StatelessWidget {
 
   Color _effectColor(EffectType t) => switch (t) {
         EffectType.damage     => const Color(0xFFFF4466),
-        EffectType.aoe        => const Color(0xFFFF8844),
         EffectType.heal       => const Color(0xFF44FF88),
         EffectType.shield     => const Color(0xFFFFCC44),
         EffectType.buff       => const Color(0xFF88CCFF),

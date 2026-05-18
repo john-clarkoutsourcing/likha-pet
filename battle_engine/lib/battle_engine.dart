@@ -8,6 +8,9 @@ import 'battle_logger.dart';
 import 'battle_state.dart';
 
 const int kMaxRounds = 30;
+const int kBloodMoonStartRound = 10;
+const int kBloodMoonBaseDamage = 20;
+const int kBloodMoonDamageStep = 10;
 
 // ── Outcome ───────────────────────────────────────────────────────────────────
 
@@ -140,6 +143,23 @@ class BattleEngine {
       final roundTraitsByPetId = {
         for (final action in ordered) action.actor.id: action.trait,
       };
+
+      // Axie combo-lock: pre-compute the locked target for each actor ONCE,
+      // before any card fires. All enemy-facing damage cards from the same actor
+      // this round will hit this target (fallback on death via _resolveTarget).
+      final comboTargetByPetId =
+          resolver.precomputeComboTargets(ordered, teamA, teamB);
+
+      // Total cards each actor plays this round — used for "3+ card combo" effects.
+      final comboSizeByPetId = <String, int>{};
+      for (final a in ordered) {
+        comboSizeByPetId[a.actor.id] = (comboSizeByPetId[a.actor.id] ?? 0) + 1;
+      }
+
+      // The pet whose last action is last in the ordered list acts last this round.
+      // Used for 'bonus_if_acts_last' (Prickly Trap).
+      final lastActorId = ordered.isNotEmpty ? ordered.last.actor.id : null;
+
       final comboCount = <String, int>{}; // petId → cards played this round
 
       for (final action in ordered) {
@@ -166,15 +186,60 @@ class BattleEngine {
           action,
           _teamOf(action.actor),
           _enemyTeamOf(action.actor),
-          comboIndex: comboIndex,
+          comboIndex:        comboIndex,
           roundTraitsByPetId: roundTraitsByPetId,
+          comboTarget:       comboTargetByPetId[petId],
+          actorComboSize:    comboSizeByPetId[petId] ?? 1,
+          isLastActor:       petId == lastActorId,
         );
       }
 
-      // ── Phase 5: End-of-round bookkeeping ─────────────────────────────────
+      // ── Phase 5: Blood Moon sudden-death damage ─────────────────────────
+      if (round >= kBloodMoonStartRound) {
+        final bloodMoonDamage =
+            kBloodMoonBaseDamage + ((round - kBloodMoonStartRound) * kBloodMoonDamageStep);
+        _logger.bloodMoon(round, bloodMoonDamage);
+        for (final pet in [...teamA, ...teamB]) {
+          if (pet.isFainted) continue;
+          pet.takeDamage(bloodMoonDamage, ignoreShield: true, ignoreLastStand: true);
+          _logger.damage(pet.name, bloodMoonDamage, pet.hp);
+          if (pet.isFainted) {
+            _logger.fainted(pet.name);
+          }
+        }
+
+        final bloodMoonWin = _checkWin();
+        if (bloodMoonWin != null) {
+          _captureState(round, '(battle ended during blood moon phase)');
+          _announceWinner(bloodMoonWin, round);
+          return _buildResult(bloodMoonWin, round);
+        }
+      }
+
+      // ── Phase 6: End-of-round bookkeeping ─────────────────────────────────
       _logger.phase('End of Round $round');
+      
+      // Track which pets played cards this round (for Last Stand idle ticks)
+      final petsThatActed = <String>{};
+      for (final action in ordered) {
+        if (!action.actor.isStunned && !action.actor.isFeared && !action.actor.isDisabled) {
+          petsThatActed.add(action.actor.id);
+        }
+      }
+      
       for (final pet in [...teamA, ...teamB]) {
-        if (!pet.isFainted) pet.tickRoundDurations();
+        if (!pet.isFainted) {
+          // If in Last Stand and didn't act this round, consume 1 idle tick
+          if (pet.isInLastStand && !petsThatActed.contains(pet.id)) {
+            pet.lastStandTicks = (pet.lastStandTicks - 1).clamp(0, 999);
+            if (pet.lastStandTicks <= 0) {
+              pet.hp = 0;
+              pet.isFainted = true;
+              _logger.fainted(pet.name);
+            }
+          }
+          pet.tickRoundDurations();
+        }
         pet.shield = 0; // Classic-style: shield does not carry to next round.
       }
       _printTeamStatus();
