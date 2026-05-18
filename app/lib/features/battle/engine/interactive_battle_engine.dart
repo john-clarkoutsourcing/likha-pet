@@ -64,6 +64,11 @@ class _RoundExecution {
   final BattleLogger logger;
   final List<Action> orderedActions;
   final Map<String, List<String>> cardChoices;
+  final Map<String, Pet?> comboTargetByPetId;
+  final Map<String, int> comboSizeByPetId;
+  final String? lastActorId;
+  final List<({bool classChainActive, Set<String> activeChainFamilies})>
+      chainContexts;
   // PvP: enemy card instance IDs played this round — so finishRound can discard them.
   final List<String> enemyPlayedCards;
   int actionIndex;
@@ -72,6 +77,10 @@ class _RoundExecution {
     required this.logger,
     required this.orderedActions,
     required this.cardChoices,
+    required this.comboTargetByPetId,
+    required this.comboSizeByPetId,
+    required this.lastActorId,
+    required this.chainContexts,
     List<String>? enemyPlayedCards,
   })  : actionIndex = 0,
         enemyPlayedCards = enemyPlayedCards ?? [];
@@ -220,9 +229,26 @@ class InteractiveBattleEngine {
 
     logger.phase('Action Phase');
     final ordered = _turns.buildResolutionOrder(playerActions, opponentActions);
+    final resolver = ActionResolver(
+      logger,
+      rng: _critRng,
+      roundTraitsByPetId: _roundTraitsByPetId,
+      onDrawCard: _handleDrawCard,
+    );
     _roundTraitsByPetId = {
       for (final action in ordered) action.actor.id: action.trait,
     };
+    final comboTargetByPetId =
+        resolver.precomputeComboTargets(ordered, playerTeam, enemyTeam);
+    final comboSizeByPetId = <String, int>{};
+    for (final action in ordered) {
+      comboSizeByPetId[action.actor.id] =
+          (comboSizeByPetId[action.actor.id] ?? 0) + 1;
+    }
+    final chainContexts =
+        resolver.precomputeChainContexts(ordered, playerTeam, enemyTeam);
+    final lastActorId = ordered.isNotEmpty ? ordered.last.actor.id : null;
+
     final frozenChoices = {
       for (final e in cardChoices.entries) e.key: List<String>.from(e.value),
     };
@@ -231,6 +257,10 @@ class InteractiveBattleEngine {
       logger: logger,
       orderedActions: ordered,
       cardChoices: frozenChoices,
+      comboTargetByPetId: comboTargetByPetId,
+      comboSizeByPetId: comboSizeByPetId,
+      lastActorId: lastActorId,
+      chainContexts: chainContexts,
       enemyPlayedCards: enemyPlayed,
     );
 
@@ -250,7 +280,10 @@ class InteractiveBattleEngine {
       throw StateError('No pending actions. Call finishRound.');
     }
 
-    final action = execution.orderedActions[execution.actionIndex++];
+    final actionIndex = execution.actionIndex;
+    final action = execution.orderedActions[actionIndex];
+    execution.actionIndex++;
+    final chainContext = execution.chainContexts[actionIndex];
     final logger = execution.logger;
     final resolver = ActionResolver(
       logger,
@@ -281,6 +314,11 @@ class InteractiveBattleEngine {
           _enemyTeamOf(action.actor),
           comboIndex: comboIndex,
           roundTraitsByPetId: _roundTraitsByPetId,
+          comboTarget: execution.comboTargetByPetId[petId],
+          actorComboSize: execution.comboSizeByPetId[petId] ?? 1,
+          isLastActor: petId == execution.lastActorId,
+          isClassChainActive: chainContext.classChainActive,
+          activeChainFamilies: chainContext.activeChainFamilies,
         );
       }
     }
@@ -415,7 +453,9 @@ class InteractiveBattleEngine {
   // ── Private ───────────────────────────────────────────────────────────────
 
   Pet? _lockedDamageTarget({
+    required Pet actor,
     required Trait trait,
+    required List<Pet> actorTeam,
     required List<Pet> enemyTeam,
   }) {
     if (trait.effect.type != EffectType.damage) return null;
@@ -437,9 +477,45 @@ class InteractiveBattleEngine {
       'lowest_hp_enemy' => _visibleFirst(
           [...alive]..sort((a, b) => a.hp.compareTo(b.hp)),
         ),
-      'enemy'           => _visibleFirst(alive),
+      'enemy'           => _closestEnemyForLane(actor, actorTeam, enemyTeam),
       _ => null,
     };
+  }
+
+  Pet _closestEnemyForLane(Pet actor, List<Pet> actorTeam, List<Pet> enemyTeam) {
+    final enemyFront = enemyTeam.isNotEmpty ? enemyTeam[0] : null;
+    if (enemyFront != null && !enemyFront.isFainted) {
+      return _visibleFirst([enemyFront]);
+    }
+
+    final enemyMid =
+        enemyTeam.length > 1 && !enemyTeam[1].isFainted ? enemyTeam[1] : null;
+    final enemyBack =
+        enemyTeam.length > 2 && !enemyTeam[2].isFainted ? enemyTeam[2] : null;
+
+    if (enemyMid != null && enemyBack != null) {
+      final actorLane = actorTeam.indexWhere((p) => p.id == actor.id);
+      if (actorLane == 1) return _visibleFirst([enemyMid, enemyBack]);
+      if (actorLane == 2) return _visibleFirst([enemyBack, enemyMid]);
+
+      final chooseMidFirst = _deterministicMidLaneChoice(actor, enemyMid, enemyBack);
+      return chooseMidFirst
+          ? _visibleFirst([enemyMid, enemyBack])
+          : _visibleFirst([enemyBack, enemyMid]);
+    }
+
+    if (enemyMid != null) return _visibleFirst([enemyMid]);
+    if (enemyBack != null) return _visibleFirst([enemyBack]);
+    return _visibleFirst(enemyTeam.where((p) => !p.isFainted).toList());
+  }
+
+  bool _deterministicMidLaneChoice(Pet actor, Pet mid, Pet back) {
+    final key = '${actor.id}|${mid.id}|${back.id}';
+    var hash = 0;
+    for (final code in key.codeUnits) {
+      hash = ((hash * 31) + code) & 0x7fffffff;
+    }
+    return hash.isEven;
   }
 
   /// Returns the first non-Stench, non-Fainted pet; Aroma pets take priority.
@@ -464,7 +540,9 @@ class InteractiveBattleEngine {
             actor: pet,
             trait: trait,
             primaryTarget: _lockedDamageTarget(
+              actor: pet,
               trait: trait,
+              actorTeam: playerTeam,
               enemyTeam: enemyTeam,
             ),
           ));
@@ -511,7 +589,9 @@ class InteractiveBattleEngine {
             actor: pet,
             trait: trait,
             primaryTarget: _lockedDamageTarget(
+              actor: pet,
               trait: trait,
+              actorTeam: enemyTeam,
               enemyTeam: playerTeam,
             ),
           ));
@@ -543,7 +623,9 @@ class InteractiveBattleEngine {
         actor: pet,
         trait: trait,
         primaryTarget: _lockedDamageTarget(
+          actor: pet,
           trait: trait,
+          actorTeam: enemyTeam,
           enemyTeam: playerTeam,
         ),
       ));

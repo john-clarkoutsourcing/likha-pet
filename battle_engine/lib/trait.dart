@@ -641,6 +641,20 @@ class TraitLibrary {
         );
       case 'bird-horn-08':
         return trait.copyWith(tags: [...trait.tags, 'disable_horn_next']);
+      case 'bird-horn-06':
+        // Air Force One: +20% damage when chained with another Trump card.
+        return trait.copyWith(tags: [
+          ...trait.tags,
+          'chain_family_trump',
+          'bonus_damage_on_chain_trump',
+        ]);
+      case 'bird-horn-12':
+        // Feather Lunge: +20% damage when chained with another Lunge card.
+        return trait.copyWith(tags: [
+          ...trait.tags,
+          'chain_family_lunge',
+          'bonus_damage_on_chain_lunge',
+        ]);
       case 'bird-mouth-10':
         // Dark Swoop: always seeks the fastest enemy (highest speed).
         // Was wrongly adding an unhandled 'target_fastest_enemy' tag.
@@ -729,15 +743,31 @@ class TraitLibrary {
         // Bug Splat: +50% damage vs Bug targets (was wrongly tagged reflect_ranged).
         return trait.copyWith(tags: [...trait.tags, 'bonus_damage_vs_bug']);
       case 'bug-back-04':
+        // Barb Strike: deal damage as normal, then apply 2 Poison only when chained.
         return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 2,
-            debuffType: DebuffType.poisoned,
-            duration: 2,
-            target: 'enemy',
-          ),
+          tags: [...trait.tags, 'apply_poison_on_chain'],
         );
+      case 'bug-horn-04':
+        // Bug Signal: steal energy only when chained with another Bug Signal.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: trait.effect.type,
+            value: trait.effect.value,
+            target: trait.effect.target,
+            selfShield: trait.effect.selfShield,
+            lifeSteal: trait.effect.lifeSteal,
+            energySteal: false,
+            energyDrain: trait.effect.energyDrain,
+          ),
+          tags: [
+            ...trait.tags,
+            'chain_family_bug_signal',
+            'energy_steal_on_chain_bug_signal',
+          ],
+        );
+      case 'bug-mouth-08':
+        // Terror Chomp: apply Fear for 2 turns when played in a class chain.
+        return trait.copyWith(tags: [...trait.tags, 'apply_fear_on_chain']);
       case 'bug-back-10':
         return trait.copyWith(
           effect: const TraitEffect(
@@ -833,6 +863,9 @@ class TraitLibrary {
       case 'plant-horn-10':
         // Prickly Trap: deal 120% damage if this Axie acts last in the round.
         return trait.copyWith(tags: [...trait.tags, 'bonus_if_acts_last']);
+      case 'plant-horn-02':
+        // Bamboo Clan: +20% damage when played in a class chain.
+        return trait.copyWith(tags: [...trait.tags, 'bonus_damage_on_chain']);
       case 'plant-mouth-02':
         // Vegetal Bite: steal energy ONLY when comboed (not unconditionally).
         // Base plantMouthVegetalBite has energySteal=true — override to remove it.
@@ -917,6 +950,13 @@ class TraitLibrary {
       case 'reptile-horn-06':
         // Surprise Invasion: deal 130% damage when target is faster than actor.
         return trait.copyWith(tags: [...trait.tags, 'bonus_if_target_faster']);
+      case 'reptile-horn-04':
+        // Scaly Lunge: +20% damage when chained with another Lunge card.
+        return trait.copyWith(tags: [
+          ...trait.tags,
+          'chain_family_lunge',
+          'bonus_damage_on_chain_lunge',
+        ]);
       case 'reptile-mouth-08':
         // Why So Serious: lifesteal ONLY when attacking Aquatic targets.
         // Base reptileMouth has no lifesteal — just add the conditional tag.

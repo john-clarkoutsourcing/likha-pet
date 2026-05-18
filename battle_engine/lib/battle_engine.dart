@@ -149,6 +149,7 @@ class BattleEngine {
       // this round will hit this target (fallback on death via _resolveTarget).
       final comboTargetByPetId =
           resolver.precomputeComboTargets(ordered, teamA, teamB);
+        final chainContexts = resolver.precomputeChainContexts(ordered, teamA, teamB);
 
       // Total cards each actor plays this round — used for "3+ card combo" effects.
       final comboSizeByPetId = <String, int>{};
@@ -162,7 +163,9 @@ class BattleEngine {
 
       final comboCount = <String, int>{}; // petId → cards played this round
 
-      for (final action in ordered) {
+      for (var i = 0; i < ordered.length; i++) {
+        final action = ordered[i];
+        final chainContext = chainContexts[i];
         if (action.actor.isFainted) continue;
 
         if (action.actor.isStunned || action.actor.isFeared || action.actor.isDisabled) {
@@ -191,6 +194,8 @@ class BattleEngine {
           comboTarget:       comboTargetByPetId[petId],
           actorComboSize:    comboSizeByPetId[petId] ?? 1,
           isLastActor:       petId == lastActorId,
+          isClassChainActive: chainContext.classChainActive,
+          activeChainFamilies: chainContext.activeChainFamilies,
         );
       }
 

@@ -38,14 +38,14 @@ const _kRoundSeconds = 30;
 // Positions = fractions of FULL screen (no SafeArea inset).
 // Full screen ~375px tall, card panel 168px → y < 0.45 visible above panel.
 const _kPlayerPos = [
-  Offset(0.30, 0.22), // FRONT
-  Offset(0.15, 0.03), // MID
-  Offset(0.10, 0.35), // BACK
+  Offset(0.30, 0.34), // FRONT
+  Offset(0.15, 0.18), // MID
+  Offset(0.10, 0.50), // BACK
 ];
 const _kEnemyPos = [
-  Offset(0.50, 0.22), // FRONT
-  Offset(0.65, 0.03), // MID
-  Offset(0.75, 0.35), // BACK
+  Offset(0.50, 0.34), // FRONT
+  Offset(0.65, 0.18), // MID
+  Offset(0.75, 0.50), // BACK
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -757,32 +757,39 @@ class _EndTurnButton extends StatelessWidget {
     bool loading = false,
   }) {
     final bgColor = gold
-        ? const Color(0xFFE03030) // red circle like reference
+        ? const Color(0xFFFF8A1F)
         : active
-            ? const Color(0xFF2A3A5A)
+            ? const Color(0xFF374766)
             : const Color(0xFF1A1F2E);
 
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 72,
+        width: 86,
         height: 72,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(14),
           color: bgColor,
+          gradient: gold
+              ? const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFFFBC59), Color(0xFFFF7A0E)],
+                )
+              : null,
           border: Border.all(
             color: gold
-                ? const Color(0xFFFF6060).withValues(alpha: 0.6)
+                ? const Color(0xFFFFD38E).withValues(alpha: 0.9)
                 : active
                     ? Colors.white.withValues(alpha: 0.15)
                     : Colors.white.withValues(alpha: 0.05),
-            width: 2.5,
+            width: 2.0,
           ),
           boxShadow: gold
               ? [
                   BoxShadow(
-                      color: const Color(0xFFE03030).withValues(alpha: 0.6),
+                      color: const Color(0xFFFF8A1F).withValues(alpha: 0.7),
                       blurRadius: 20,
                       spreadRadius: 3)
                 ]
@@ -796,20 +803,35 @@ class _EndTurnButton extends StatelessWidget {
                   child: CircularProgressIndicator(
                       strokeWidth: 2.5, color: Colors.white70),
                 )
-              : Text(
-                  label.replaceAll(' ', '\n'),
-                  style: GoogleFonts.rajdhani(
-                    color: gold
-                        ? Colors.white
-                        : active
-                            ? Colors.white70
-                            : Colors.white24,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.3,
-                    height: 1.2,
-                  ),
-                  textAlign: TextAlign.center,
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.sports_martial_arts_rounded,
+                      size: 18,
+                      color: gold
+                          ? Colors.white
+                          : active
+                              ? Colors.white70
+                              : Colors.white24,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      style: GoogleFonts.rajdhani(
+                        color: gold
+                            ? Colors.white
+                            : active
+                                ? Colors.white70
+                                : Colors.white24,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.2,
+                        height: 1,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
         ),
       ),

@@ -31,8 +31,8 @@ import '../widgets/projectile_widget.dart';
 
 const double kBattlePanelH = 182.0;
 const double kBattlePanelPeekH = 32.0;
-const double kBattleSpriteBase = 130.0;
-const _kScaleByPos = [1.50, 1.50, 1.50];
+const double kBattleSpriteBase = 142.0;
+const _kScaleByPos = [1.55, 1.55, 1.55];
 const _kOpacityByPos = [1.00, 1.00, 1.00];
 
 // ── Lazy card catalog ─────────────────────────────────────────────────────────
@@ -130,10 +130,12 @@ class BattleTopHud extends StatelessWidget {
     final rightName = playerOnRight ? vm.playerTeamName : vm.enemyTeamName;
     final leftIsPlayer = !playerOnRight;
     final rightIsPlayer = playerOnRight;
+    final screenW = MediaQuery.sizeOf(context).width;
+    final compact = screenW < 900;
 
     return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: compact ? 58 : 64,
+      padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -147,7 +149,8 @@ class BattleTopHud extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _TeamTag(name: leftName, isPlayer: leftIsPlayer),
+          _TeamTag(name: leftName, isPlayer: leftIsPlayer, compact: compact),
+          SizedBox(width: compact ? 4 : 8),
           Expanded(
             child: Center(
               child: FittedBox(
@@ -162,13 +165,13 @@ class BattleTopHud extends StatelessWidget {
                           'ROUND ${vm.currentRound}',
                           style: GoogleFonts.rajdhani(
                             color: Colors.white70,
-                            fontSize: 10,
+                            fontSize: compact ? 9 : 10,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 2,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        _BattleRoundTimer(timer: timer),
+                        _BattleRoundTimer(timer: timer, compact: compact),
                       ],
                     ),
                     if (vm.isBloodMoon) ...[
@@ -195,7 +198,7 @@ class BattleTopHud extends StatelessWidget {
                           'BLOOD MOON',
                           style: GoogleFonts.rajdhani(
                             color: const Color(0xFFFFD6DB),
-                            fontSize: 9,
+                            fontSize: compact ? 8 : 9,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 1.1,
                           ),
@@ -203,13 +206,18 @@ class BattleTopHud extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 3),
-                    _BattleAttackOrderStrip(vm: vm),
+                    _BattleAttackOrderStrip(vm: vm, compact: compact),
                   ],
                 ),
               ),
             ),
           ),
-          _TeamTag(name: rightName, isPlayer: rightIsPlayer),
+          SizedBox(width: compact ? 4 : 8),
+          _TeamTag(name: rightName, isPlayer: rightIsPlayer, compact: compact),
+          if (!compact) ...[
+            const SizedBox(width: 6),
+            _TopHudUtilityCluster(deckCount: vm.deckDrawSize),
+          ],
         ],
       ),
     );
@@ -219,18 +227,24 @@ class BattleTopHud extends StatelessWidget {
 class _TeamTag extends StatelessWidget {
   final String name;
   final bool isPlayer;
-  const _TeamTag({required this.name, required this.isPlayer});
+  final bool compact;
+  const _TeamTag({
+    required this.name,
+    required this.isPlayer,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = isPlayer ? AppColors.accent : AppColors.offensive;
+    final avatarSize = compact ? 22.0 : 26.0;
     final avatar = Container(
-      width: 26,
-      height: 26,
+      width: avatarSize,
+      height: avatarSize,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withValues(alpha: 0.2),
-        border: Border.all(color: color, width: 2),
+        color: color.withValues(alpha: 0.22),
+        border: Border.all(color: color.withValues(alpha: 0.9), width: 1.6),
       ),
       child: Center(
         child: Text(name[0],
@@ -244,26 +258,133 @@ class _TeamTag extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: GoogleFonts.rajdhani(
-            color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700));
+        color: Colors.white70,
+        fontSize: compact ? 10 : 11,
+        fontWeight: FontWeight.w700));
 
-    // isPlayer on LEFT: avatar | label; isPlayer on RIGHT: label | avatar
-    return isPlayer
+    final labelWidth = compact ? 52.0 : 74.0;
+    final content = isPlayer
         ? Row(mainAxisSize: MainAxisSize.min, children: [
             avatar,
-            const SizedBox(width: 5),
-            SizedBox(width: 72, child: label),
+            const SizedBox(width: 6),
+            SizedBox(width: labelWidth, child: label),
           ])
         : Row(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox(width: 72, child: label),
-            const SizedBox(width: 5),
+            SizedBox(width: labelWidth, child: label),
+            const SizedBox(width: 6),
             avatar,
           ]);
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 3 : 4,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF8A5A2B), Color(0xFF5A3317)],
+        ),
+        border: Border.all(color: const Color(0xFFD5A26A).withValues(alpha: 0.9)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: content,
+    );
+  }
+}
+
+class _TopHudUtilityCluster extends StatelessWidget {
+  final int deckCount;
+  const _TopHudUtilityCluster({required this.deckCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _UtilityCircleButton(
+          icon: Icons.settings_rounded,
+          tooltip: 'Settings',
+        ),
+        const SizedBox(width: 6),
+        _UtilityCircleButton(
+          icon: Icons.style_rounded,
+          tooltip: 'Deck',
+          badgeText: '$deckCount',
+        ),
+      ],
+    );
+  }
+}
+
+class _UtilityCircleButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final String? badgeText;
+
+  const _UtilityCircleButton({
+    required this.icon,
+    required this.tooltip,
+    this.badgeText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF1C2438).withValues(alpha: 0.9),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Icon(icon, size: 15, color: Colors.white70),
+          ),
+          if (badgeText != null)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE89A32),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: Colors.black54),
+                ),
+                child: Text(
+                  badgeText!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
 class _BattleRoundTimer extends StatelessWidget {
   final AnimationController timer;
-  const _BattleRoundTimer({required this.timer});
+  final bool compact;
+  const _BattleRoundTimer({required this.timer, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -277,21 +398,22 @@ class _BattleRoundTimer extends StatelessWidget {
             : remaining > 0.25
                 ? const Color(0xFFFFDD44)
                 : const Color(0xFFFF4444);
+        final timerSize = compact ? 30.0 : 34.0;
         return SizedBox(
-          width: 34,
-          height: 34,
+          width: timerSize,
+          height: timerSize,
           child: Stack(
             alignment: Alignment.center,
             children: [
               CircularProgressIndicator(
                   value: remaining,
-                  strokeWidth: 3,
+                  strokeWidth: compact ? 2.5 : 3,
                   color: color,
                   backgroundColor: Colors.white12),
               Text('$seconds',
                   style: TextStyle(
                       color: color,
-                      fontSize: 11,
+                      fontSize: compact ? 10 : 11,
                       fontWeight: FontWeight.w900,
                       shadows: const [
                         Shadow(blurRadius: 3, color: Colors.black)
@@ -306,23 +428,42 @@ class _BattleRoundTimer extends StatelessWidget {
 
 class _BattleAttackOrderStrip extends StatelessWidget {
   final PveBattleViewModel vm;
-  const _BattleAttackOrderStrip({required this.vm});
+  final bool compact;
+  const _BattleAttackOrderStrip({required this.vm, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     final alive = vm.turnOrder.where((e) => !e.isFainted).toList();
+    final visible = compact && alive.length > 4 ? alive.take(4).toList() : alive;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var i = 0; i < alive.length; i++) ...[
+        for (var i = 0; i < visible.length; i++) ...[
           if (i > 0)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 1),
               child: Icon(Icons.chevron_right, size: 9, color: Colors.white24),
             ),
-          _BattleOrderBadge(entry: alive[i], number: i + 1, isFirst: i == 0),
+          _BattleOrderBadge(
+            entry: visible[i],
+            number: i + 1,
+            isFirst: i == 0,
+            compact: compact,
+          ),
         ],
+        if (visible.length < alive.length)
+          const Padding(
+            padding: EdgeInsets.only(left: 3),
+            child: Text(
+              '…',
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -332,13 +473,19 @@ class _BattleOrderBadge extends StatelessWidget {
   final TurnOrderEntry entry;
   final int number;
   final bool isFirst;
+  final bool compact;
   const _BattleOrderBadge(
-      {required this.entry, required this.number, required this.isFirst});
+      {required this.entry,
+      required this.number,
+      required this.isFirst,
+      this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     final c = entry.isPlayer ? AppColors.accent : AppColors.offensive;
-    final size = isFirst ? 32.0 : 26.0;
+    final size = compact
+        ? (isFirst ? 28.0 : 22.0)
+        : (isFirst ? 32.0 : 26.0);
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -369,22 +516,26 @@ class _BattleOrderBadge extends StatelessWidget {
                         child: Text(entry.name[0],
                             style: TextStyle(
                                 color: Colors.white,
-                                fontSize: isFirst ? 13 : 10,
+                                fontSize: compact
+                                    ? (isFirst ? 11 : 9)
+                                    : (isFirst ? 13 : 10),
                                 fontWeight: FontWeight.w900))))
                 : Center(
                     child: Text(entry.name[0],
                         style: TextStyle(
                             color: Colors.white,
-                            fontSize: isFirst ? 13 : 10,
+                            fontSize: compact
+                                ? (isFirst ? 11 : 9)
+                                : (isFirst ? 13 : 10),
                             fontWeight: FontWeight.w900))),
           ),
         ),
         Positioned(
-          top: -4,
-          left: -4,
+          top: compact ? -3 : -4,
+          left: compact ? -3 : -4,
           child: Container(
-            width: 14,
-            height: 14,
+            width: compact ? 12 : 14,
+            height: compact ? 12 : 14,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: c,
@@ -1002,7 +1153,7 @@ class _BattlePet extends StatelessWidget {
                         width: barWidth,
                         hpBarDuration: snapHpBars
                             ? Duration.zero
-                            : const Duration(milliseconds: 500),
+                          : const Duration(milliseconds: 620),
                       ),
                     ),
                 ],
@@ -1042,6 +1193,33 @@ class _BattlePetSprite extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _petColor(pet.name);
+    final coreSprite = pet.isFainted
+        ? SizedBox(
+            width: size,
+            height: size,
+            child: DeadPetEffect(size: size, flipHorizontal: flipHorizontal),
+          )
+        : pet.creatureDef != null
+            ? SizedBox(
+                width: size,
+                height: size,
+                child: PetRendererWidget(
+                  def: pet.creatureDef!,
+                  size: size,
+                  flipHorizontal: flipHorizontal,
+                  animation: battleAnimFor(animState, attackSlot: attackSlot),
+                  figScale: 0.26,
+                  yOff: 0.70,
+                ),
+              )
+            : PetSpriteWidget(
+                config: pet.spriteConfig,
+                size: size,
+                flipHorizontal: flipHorizontal,
+                petName: pet.name,
+                petColor: color,
+              );
+
     return Stack(
       alignment: Alignment.center,
       clipBehavior: Clip.none,
@@ -1060,32 +1238,11 @@ class _BattlePetSprite extends StatelessWidget {
             ),
           ),
         ),
-        if (pet.isFainted)
-          SizedBox(
-              width: size,
-              height: size,
-              child: DeadPetEffect(size: size, flipHorizontal: flipHorizontal))
-        else if (pet.creatureDef != null)
-          SizedBox(
-            width: size,
-            height: size,
-            child: PetRendererWidget(
-              def: pet.creatureDef!,
-              size: size,
-              flipHorizontal: flipHorizontal,
-              animation: battleAnimFor(animState, attackSlot: attackSlot),
-              figScale: 0.26,
-              yOff: 0.70,
-            ),
-          )
-        else
-          PetSpriteWidget(
-            config: pet.spriteConfig,
-            size: size,
-            flipHorizontal: flipHorizontal,
-            petName: pet.name,
-            petColor: color,
-          ),
+        _BattleReactionMotion(
+          animState: animState,
+          seedKey: pet.id,
+          child: coreSprite,
+        ),
         if (hasSkill && !pet.isFainted)
           Positioned(
             top: 0,
@@ -1113,6 +1270,92 @@ class _BattlePetSprite extends StatelessWidget {
       Color(0xFF43A047),
     ];
     return c[name.codeUnits.first % c.length];
+  }
+}
+
+class _BattleReactionMotion extends StatefulWidget {
+  final Widget child;
+  final PetCharacterAnimState? animState;
+  final String seedKey;
+
+  const _BattleReactionMotion({
+    required this.child,
+    required this.animState,
+    required this.seedKey,
+  });
+
+  @override
+  State<_BattleReactionMotion> createState() => _BattleReactionMotionState();
+}
+
+class _BattleReactionMotionState extends State<_BattleReactionMotion>
+    with TickerProviderStateMixin {
+  late final AnimationController _idleCtrl;
+  late final AnimationController _hitCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final variance = widget.seedKey.codeUnits.fold<int>(0, (a, b) => a + b) % 450;
+    _idleCtrl = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 1800 + variance),
+    )..repeat();
+    _hitCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _BattleReactionMotion oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animState != PetCharacterAnimState.hit &&
+        widget.animState == PetCharacterAnimState.hit) {
+      _hitCtrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _idleCtrl.dispose();
+    _hitCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _idleEnabled {
+    return switch (widget.animState) {
+      PetCharacterAnimState.hit ||
+      PetCharacterAnimState.faint ||
+      PetCharacterAnimState.move ||
+      PetCharacterAnimState.attack ||
+      PetCharacterAnimState.attackMelee ||
+      PetCharacterAnimState.attackRanged => false,
+      _ => true,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_idleCtrl, _hitCtrl]),
+      builder: (_, __) {
+        final idlePhase = _idleCtrl.value * math.pi * 2;
+        final idleY = _idleEnabled ? math.sin(idlePhase) * 2.0 : 0.0;
+        final idleScale = _idleEnabled ? 1.0 + math.sin(idlePhase) * 0.008 : 1.0;
+
+        final hitT = _hitCtrl.value;
+        final hitX = hitT > 0 ? math.sin(hitT * math.pi * 6) * (1.0 - hitT) * 7.0 : 0.0;
+
+        return Transform.translate(
+          offset: Offset(hitX, idleY),
+          child: Transform.scale(
+            scale: idleScale,
+            child: widget.child,
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -1608,18 +1851,27 @@ class BattleBottomPanel extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                        isCollapsed
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        size: 15,
-                        color: Colors.white70),
+                    Builder(builder: (context) {
+                      final compact = MediaQuery.sizeOf(context).width < 900;
+                      return Icon(
+                          isCollapsed
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: compact ? 13 : 15,
+                          color: Colors.white70);
+                    }),
                     const SizedBox(width: 4),
-                    Text(isCollapsed ? 'Show Deck' : 'Hide Deck',
-                        style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700)),
+                    Builder(builder: (context) {
+                      final compact = MediaQuery.sizeOf(context).width < 900;
+                      final label = compact
+                          ? 'Deck'
+                          : (isCollapsed ? 'Show Deck' : 'Hide Deck');
+                      return Text(label,
+                          style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: compact ? 9 : 10,
+                              fontWeight: FontWeight.w700));
+                    }),
                   ],
                 ),
               ),
@@ -1654,125 +1906,157 @@ class _BattleBottomPanelContent extends StatelessWidget {
       }
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Energy orb
-        SizedBox(
-          width: 76,
-          child: Center(
-            child:
-                BattleEnergyDisplay(energy: previewEnergy, max: kTeamEnergyCap),
-          ),
-        ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 900;
+        final energySlotW = compact ? 62.0 : 76.0;
+        final endSlotW = compact ? 90.0 : 102.0;
+        final listPadding = compact
+            ? const EdgeInsets.fromLTRB(2, 6, 2, 6)
+            : const EdgeInsets.fromLTRB(4, 6, 4, 6);
 
-        // Card hand
-        if (!vm.isBattleOver)
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: entries.isEmpty
-                      ? const Center(
-                          child: Text('No cards',
-                              style: TextStyle(
-                                  color: Colors.white38, fontSize: 12)))
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-                          itemCount: entries.length,
-                          itemBuilder: (_, i) {
-                            final (pet, card) = entries[i];
-                            final assigned = vm.pendingSkills[pet.id] ?? [];
-                            final isAssigned =
-                                assigned.contains(card.instanceId);
-                            final comboIdx = isAssigned
-                                ? assigned.indexOf(card.instanceId) + 1
-                                : null;
-                            final isNew =
-                                vm.newCardIds.contains(card.instanceId);
-                            final isFizzled =
-                                vm.fizzledCardIds.contains(card.instanceId);
-
-                            final prevPet = i > 0 ? entries[i - 1].$1 : null;
-                            final isNewPet =
-                                prevPet == null || prevPet.id != pet.id;
-                            final petColor = _clsColor(
-                                pet.creatureDef?.bodyClass.name ?? '');
-                            final clsName =
-                                pet.creatureDef?.bodyClass.name ?? '';
-                            final clsLabel = clsName.isEmpty
-                                ? ''
-                                : '${clsName[0].toUpperCase()}${clsName.substring(1)}';
-
-                            Widget w = Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  height: 20,
-                                  child: isNewPet && clsLabel.isNotEmpty
-                                      ? Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 7, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: petColor.withValues(
-                                                alpha: 0.18),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            border: Border.all(
-                                                color: petColor.withValues(
-                                                    alpha: 0.55)),
-                                          ),
-                                          child: Text(clsLabel,
-                                              style: TextStyle(
-                                                  color: petColor,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w800,
-                                                  letterSpacing: 0.3)),
-                                        )
-                                      : const SizedBox.shrink(),
-                                ),
-                                const SizedBox(height: 3),
-                                BattleSkillCard(
-                                  trait: card.trait,
-                                  petName: card.ownerPetName,
-                                  isSelected: isAssigned,
-                                  isPity: card.isPity,
-                                  isFizzled: isFizzled,
-                                  cardArtPath: card.cardArtPath,
-                                  cardTemplatePath: card.cardTemplatePath,
-                                  comboIndex: comboIdx,
-                                  petColor: card.petColor,
-                                  onTap: () => onAssignSkill(card.instanceId),
-                                ),
-                              ],
-                            );
-
-                            if (isNew) {
-                              w = BattleCardEntrance(
-                                key: ValueKey(card.instanceId),
-                                delay: Duration(milliseconds: i * 55),
-                                child: w,
-                              );
-                            }
-
-                            return Padding(
-                              padding: EdgeInsets.only(
-                                  left: isNewPet && i > 0 ? 14 : 3, right: 3),
-                              child: w,
-                            );
-                          },
-                        ),
-                ),
-              ],
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Energy orb
+            SizedBox(
+              width: energySlotW,
+              child: Center(
+                child: BattleEnergyDisplay(
+                    energy: previewEnergy, max: kTeamEnergyCap),
+              ),
             ),
-          ),
 
-        // End-turn button slot
-        SizedBox(width: 88, child: Center(child: endButtonSlot)),
-      ],
+            // Card hand
+            if (!vm.isBattleOver)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: entries.isEmpty
+                          ? const Center(
+                              child: Text('No cards',
+                                  style: TextStyle(
+                                      color: Colors.white38, fontSize: 12)))
+                          : ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              padding: listPadding,
+                              itemCount: entries.length,
+                              itemBuilder: (_, i) {
+                                final (pet, card) = entries[i];
+                                final assigned = vm.pendingSkills[pet.id] ?? [];
+                                final isAssigned =
+                                    assigned.contains(card.instanceId);
+                                final comboIdx = isAssigned
+                                    ? assigned.indexOf(card.instanceId) + 1
+                                    : null;
+                                final isNew =
+                                    vm.newCardIds.contains(card.instanceId);
+                                final isFizzled =
+                                    vm.fizzledCardIds.contains(card.instanceId);
+
+                                final prevPet = i > 0 ? entries[i - 1].$1 : null;
+                                final isNewPet =
+                                    prevPet == null || prevPet.id != pet.id;
+                                final petColor =
+                                    _clsColor(pet.creatureDef?.bodyClass.name ?? '');
+                                final clsName =
+                                    pet.creatureDef?.bodyClass.name ?? '';
+                                final clsLabel = clsName.isEmpty
+                                    ? ''
+                                    : '${clsName[0].toUpperCase()}${clsName.substring(1)}';
+
+                                Widget w = Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      height: 20,
+                                      child: isNewPet && clsLabel.isNotEmpty
+                                          ? Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 7, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: petColor.withValues(alpha: 0.18),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                    color: petColor.withValues(
+                                                        alpha: 0.55)),
+                                              ),
+                                              child: Text(clsLabel,
+                                                  style: TextStyle(
+                                                      color: petColor,
+                                                      fontSize: compact ? 8 : 9,
+                                                      fontWeight: FontWeight.w800,
+                                                      letterSpacing: 0.3)),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    BattleSkillCard(
+                                      trait: card.trait,
+                                      petName: card.ownerPetName,
+                                      isSelected: isAssigned,
+                                      isPity: card.isPity,
+                                      isFizzled: isFizzled,
+                                      cardArtPath: card.cardArtPath,
+                                      cardTemplatePath: card.cardTemplatePath,
+                                      comboIndex: comboIdx,
+                                      petColor: card.petColor,
+                                      onTap: () => onAssignSkill(card.instanceId),
+                                    ),
+                                    if (compact) const SizedBox(height: 1),
+                                  ],
+                                );
+
+                                if (isNew) {
+                                  w = BattleCardEntrance(
+                                    key: ValueKey(card.instanceId),
+                                    delay: Duration(milliseconds: i * 55),
+                                    child: w,
+                                  );
+                                }
+
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                      left: isNewPet && i > 0 ? (compact ? 8 : 14) : 3,
+                                      right: 3),
+                                  child: w,
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // End-turn button slot
+            SizedBox(
+              width: endSlotW,
+              child: Center(
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 4 : 6,
+                    vertical: compact ? 5 : 6,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x26FFB347), Color(0x10FF8C1A)],
+                    ),
+                    border: Border.all(color: const Color(0x66FFB347)),
+                  ),
+                  child: endButtonSlot,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1797,7 +2081,7 @@ class BattleEnergyDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const c = AppColors.energyBlue;
+    const c = Color(0xFFFF9F1A);
     final frac = max > 0 ? (energy / max).clamp(0.0, 1.0) : 0.0;
 
     return Column(
@@ -1831,7 +2115,7 @@ class BattleEnergyDisplay extends StatelessWidget {
                       energy > 0
                           ? c.withValues(alpha: 0.9)
                           : Colors.white.withValues(alpha: 0.1),
-                      energy > 0 ? const Color(0xFF0A3A6A) : Colors.black45,
+                      energy > 0 ? const Color(0xFF7A3B00) : Colors.black45,
                     ],
                   ),
                   border: Border.all(
@@ -1861,28 +2145,14 @@ class BattleEnergyDisplay extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        // Gem row
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(
-              max,
-              (i) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: 7,
-                    height: 7,
-                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i < energy ? c : Colors.white12,
-                      boxShadow: i < energy
-                          ? [
-                              BoxShadow(
-                                  color: c.withValues(alpha: 0.7),
-                                  blurRadius: 4)
-                            ]
-                          : null,
-                    ),
-                  )),
+        Text(
+          '$energy/$max',
+          style: GoogleFonts.rajdhani(
+            color: const Color(0xFFFFD9A1),
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.3,
+          ),
         ),
       ],
     );

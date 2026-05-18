@@ -144,6 +144,9 @@ if $DEPLOY_WEB; then
   echo ""
   echo -e "${CYAN}${BOLD}── Building Flutter web app ──${NC}"
 
+  # Ensure bundled mechanics content matches the root markdown source.
+  "$SCRIPT_DIR/sync_mechanics.sh"
+
   # Resolve server URL — priority: env var → .server_url cache → gcloud → hardcoded fallback.
   if [[ -z "${PAKSI_SERVER_URL:-}" ]]; then
     if [[ -f "$SCRIPT_DIR/.server_url" ]]; then

@@ -115,6 +115,9 @@ require() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Keep Home > Mechanics markdown in sync with the root source file.
+"$SCRIPT_DIR/sync_mechanics.sh"
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  1. BANNER + --engine-only fast path
 # ─────────────────────────────────────────────────────────────────────────────

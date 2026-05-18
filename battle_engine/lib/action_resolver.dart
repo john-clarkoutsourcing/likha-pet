@@ -258,6 +258,8 @@ class ActionResolver {
     'fastest_enemy',
   };
 
+  static const _kChainFamilyPrefix = 'chain_family_';
+
   /// All enemy-facing single-target specs. When a pre-computed [comboTarget]
   /// is available, it is used for cards whose spec is one of these — so that
   /// "normal" cards attack the same target as the special one in the combo.
@@ -319,17 +321,109 @@ class ActionResolver {
       final actorTeam = isOnTeamA ? teamA : teamB;
       final enemyTeam = isOnTeamA ? teamB : teamA;
 
+      var hasDefaultEnemyDamage = false;
+
       // Scan cards in order; first special enemy-target spec wins.
       for (final a in actions) {
         final spec = a.trait.effect.target;
+        if (a.trait.effect.type == EffectType.damage && spec == 'enemy') {
+          hasDefaultEnemyDamage = true;
+        }
         if (_kComboLockSpecs.contains(spec)) {
           result[actorId] = _resolveTarget(spec, actor, actorTeam, enemyTeam);
           break;
         }
       }
+      // No special spec: lock default closest-target once for this actor so
+      // split-path selection stays stable through the actor's combo.
+      result.putIfAbsent(
+        actorId,
+        () => hasDefaultEnemyDamage
+            ? _resolveTarget('enemy', actor, actorTeam, enemyTeam)
+            : null,
+      );
       // No special spec → actor absent from result → per-card fallback in resolve().
     }
     return result;
+  }
+
+  /// Precompute chain state per action index.
+  ///
+  /// Chain requires matching card class across different Axies on the same team.
+  /// Named chain families (e.g. lunge/trump/bug_signal) are also computed for
+  /// cards that require a specific partner card.
+  List<({bool classChainActive, Set<String> activeChainFamilies})>
+      precomputeChainContexts(
+    List<Action> ordered,
+    List<Pet> teamA,
+    List<Pet> teamB,
+  ) {
+    final contexts = List<({bool classChainActive, Set<String> activeChainFamilies})>.filled(
+      ordered.length,
+      (classChainActive: false, activeChainFamilies: const {}),
+      growable: false,
+    );
+
+    final teamAIds = {for (final p in teamA) p.id};
+    final teamBIds = {for (final p in teamB) p.id};
+
+    _fillTeamChainContexts(ordered, teamAIds, contexts);
+    _fillTeamChainContexts(ordered, teamBIds, contexts);
+    return contexts;
+  }
+
+  void _fillTeamChainContexts(
+    List<Action> ordered,
+    Set<String> teamIds,
+    List<({bool classChainActive, Set<String> activeChainFamilies})> contexts,
+  ) {
+    final classActors = <CreatureClass, Set<String>>{};
+    final familyActors = <String, Set<String>>{};
+    final teamIndexes = <int>[];
+
+    for (var i = 0; i < ordered.length; i++) {
+      final action = ordered[i];
+      if (!teamIds.contains(action.actor.id)) continue;
+      teamIndexes.add(i);
+
+      final cls = action.trait.partClass;
+      if (cls != null) {
+        (classActors[cls] ??= <String>{}).add(action.actor.id);
+      }
+
+      for (final tag in action.trait.tags) {
+        final family = _chainFamilyFromTag(tag);
+        if (family == null) continue;
+        (familyActors[family] ??= <String>{}).add(action.actor.id);
+      }
+    }
+
+    for (final index in teamIndexes) {
+      final action = ordered[index];
+      final cls = action.trait.partClass;
+      final classChainActive =
+          cls != null && (classActors[cls]?.length ?? 0) >= 2;
+
+      final activeFamilies = <String>{};
+      for (final tag in action.trait.tags) {
+        final family = _chainFamilyFromTag(tag);
+        if (family == null) continue;
+        if ((familyActors[family]?.length ?? 0) >= 2) {
+          activeFamilies.add(family);
+        }
+      }
+
+      contexts[index] = (
+        classChainActive: classChainActive,
+        activeChainFamilies: activeFamilies,
+      );
+    }
+  }
+
+  String? _chainFamilyFromTag(String tag) {
+    if (!tag.startsWith(_kChainFamilyPrefix)) return null;
+    final family = tag.substring(_kChainFamilyPrefix.length);
+    return family.isEmpty ? null : family;
   }
 
   void resolve(
@@ -345,6 +439,11 @@ class ActionResolver {
     /// True when this actor is the last to fire in the round (lowest speed).
     /// Used for 'bonus_if_acts_last' (Prickly Trap).
     bool isLastActor = false,
+    /// True when this card's class is chained with the same class on another
+    /// Axie from the same team this round.
+    bool isClassChainActive = false,
+    /// Active named chain families (e.g. 'lunge', 'trump').
+    Set<String> activeChainFamilies = const {},
   }) {
     final traitsByPetId = roundTraitsByPetId ?? _roundTraitsByPetId;
     final actor = action.actor;
@@ -404,7 +503,9 @@ class ActionResolver {
         //  2. Pre-computed comboTarget — if alive, not Stench, and enemy spec.
         //  3. Per-card _resolveTarget fallback → _preferredTarget respects
         //     Stench and Aroma correctly.
-        var target = action.primaryTarget != null &&
+        final canUsePrimaryTarget = effect.target != 'enemy';
+        var target = canUsePrimaryTarget &&
+              action.primaryTarget != null &&
                     !action.primaryTarget!.isFainted &&
                     !action.primaryTarget!.isStenched
             ? action.primaryTarget
@@ -524,6 +625,21 @@ class ActionResolver {
         // Prickly Trap: +20% when this Axie acts last in the round.
         if (trait.tags.contains('bonus_if_acts_last') && isLastActor)
           damageBoost = math.max(damageBoost, 1.2);
+
+        // Generic class-chain damage boost (+20%) for chain-only cards.
+        if (trait.tags.contains('bonus_damage_on_chain') && isClassChainActive) {
+          damageBoost = math.max(damageBoost, 1.2);
+        }
+
+        // Named chain-family boosts (+20%) for cards like Lunge/Trump chains.
+        if (trait.tags.contains('bonus_damage_on_chain_lunge') &&
+            activeChainFamilies.contains('lunge')) {
+          damageBoost = math.max(damageBoost, 1.2);
+        }
+        if (trait.tags.contains('bonus_damage_on_chain_trump') &&
+            activeChainFamilies.contains('trump')) {
+          damageBoost = math.max(damageBoost, 1.2);
+        }
 
         var actual = 0;
         for (var hit = 0; hit < hitCount; hit++) {
@@ -697,6 +813,16 @@ class ActionResolver {
             log.energySteal(actor.name, enemy.name, drained);
           }
         }
+        // Bug Signal: steal energy when chained with another Bug Signal card.
+        if (trait.tags.contains('energy_steal_on_chain_bug_signal') &&
+            activeChainFamilies.contains('bug_signal')) {
+          final enemy = _firstAlive(enemyTeam) ?? target;
+          final drained = enemy.drainEnergy(1);
+          if (drained > 0) {
+            actor.receiveEnergy(drained);
+            log.energySteal(actor.name, enemy.name, drained);
+          }
+        }
         // Scale Dart: gain 1 energy if the target has any active buff.
         if (trait.tags.contains('energy_gain_vs_buffed') &&
             target.buffs.isNotEmpty) {
@@ -738,6 +864,19 @@ class ActionResolver {
             shieldBefore > 0) {
           target.applyDebuff(DebuffType.fear, 0, 1);
           log.debuff(target.name, 'fear', 0, 1);
+        }
+        // Chain-only debuffs.
+        if (trait.tags.contains('apply_poison_on_chain') &&
+            isClassChainActive &&
+            !target.isFainted) {
+          target.applyDebuff(DebuffType.poisoned, 2, 999);
+          log.debuff(target.name, 'poisoned', 2, 999);
+        }
+        if (trait.tags.contains('apply_fear_on_chain') &&
+            isClassChainActive &&
+            !target.isFainted) {
+          target.applyDebuff(DebuffType.fear, 0, 2);
+          log.debuff(target.name, 'fear', 0, 2);
         }
         // Kotaro Bite: gain 1 energy when the target is faster than this Axie.
         if (trait.tags.contains('energy_if_target_faster') &&
@@ -1090,7 +1229,7 @@ class ActionResolver {
     List<Pet> enemyTeam,
   ) {
     return switch (spec) {
-      'enemy'          => _preferredTarget(_aliveCandidates(enemyTeam)),
+      'enemy'          => _closestEnemyTarget(actor, actorTeam, enemyTeam),
       'lowest_hp_enemy'=> _preferredTarget(_lowestHpCandidates(enemyTeam)),
       'fastest_enemy'  => _preferredTarget(_fastestCandidates(enemyTeam)),
       'furthest_enemy' => _preferredTarget(_backRowCandidates(enemyTeam)),
@@ -1101,6 +1240,45 @@ class ActionResolver {
       'front_ally'     => _firstAlive(actorTeam),
       _                => _firstAlive(enemyTeam),
     };
+  }
+
+  Pet? _closestEnemyTarget(Pet actor, List<Pet> actorTeam, List<Pet> enemyTeam) {
+    final alive = _aliveCandidates(enemyTeam);
+    if (alive.isEmpty) return null;
+
+    // Center-front lock: when enemy front is alive, it is the default closest.
+    final enemyFront = enemyTeam.isNotEmpty ? enemyTeam[0] : null;
+    if (enemyFront != null && !enemyFront.isFainted) {
+      return _preferredTarget([enemyFront]);
+    }
+
+    // Split path: front is down and two parallel options remain.
+    final mid = enemyTeam.length > 1 && !enemyTeam[1].isFainted ? enemyTeam[1] : null;
+    final back = enemyTeam.length > 2 && !enemyTeam[2].isFainted ? enemyTeam[2] : null;
+    if (mid != null && back != null) {
+      final actorLane = actorTeam.indexWhere((p) => p.id == actor.id);
+      final preferredFirst = switch (actorLane) {
+        1 => [mid, back],
+        2 => [back, mid],
+        _ => _deterministicMidLaneChoice(actor, mid, back)
+            ? [mid, back]
+            : [back, mid], // deterministic 50/50 for middle lane
+      };
+      return _preferredTarget(preferredFirst);
+    }
+
+    if (mid != null) return _preferredTarget([mid]);
+    if (back != null) return _preferredTarget([back]);
+    return _preferredTarget(alive);
+  }
+
+  bool _deterministicMidLaneChoice(Pet actor, Pet mid, Pet back) {
+    final key = '${actor.id}|${mid.id}|${back.id}';
+    var hash = 0;
+    for (final code in key.codeUnits) {
+      hash = ((hash * 31) + code) & 0x7fffffff;
+    }
+    return hash.isEven;
   }
 
   List<Pet> _resolveMultiple(

@@ -61,14 +61,14 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   late final String _matchId;
 
   List<Offset> _playerBattlePos = const [
-    Offset(0.30, 0.22),
-    Offset(0.15, 0.03),
-    Offset(0.10, 0.48),
+    Offset(0.30, 0.34),
+    Offset(0.15, 0.18),
+    Offset(0.10, 0.50),
   ];
   List<Offset> _enemyBattlePos = const [
-    Offset(0.50, 0.22),
-    Offset(0.65, 0.03),
-    Offset(0.75, 0.48),
+    Offset(0.50, 0.34),
+    Offset(0.65, 0.18),
+    Offset(0.75, 0.50),
   ];
 
   final Map<String, PetCharacterConfig> _mixedSkeletonConfigs = {};

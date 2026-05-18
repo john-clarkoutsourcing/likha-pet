@@ -24,14 +24,14 @@ import 'pvp_result_screen.dart';
 //              opponent faces left (flipHorizontal: false).
 
 const _kPlayerPos = [
-  Offset(0.30, 0.22), // FRONT — nearest to centre
-  Offset(0.15, 0.03), // MID
-  Offset(0.10, 0.35), // BACK
+  Offset(0.30, 0.34), // FRONT — nearest to centre
+  Offset(0.15, 0.18), // MID
+  Offset(0.10, 0.50), // BACK
 ];
 const _kOpponentPos = [
-  Offset(0.50, 0.22), // FRONT — nearest to centre
-  Offset(0.65, 0.03), // MID
-  Offset(0.75, 0.35), // BACK
+  Offset(0.50, 0.34), // FRONT — nearest to centre
+  Offset(0.65, 0.18), // MID
+  Offset(0.75, 0.50), // BACK
 ];
 
 const _kRoundSeconds = 30;
@@ -272,20 +272,36 @@ class _LockInButton extends StatelessWidget {
             : 'Ready';
 
     return SizedBox(
-      width: 76,
+      width: 86,
       child: ElevatedButton(
         onPressed: disabled
             ? null
             : () => ref.read(pvpBattleProvider.notifier).executeRound(),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFEF5350),
+          backgroundColor: const Color(0xFFFF8A1F),
+          foregroundColor: Colors.white,
+          elevation: disabled ? 0 : 8,
+          shadowColor: const Color(0xAAFF8A1F),
           disabledBackgroundColor: AppColors.surface,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        child: Text(label,
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.bolt_rounded, size: 17),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                height: 1,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
