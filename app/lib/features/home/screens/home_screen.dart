@@ -171,8 +171,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final size = layout.contentSize;
     final width = layout.totemWidth;
     final height = layout.totemHeight;
-    final canQuickBattle = player.hasFullTeam;
-
     return Positioned(
       right: 0,
       top: size.height * (layout.isMobile ? 0.01 : 0.005),
@@ -206,7 +204,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     icon: Icons.flag,
                     width: width * 0.82,
                     compact: layout.isMobile,
-                    onTap: () => context.push(Routes.worldMap),
+                    onTap: player.hasFullTeam
+                        ? () => context.push(Routes.worldMap)
+                        : () => _showNoTeamDialog(context),
                   ),
                   SizedBox(height: height * 0.02),
                   _TotemButton(
@@ -215,7 +215,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     icon: Icons.sports_martial_arts,
                     width: width * 0.82,
                     compact: layout.isMobile,
-                    onTap: canQuickBattle
+                    onTap: player.hasFullTeam
                         ? () => context.push(
                               Routes.battle,
                               extra: const BattleScreenArgs(
@@ -223,7 +223,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 enemyTeamName: 'Rivals',
                               ),
                             )
-                        : () => context.push(Routes.teamManager),
+                        : () => _showNoTeamDialog(context),
                   ),
                   const Spacer(),
                   _TotemFooter(
@@ -244,6 +244,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showNoTeamDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF111A28),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF4AC4D9), width: 1.5),
+        ),
+        title: const Text(
+          'No Active Team',
+          style: TextStyle(
+            fontFamily: 'LilitaOne',
+            color: Color(0xFFEAFBFF),
+            fontSize: 18,
+          ),
+        ),
+        content: const Text(
+          'You need to create a team and assign 3 pets\n(FRONT / MID / BACK) before battling.',
+          style: TextStyle(
+            fontFamily: 'Fredoka',
+            color: Color(0xFFAAE8F5),
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white38)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.push(Routes.teamManager);
+            },
+            child: const Text(
+              'Create Team',
+              style: TextStyle(
+                color: Color(0xFF4AC4D9),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

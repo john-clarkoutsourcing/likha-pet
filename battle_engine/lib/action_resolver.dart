@@ -68,6 +68,8 @@ import 'battle_logger.dart';
 // │  (those check the DEFENDER's back/tail trait, not the attacker's).      │
 // │                                                                          │
 // │  WHERE TO ADD a tag that:                                               │
+// │  • Redirects the target BEFORE damage → add in the redirect block just  │
+// │    before ignoreShield (target_aquatic_if_low_hp pattern)               │
 // │  • Only makes sense after damage lands (need actual / shieldBroke)      │
 // │  • Targets the ENEMY (target variable is available)                     │
 // │  • Fires unconditionally on any hit → add after _applyOnHitReactions    │
@@ -84,11 +86,22 @@ import 'battle_logger.dart';
 // │    end_last_stand                kills last-stand target                 │
 // │    lifeSteal                     heal actor by actual HP dealt           │
 // │    energy_on_crit                isCrit → actor gains energy            │
+// │    self_atk_up_vs_plant_reptile  AttackUp self vs Plant or Reptile      │
+// │    self_atk_up_vs_beast_bug      AttackUp self vs Beast or Bug          │
+// │    self_speed_up_on_hit          SpeedUp self when hit lands            │
 // │    target_aroma                  actual>0 → Aroma on target             │
 // │    isolated_on_combo_3           comboIndex>=2 → Isolate on target      │
 // │    transfer_debuffs              move actor's debuffs to target          │
 // │    reflect                       target reflects % damage back           │
 // │    energySteal / energyDrain     drain enemy energy                     │
+// │    energy_gain_on_combo          comboIndex>=1 → actor gains energy     │
+// │    energy_steal_on_combo         comboIndex>=1 → steal enemy energy     │
+// │    energy_gain_vs_buffed         target has buffs → actor gains energy  │
+// │    lifesteal_vs_plant            heal actor vs Plant targets             │
+// │    lifesteal_vs_aquatic          heal actor vs Aquatic targets           │
+// │    shield_equal_to_damage        actor shield += actual damage dealt     │
+// │    apply_lethal_if_low_hp        target HP≤50% → apply Lethal           │
+// │    apply_fear_if_shielded        shieldBefore>0 → apply Fear on target  │
 // └─────────────────────────────────────────────────────────────────────────┘
 //
 // ┌─────────────────────────────────────────────────────────────────────────┐
@@ -105,6 +118,7 @@ import 'battle_logger.dart';
 // │    consumeAttackModifiers   clears attackUp/attackDown after offense    │
 // │    _tickPoison              all poisoned pets lose HP per action        │
 // │    self_aroma               actor gets Aroma (any card type)            │
+// │    self_speed_up_on_combo   comboIndex>=1 → SpeedUp self               │
 // │    selfShield               actor gets shield from effect.selfShield    │
 // └─────────────────────────────────────────────────────────────────────────┘
 //
@@ -161,6 +175,9 @@ import 'battle_logger.dart';
 //  reflect      Reflect X% of incoming melee/ranged damage back.
 //  healBlocked  Cannot receive healing (regen, lifesteal, heal cards).
 //  critBlocked  Cannot be critically hit this round.
+//  moraleDown   Reduce crit chance (lowers effective morale).
+//  fragile      Take 25% more defense reduction (flat −25% defense).
+//  lethal       Next lethal hit bypasses Last Stand (pet dies outright).
 //  attackDown   Reduce attack by X% for N rounds.
 //  defenseDown  Reduce defense by X% for N rounds.
 //  speedDown    Reduce speed for N rounds.
@@ -176,6 +193,7 @@ import 'battle_logger.dart';
 //  attackUp   +X% attack for N rounds. Consumed when pet attacks (!)
 //  defenseUp  +X% defense for N rounds.
 //  speedUp    +X% speed for N rounds. Affects turn order.
+//  moraleUp   Increase crit chance (raises effective morale).
 //  energized  Gain +X bonus energy per round.
 //  regen      Restore X HP per round (ticks in processStatusEffects).
 //
@@ -296,34 +314,90 @@ class ActionResolver {
             target = altTarget;
           }
         }
+        // ── Target redirects (override target based on conditions) ──────────
+        // Must fire before ignoreShield / damage calc so the final target is used.
+        if (trait.tags.contains('target_aquatic_if_low_hp') &&
+            actor.hp <= actor.maxHp ~/ 2) {
+          final alt = _preferredTarget(_aliveCandidates(enemyTeam)
+              .where((p) => p.creatureClass == CreatureClass.aquatic)
+              .toList());
+          if (alt != null) target = alt;
+        }
+        if (trait.tags.contains('target_bug_if_low_hp') &&
+            actor.hp <= actor.maxHp ~/ 2) {
+          final alt = _preferredTarget(_aliveCandidates(enemyTeam)
+              .where((p) => p.creatureClass == CreatureClass.bug)
+              .toList());
+          if (alt != null) target = alt;
+        }
+        if (trait.tags.contains('target_injured_if_low_hp') &&
+            actor.hp <= actor.maxHp ~/ 2) {
+          final alt = _lowestHp(enemyTeam);
+          if (alt != null) target = alt;
+        }
+
         final ignoreShield = effect.target == 'enemy' && target.isAsleep;
         final ignoreLastStand = trait.tags.contains('prevent_last_stand');
         final hitCount = trait.tags.contains('multi_hit_3') ? 3 : 1;
-        final net = _computeDamage(actor, target, effect.value, trait,
-            comboIndex: comboIndex);
-        final isCrit = trait.tags.contains('crit_if_first') && comboIndex == 0
-            ? true
-            : _rollCrit(actor, target);
-        final critMultiplier = trait.tags.contains('double_crit_damage') ? 3 : 2;
-        final damageBoost = trait.tags.contains('bonus_damage_if_debuffed') &&
-                target.debuffs.isNotEmpty
-            ? 1.2
-            : trait.tags.contains('bonus_damage_vs_bug') &&
-                target.creatureClass == CreatureClass.bug
-            ? 1.5
-            : 1.0;
+        // Declare shieldBefore and targetTrait here so damageBoost can reference them.
         final targetTrait = traitsByPetId[target.id];
         final shieldBefore = target.shield;
+        final net = _computeDamage(actor, target, effect.value, trait,
+            comboIndex: comboIndex);
+        // ── Crit determination ───────────────────────────────────────────
+        // Tags can force a crit; otherwise roll probabilistically.
+        final bool isCrit;
+        if (trait.tags.contains('crit_if_first') && comboIndex == 0) {
+          isCrit = true; // Branch Charge: guaranteed crit when acting first
+        } else if (trait.tags.contains('crit_on_combo_3') && comboIndex >= 2) {
+          isCrit = true; // Single Combat: guaranteed crit on 3rd+ combo card
+        } else {
+          isCrit = _rollCrit(actor, target);
+        }
+        final critMultiplier = trait.tags.contains('double_crit_damage') ? 3 : 2;
+
+        // ── Damage multipliers ───────────────────────────────────────────
+        // Multiple multipliers may match; we take the highest (they don't
+        // stack additively — each is a standalone condition bonus).
+        // Add new bonuses here following the same pattern.
+        double damageBoost = 1.0;
+
+        // Allergic Reaction / Blackmail II: +30% vs debuffed target
+        if (trait.tags.contains('bonus_damage_if_debuffed') &&
+            target.debuffs.isNotEmpty)
+          damageBoost = math.max(damageBoost, 1.3);
+
+        // Bug Splat: +50% vs Bug class
+        if (trait.tags.contains('bonus_damage_vs_bug') &&
+            target.creatureClass == CreatureClass.bug)
+          damageBoost = math.max(damageBoost, 1.5);
+
+        // Angry Lam: +20% when actor HP ≤ 50%
+        if (trait.tags.contains('bonus_if_low_hp') &&
+            actor.hp <= actor.maxHp ~/ 2)
+          damageBoost = math.max(damageBoost, 1.2);
+
+        // Surprise Invasion: +30% when target is faster than actor
+        if (trait.tags.contains('bonus_if_target_faster') &&
+            target.effectiveSpeed > actor.effectiveSpeed)
+          damageBoost = math.max(damageBoost, 1.3);
+
+        // Dull Grip: +15% when target has shield
+        if (trait.tags.contains('bonus_vs_shielded') && shieldBefore > 0)
+          damageBoost = math.max(damageBoost, 1.15);
+
+        // Shell Jab / Early Bird: +50% vs idle target (no shield)
+        if (trait.tags.contains('bonus_vs_idle') && shieldBefore == 0)
+          damageBoost = math.max(damageBoost, 1.5);
+
+        // Revenge Arrow / similar: ×2 when actor is in Last Stand
+        if (trait.tags.contains('double_damage_last_stand') && actor.isInLastStand)
+          damageBoost = math.max(damageBoost, 2.0);
+
         var actual = 0;
         for (var hit = 0; hit < hitCount; hit++) {
           final dmg = _clamp(
-            ((isCrit ? net * critMultiplier : net) *
-                    damageBoost *
-                    (trait.tags.contains('double_damage_last_stand') &&
-                            actor.isInLastStand
-                        ? 2.0
-                        : 1.0))
-                .round(),
+            ((isCrit ? net * critMultiplier : net) * damageBoost).round(),
             kMaxSingleHitDamage,
           );
           final applied = target.takeDamage(
@@ -400,6 +474,26 @@ class ActionResolver {
         if (trait.tags.contains('energy_on_crit') && isCrit) {
           actor.receiveEnergy(1);
         }
+        // Fish Hook: apply Attack+ to self when hitting a Plant or Reptile.
+        // 'Dusk' from the original Axie game does not exist in our class set.
+        if (trait.tags.contains('self_atk_up_vs_plant_reptile') &&
+            (target.creatureClass == CreatureClass.plant ||
+             target.creatureClass == CreatureClass.reptile)) {
+          actor.applyBuff(BuffType.attackUp, 20, 1);
+          log.buff(actor.name, 'attackUp', 20, 1);
+        }
+        // Clam Slash: apply Attack+ to self when hitting a Beast or Bug.
+        if (trait.tags.contains('self_atk_up_vs_beast_bug') &&
+            (target.creatureClass == CreatureClass.beast ||
+             target.creatureClass == CreatureClass.bug)) {
+          actor.applyBuff(BuffType.attackUp, 20, 1);
+          log.buff(actor.name, 'attackUp', 20, 1);
+        }
+        // Aqua Mirror: gain Speed+ when the hit lands.
+        if (trait.tags.contains('self_speed_up_on_hit') && actual > 0) {
+          actor.applyBuff(BuffType.speedUp, 20, 1);
+          log.buff(actor.name, 'speedUp', 20, 1);
+        }
         // target_aroma: mark the hit enemy with Aroma so allies focus it.
         if (trait.tags.contains('target_aroma') &&
             !target.isFainted &&
@@ -457,6 +551,62 @@ class ActionResolver {
               log.energyDrain(actor.name, enemy.name, drained);
             }
           }
+        }
+        // Tail Slap: gain 1 energy when used as a combo card (2nd+ card).
+        if (trait.tags.contains('energy_gain_on_combo') && comboIndex >= 1) {
+          actor.receiveEnergy(1);
+          log.energySteal(actor.name, actor.name, 1);
+        }
+        // Night Steal / Vegetal Bite: steal 1 enemy energy when used in a combo.
+        if (trait.tags.contains('energy_steal_on_combo') && comboIndex >= 1) {
+          final enemy = _firstAlive(enemyTeam) ?? target;
+          final drained = enemy.drainEnergy(1);
+          if (drained > 0) {
+            actor.receiveEnergy(drained);
+            log.energySteal(actor.name, enemy.name, drained);
+          }
+        }
+        // Scale Dart: gain 1 energy if the target has any active buff.
+        if (trait.tags.contains('energy_gain_vs_buffed') &&
+            target.buffs.isNotEmpty) {
+          actor.receiveEnergy(1);
+          log.energySteal(actor.name, actor.name, 1);
+        }
+        // Vegan Diet: lifesteal when target is Plant class.
+        if (trait.tags.contains('lifesteal_vs_plant') &&
+            target.creatureClass == CreatureClass.plant &&
+            actual > 0) {
+          final heal = actual.clamp(0, kMaxFlatHealing);
+          actor.receiveHealing(heal);
+          log.heal(actor.name, heal, actor.hp);
+        }
+        // Why So Serious: lifesteal when target is Aquatic class.
+        if (trait.tags.contains('lifesteal_vs_aquatic') &&
+            target.creatureClass == CreatureClass.aquatic &&
+            actual > 0) {
+          final heal = actual.clamp(0, kMaxFlatHealing);
+          actor.receiveHealing(heal);
+          log.heal(actor.name, heal, actor.hp);
+        }
+        // Woodman Power: gain shield equal to the damage dealt this hit.
+        if (trait.tags.contains('shield_equal_to_damage') && actual > 0) {
+          final shieldAmt = actual.clamp(0, kMaxShield);
+          actor.applyShield(shieldAmt);
+          log.shield(actor.name, shieldAmt, actor.shield);
+        }
+        // Death Mark: apply Lethal when target HP falls to ≤ 50% (bypasses Last Stand).
+        if (trait.tags.contains('apply_lethal_if_low_hp') &&
+            !target.isFainted &&
+            target.hp <= target.maxHp ~/ 2) {
+          target.applyDebuff(DebuffType.lethal, 0, 1);
+          log.debuff(target.name, 'lethal', 0, 1);
+        }
+        // Grub Surprise: apply Fear when the target had a shield before this hit.
+        if (trait.tags.contains('apply_fear_if_shielded') &&
+            !target.isFainted &&
+            shieldBefore > 0) {
+          target.applyDebuff(DebuffType.fear, 0, 1);
+          log.debuff(target.name, 'fear', 0, 1);
         }
 
       // ── AoE damage ────────────────────────────────────────────────────────
@@ -563,6 +713,12 @@ class ActionResolver {
       log.debuff(actor.name, 'aroma', 0, 2);
     }
 
+    // Acrobatic (beast-horn-12): gain Speed+ when used as the 2nd+ card in a combo.
+    if (trait.tags.contains('self_speed_up_on_combo') && comboIndex >= 1) {
+      actor.applyBuff(BuffType.speedUp, 20, 1);
+      log.buff(actor.name, 'speedUp', 20, 1);
+    }
+
     // Self-shield on attack — +10% bonus when card class matches attacker class.
     if (effect.selfShield > 0) {
       int amount = effect.selfShield;
@@ -598,14 +754,23 @@ class ActionResolver {
 
   // ── Critical hit ──────────────────────────────────────────────────────────
   //
-  // Crit chance = attacker.morale × 0.1% − defender.speed × 0.05%
-  // Clamped 0–30%.  Crits deal ×2 damage.
-  // High-speed defenders are harder to crit — mimics Axie's speed/morale interplay.
+  // Crit chance = effectiveMorale × 0.1% − defender.speed × 0.05%
+  // Clamped 0–30%.  Crits deal ×2 damage (×3 with double_crit_damage tag).
+  //
+  // moraleDown debuff reduces the attacker's effective morale.
+  // moraleUp   buff    increases the attacker's effective morale.
 
   bool _rollCrit(Pet attacker, Pet defender) {
     if (attacker.isJinxed || defender.isCritBlocked) return false;
-    final chance =
-        (attacker.morale * 0.001 - defender.speed * 0.0005).clamp(0.0, 0.30);
+    double moraleMult = 1.0;
+    for (final d in attacker.debuffs) {
+      if (d.type == DebuffType.moraleDown) moraleMult -= d.value / 100.0;
+    }
+    for (final b in attacker.buffs) {
+      if (b.type == BuffType.moraleUp) moraleMult += b.value / 100.0;
+    }
+    final effectiveMorale = (attacker.morale * moraleMult.clamp(0.0, 3.0)).round();
+    final chance = (effectiveMorale * 0.001 - defender.speed * 0.0005).clamp(0.0, 0.30);
     return chance > 0 && _rng.nextDouble() < chance;
   }
 

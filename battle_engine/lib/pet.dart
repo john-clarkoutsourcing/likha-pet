@@ -97,7 +97,10 @@ class Pet {
   int get effectiveDefense {
     int upPct = 0, dnPct = 0;
     for (final b in buffs)   { if (b.type == BuffType.defenseUp)     upPct += b.value; }
-    for (final d in debuffs) { if (d.type == DebuffType.defenseDown) dnPct += d.value; }
+    for (final d in debuffs) {
+      if (d.type == DebuffType.defenseDown) dnPct += d.value;
+      if (d.type == DebuffType.fragile)     dnPct += 25; // fragile = flat −25%
+    }
     final net = upPct - dnPct;
     if (net == 0) return kBaseDefense;
     return (kBaseDefense * (1.0 + net / 100.0)).round().clamp(0, 999);
@@ -113,7 +116,11 @@ class Pet {
     return (speed * (1.0 + net / 100.0)).round().clamp(1, 999);
   }
 
-  bool get isStunned  => debuffs.any((d) => d.type == DebuffType.stunned);
+  bool get isStunned       => debuffs.any((d) => d.type == DebuffType.stunned);
+  bool get isLethalTarget  => debuffs.any((d) => d.type == DebuffType.lethal);
+  bool get isFragile       => debuffs.any((d) => d.type == DebuffType.fragile);
+  bool get isMoraleDebuffed=> debuffs.any((d) => d.type == DebuffType.moraleDown);
+  bool get isMoraleBuffed  => buffs.any((b)  => b.type  == BuffType.moraleUp);
   bool get isPoisoned => debuffs.any((d) => d.type == DebuffType.poisoned);
   bool get isBurned   => debuffs.any((d) => d.type == DebuffType.burned);
   bool get isAsleep   => debuffs.any((d) => d.type == DebuffType.sleep);
@@ -265,7 +272,9 @@ class Pet {
     final actual = remaining.clamp(0, 999);
     hp -= actual;
     if (hp <= 0) {
-      if ((!ignoreLastStand && canEnterLastStand) || forceLastStand) {
+      // lethal debuff: target bypasses Last Stand (treated same as ignoreLastStand).
+      final hasLethal = debuffs.any((d) => d.type == DebuffType.lethal);
+      if ((!ignoreLastStand && canEnterLastStand && !hasLethal) || forceLastStand) {
         hp = 1;
         lastStandTicks = _computeLastStandTicks();
       } else {

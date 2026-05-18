@@ -267,6 +267,7 @@ class TraitSystem {
         BuffType.attackUp => 'Raise Attack +${e.value}',
         BuffType.defenseUp => 'Raise Defense +${e.value}',
         BuffType.speedUp => 'Raise Speed +${e.value}',
+        BuffType.moraleUp => 'Morale Up (higher crit chance)',
         BuffType.energized => 'Gain +${e.value} bonus energy/round',
         BuffType.regen => 'Regenerate ${e.value} HP/round',
         null => 'Apply buff +${e.value}',
@@ -291,6 +292,9 @@ class TraitSystem {
         DebuffType.stench => 'Inflict Stench (${e.duration} rounds)',
         DebuffType.speedDown => 'Reduce Speed (acts last 1 round)',
         DebuffType.isolate => 'Isolate (cannot target allies)',
+        DebuffType.moraleDown => 'Morale Down (lower crit chance)',
+        DebuffType.fragile => 'Fragile (−25% effective defense)',
+        DebuffType.lethal => 'Lethal (bypasses Last Stand)',
         null => 'Apply debuff −${e.value}',
       };
 }

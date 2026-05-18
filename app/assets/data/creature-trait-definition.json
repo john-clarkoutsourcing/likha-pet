@@ -1,0 +1,1196 @@
+{
+  "plant_cards": {
+    "mouth": [
+      {
+        "part_name": "Serious",
+        "card_name": "Vegetal Bite",
+        "energy": 1,
+        "attack": 30,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Steal 1 energy from your opponent when comboed with another card."
+      },
+      {
+        "part_name": "Zigzag",
+        "card_name": "Drain Bite",
+        "energy": 1,
+        "attack": 60,
+        "defense": 60,
+        "type": "melee",
+        "effect": "Heal this Axie by the damage inflicted by this card."
+      },
+      {
+        "part_name": "Herbivore",
+        "card_name": "Vegan Diet",
+        "energy": 1,
+        "attack": 65,
+        "defense": 65,
+        "type": "melee",
+        "effect": "Heal this Axie by the damage inflicted when attacking a Plant target."
+      },
+      {
+        "part_name": "Silence Whisper",
+        "card_name": "Forest Spirit",
+        "energy": 1,
+        "attack": 0,
+        "defense": 40,
+        "type": "support",
+        "effect": "Heal front teammate for 190 HP."
+      }
+    ],
+    "horn": [
+      {
+        "part_name": "Cactus",
+        "card_name": "Prickly Trap",
+        "energy": 1,
+        "attack": 115,
+        "defense": 20,
+        "type": "melee",
+        "effect": "Deals 120% damage if this Axie attacks last."
+      },
+      {
+        "part_name": "Beech",
+        "card_name": "Wooden Stab",
+        "energy": 1,
+        "attack": 105,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Deals 120% damage if this Axie's shield breaks."
+      },
+      {
+        "part_name": "Rose Bud",
+        "card_name": "Healing Fragrance",
+        "energy": 1,
+        "attack": 0,
+        "defense": 40,
+        "type": "support",
+        "effect": "Heal this Axie for 120 HP."
+      },
+      {
+        "part_name": "Watermelon",
+        "card_name": "Heartbreak",
+        "energy": 1,
+        "attack": 30,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Apply Morale- to enemy for 2 rounds."
+      }
+    ],
+    "back": [
+      {
+        "part_name": "Pumpkin",
+        "card_name": "October Treat",
+        "energy": 1,
+        "attack": 0,
+        "defense": 115,
+        "type": "support",
+        "effect": "Draw a card if this Axie's shield doesn't break this round."
+      },
+      {
+        "part_name": "Bidens",
+        "card_name": "Cleanse Scent",
+        "energy": 0,
+        "attack": 0,
+        "defense": 50,
+        "type": "support",
+        "effect": "Remove all debuffs from this Axie."
+      },
+      {
+        "part_name": "Shiitake",
+        "card_name": "Shroom Spite",
+        "energy": 1,
+        "attack": 35,
+        "defense": 40,
+        "type": "support",
+        "effect": "Heal this Axie for 240 HP."
+      },
+      {
+        "part_name": "Turnip",
+        "card_name": "Turnip Rocket",
+        "energy": 1,
+        "attack": 60,
+        "defense": 80,
+        "type": "ranged",
+        "effect": "Target a Bird class enemy if comboed with 2 or more cards."
+      }
+    ],
+    "tail": [
+      {
+        "part_name": "Carrot",
+        "card_name": "Carrot Hammer",
+        "energy": 1,
+        "attack": 70,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Gain 1 energy if this Axie's shield breaks. Max once per round."
+      },
+      {
+        "part_name": "Cattail",
+        "card_name": "Cattail Slap",
+        "energy": 0,
+        "attack": 20,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Draw a card when struck by a Beast or Bug card."
+      },
+      {
+        "part_name": "Hatchet",
+        "card_name": "Spicy Surprise",
+        "energy": 1,
+        "attack": 80,
+        "defense": 60,
+        "type": "melee",
+        "effect": "Disable target's mouth cards next round."
+      },
+      {
+        "part_name": "Yam",
+        "card_name": "Gas Unleash",
+        "energy": 1,
+        "attack": 30,
+        "defense": 20,
+        "type": "ranged",
+        "effect": "Apply Poison for 2 rounds when attacking or defending."
+      }
+    ]
+  },
+  "beast_cards": {
+    "mouth": [
+      {
+        "part_name": "Nut Cracker",
+        "card_name": "Nut Crack",
+        "energy": 1,
+        "attack": 105,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Deals 120% damage when comboed with another 'Nut Cracker' card."
+      },
+      {
+        "part_name": "Goda",
+        "card_name": "Piercing Sound",
+        "energy": 1,
+        "attack": 85,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Destroy 1 of your opponent's energy."
+      },
+      {
+        "part_name": "Axie Kiss",
+        "card_name": "Death Mark",
+        "energy": 1,
+        "attack": 100,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Apply Lethal to target if this Axie's HP is below 50%."
+      },
+      {
+        "part_name": "Confident",
+        "card_name": "Self-Overcome",
+        "energy": 0,
+        "attack": 0,
+        "defense": 40,
+        "type": "support",
+        "effect": "Purge debuffs from this Axie. Apply Morale+ for 2 rounds."
+      }
+    ],
+    "horn": [
+      {
+        "part_name": "Imp",
+        "card_name": "Ivory Stab",
+        "energy": 1,
+        "attack": 70,
+        "defense": 20,
+        "type": "melee",
+        "effect": "Gain 1 energy per critical strike dealt by your team this round."
+      },
+      {
+        "part_name": "Ronin",
+        "card_name": "Single Combat",
+        "energy": 1,
+        "attack": 80,
+        "defense": 20,
+        "type": "melee",
+        "effect": "Guaranteed critical strike when comboed with at least 2 other cards."
+      },
+      {
+        "part_name": "Little Branch",
+        "card_name": "Branch Charge",
+        "energy": 1,
+        "attack": 100,
+        "defense": 0,
+        "type": "melee",
+        "effect": "Increase critical strike chance by 20% when chained or comboed with a Plant card."
+      },
+      {
+        "part_name": "Dual Blade",
+        "card_name": "Sinister Strike",
+        "energy": 1,
+        "attack": 130,
+        "defense": 20,
+        "type": "melee",
+        "effect": "Deals 200% damage on critical strikes."
+      },
+      {
+        "part_name": "Pliers",
+        "card_name": "Dull Grip",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Deals 115% damage when attacking shielded targets."
+      },
+      {
+        "part_name": "Arco",
+        "card_name": "Acrobatic",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Apply Speed+ to this Axie for 2 rounds when comboed with another card."
+      }
+    ],
+    "back": [
+      {
+        "part_name": "Risky Beast",
+        "card_name": "Revenge Arrow",
+        "energy": 1,
+        "attack": 120,
+        "defense": 25,
+        "type": "ranged",
+        "effect": "Deals 150% damage when in Last Stand."
+      },
+      {
+        "part_name": "Hero",
+        "card_name": "Heroic Reward",
+        "energy": 0,
+        "attack": 55,
+        "defense": 0,
+        "type": "melee",
+        "effect": "Draw a card when attacking an Aquatic, Bird, or Dawn target."
+      },
+      {
+        "part_name": "Jaguar",
+        "card_name": "Nitro Leap",
+        "energy": 1,
+        "attack": 120,
+        "defense": 35,
+        "type": "melee",
+        "effect": "Always attack first if this Axie is in Last Stand."
+      },
+      {
+        "part_name": "Timber",
+        "card_name": "Woodman Power",
+        "energy": 1,
+        "attack": 80,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Add shield equal to damage dealt by this card."
+      },
+      {
+        "part_name": "Furball",
+        "card_name": "Juggling Balls",
+        "energy": 1,
+        "attack": 40,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Strikes 3 times."
+      },
+      {
+        "part_name": "Hamster",
+        "card_name": "Sugar Rush",
+        "energy": 1,
+        "attack": 120,
+        "defense": 20,
+        "type": "melee",
+        "effect": "Deal 10% additional damage for each allied Bug Axie."
+      }
+    ],
+    "tail": [
+      {
+        "part_name": "Nut Cracker",
+        "card_name": "Nut Throw",
+        "energy": 1,
+        "attack": 105,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Deals 120% damage when comboed with another 'Nut Cracker' card."
+      },
+      {
+        "part_name": "Cottontail",
+        "card_name": "Luna Absorb",
+        "energy": 0,
+        "attack": 0,
+        "defense": 0,
+        "type": "support",
+        "effect": "Gain 1 energy."
+      },
+      {
+        "part_name": "Rice",
+        "card_name": "Night Steal",
+        "energy": 1,
+        "attack": 80,
+        "defense": 10,
+        "type": "melee",
+        "effect": "Steal 1 energy from your opponent when comboed with another card."
+      },
+      {
+        "part_name": "Shiba",
+        "card_name": "Rampant Howl",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Guaranteed Last Stand if killed this round when comboed with another 3 cards."
+      },
+      {
+        "part_name": "Hare",
+        "card_name": "Hare Dagger",
+        "energy": 1,
+        "attack": 115,
+        "defense": 20,
+        "type": "ranged",
+        "effect": "Draw a card if this Axie attacks at the beginning of the round."
+      },
+      {
+        "part_name": "Gerbil",
+        "card_name": "Gerbil Jump",
+        "energy": 1,
+        "attack": 50,
+        "defense": 25,
+        "type": "ranged",
+        "effect": "Skip the closest target if there are 2 or more enemies remaining."
+      }
+    ]
+  },
+  "aquatic_cards": {
+    "mouth": [
+      {
+        "part_name": "Risky Fish",
+        "card_name": "Fish Hook",
+        "energy": 1,
+        "attack": 120,
+        "defense": 25,
+        "type": "melee",
+        "effect": "Apply Attack+ to this Axie when attacking Plant, Reptile, or Dusk targets."
+      },
+      {
+        "part_name": "Catfish",
+        "card_name": "Swallow",
+        "energy": 1,
+        "attack": 90,
+        "defense": 25,
+        "type": "melee",
+        "effect": "Heal this Axie by the damage inflicted with this card."
+      },
+      {
+        "part_name": "Lam",
+        "card_name": "Angry Lam",
+        "energy": 1,
+        "attack": 110,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Deal 120% damage if this Axie's HP is below 50%."
+      },
+      {
+        "part_name": "Piranha",
+        "card_name": "Crimson Water",
+        "energy": 1,
+        "attack": 120,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Target injured enemy if this Axie's HP is below 50%."
+      }
+    ],
+    "horn": [
+      {
+        "part_name": "Shoal Star",
+        "card_name": "Star Shuriken",
+        "energy": 1,
+        "attack": 115,
+        "defense": 15,
+        "type": "ranged",
+        "effect": "Target cannot enter Last Stand if this card brings its HP to zero."
+      },
+      {
+        "part_name": "Oranda",
+        "card_name": "Hero's Bane",
+        "energy": 1,
+        "attack": 125,
+        "defense": 20,
+        "type": "ranged",
+        "effect": "End target's Last Stand state automatically."
+      },
+      {
+        "part_name": "Clamshell",
+        "card_name": "Clam Slash",
+        "energy": 1,
+        "attack": 115,
+        "defense": 35,
+        "type": "melee",
+        "effect": "Apply Attack+ to this Axie when attacking Beast, Bug, or Mech targets."
+      },
+      {
+        "part_name": "Anemone",
+        "card_name": "Aqua Vitality",
+        "energy": 1,
+        "attack": 75,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Successful attacks restore 50 HP for each Anemone part this Axie possesses."
+      },
+      {
+        "part_name": "Babylonia",
+        "card_name": "Shell Jab",
+        "energy": 1,
+        "attack": 125,
+        "defense": 25,
+        "type": "melee",
+        "effect": "Deal 150% damage when attacking an idle target."
+      },
+      {
+        "part_name": "Teal Shell",
+        "card_name": "Deep Sea Shield",
+        "energy": 1,
+        "attack": 80,
+        "defense": 50,
+        "type": "melee",
+        "effect": "Apply Attack+ to this Axie if its shield breaks."
+      }
+    ],
+    "back": [
+      {
+        "part_name": "Goldfish",
+        "card_name": "Swift Escape",
+        "energy": 1,
+        "attack": 100,
+        "defense": 35,
+        "type": "melee",
+        "effect": "Apply Speed+ to this Axie for 2 rounds when attacked."
+      },
+      {
+        "part_name": "Sponge",
+        "card_name": "Shipwreck",
+        "energy": 1,
+        "attack": 85,
+        "defense": 60,
+        "type": "melee",
+        "effect": "Apply Attack+ to this Axie if its shield breaks. Can only trigger once per round."
+      },
+      {
+        "part_name": "Hermit",
+        "card_name": "Shelter",
+        "energy": 1,
+        "attack": 0,
+        "defense": 120,
+        "type": "melee",
+        "effect": "This Axie cannot receive critical strikes this round."
+      },
+      {
+        "part_name": "Blue Moon",
+        "card_name": "Scale Dart",
+        "energy": 1,
+        "attack": 100,
+        "defense": 35,
+        "type": "ranged",
+        "effect": "Draw a card when attacking an idle target."
+      },
+      {
+        "part_name": "Perch",
+        "card_name": "Spinal Tap",
+        "energy": 1,
+        "attack": 100,
+        "defense": 20,
+        "type": "melee",
+        "effect": "Prioritize idle target when comboed with at least 2 additional cards."
+      },
+      {
+        "part_name": "Anemone",
+        "card_name": "Aquaponics",
+        "energy": 1,
+        "attack": 75,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Successful attacks restore 50 HP for each Anemone part this Axie possesses."
+      }
+    ],
+    "tail": [
+      {
+        "part_name": "Koi",
+        "card_name": "Upstream Swim",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Apply Speed+ to this Axie for 2 rounds when comboed with another Aquatic card."
+      },
+      {
+        "part_name": "Nimo",
+        "card_name": "Tail Slap",
+        "energy": 0,
+        "attack": 30,
+        "defense": 0,
+        "type": "melee",
+        "effect": "Gain 1 energy when comboed with another card."
+      },
+      {
+        "part_name": "Tadpole",
+        "card_name": "Chomp",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Apply Jinx to target for 2 rounds if comboed with 2 other cards."
+      },
+      {
+        "part_name": "Navaga",
+        "card_name": "Flanking Smack",
+        "energy": 1,
+        "attack": 100,
+        "defense": 45,
+        "type": "melee",
+        "effect": "Deal 120% damage if this Axie attacks first."
+      },
+      {
+        "part_name": "Shrimp",
+        "card_name": "Chitin Jump",
+        "energy": 1,
+        "attack": 25,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Prioritizes furthest target."
+      },
+      {
+        "part_name": "Gila",
+        "card_name": "Neuro Toxin",
+        "energy": 1,
+        "attack": 100,
+        "defense": 55,
+        "type": "ranged",
+        "effect": "Apply Attack- to poisoned targets."
+      }
+    ]
+  },
+  "reptile_cards": {
+    "mouth": [
+      {
+        "part_name": "Toothless Bite",
+        "card_name": "Sneaky Raid",
+        "energy": 1,
+        "attack": 20,
+        "defense": 40,
+        "type": "ranged",
+        "effect": "Prioritize furthest target."
+      },
+      {
+        "part_name": "Kotaro",
+        "card_name": "Kotaro Bite",
+        "energy": 1,
+        "attack": 85,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Gain 1 energy if target is faster than this Axie."
+      },
+      {
+        "part_name": "Tiny Turtle",
+        "card_name": "Chomp",
+        "energy": 1,
+        "attack": 80,
+        "defense": 50,
+        "type": "melee",
+        "effect": "Apply Stun to target when comboed with at least 2 other cards."
+      },
+      {
+        "part_name": "Razor Bite",
+        "card_name": "Why So Serious",
+        "energy": 1,
+        "attack": 95,
+        "defense": 55,
+        "type": "melee",
+        "effect": "Heal this Axie by damage inflicted when attacking an Aquatic target."
+      }
+    ],
+    "horn": [
+      {
+        "part_name": "Uncashed Gore",
+        "card_name": "Bumpy",
+        "energy": 1,
+        "attack": 90,
+        "defense": 70,
+        "type": "melee",
+        "effect": "Apply 1 stack of Poison to attacker when struck by a melee card."
+      },
+      {
+        "part_name": "Bumpy",
+        "card_name": "Overgrow Keratin",
+        "energy": 1,
+        "attack": 90,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Recover 20 shield per strike if this Axie's shield is up."
+      },
+      {
+        "part_name": "Incisor",
+        "card_name": "Disarm",
+        "energy": 1,
+        "attack": 100,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Apply Speed- to target for 2 rounds."
+      },
+      {
+        "part_name": "Scaly Spoon",
+        "card_name": "Spiiky Wing",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Deals 120% damage when striking shields."
+      },
+      {
+        "part_name": "Cerastes",
+        "card_name": "Surprise Attack",
+        "energy": 1,
+        "attack": 90,
+        "defense": 60,
+        "type": "melee",
+        "effect": "Deal 130% damage if target is faster than this Axie."
+      },
+      {
+        "part_name": "Scaly Spear",
+        "card_name": "Spiiky Spear",
+        "energy": 1,
+        "attack": 110,
+        "defense": 35,
+        "type": "melee",
+        "effect": "Deal 120% damage when comboed with another 'Spiiky Spear' card."
+      }
+    ],
+    "back": [
+      {
+        "part_name": "Bone Sail",
+        "card_name": "Ivory Chop",
+        "energy": 1,
+        "attack": 80,
+        "defense": 80,
+        "type": "melee",
+        "effect": "Draw a card if this Axie's shield breaks."
+      },
+      {
+        "part_name": "Tri Spikes",
+        "card_name": "Spike Throw",
+        "energy": 1,
+        "attack": 80,
+        "defense": 50,
+        "type": "ranged",
+        "effect": "Target enemy with lowest shield when comboed with 2 or more cards."
+      },
+      {
+        "part_name": "Green Thorns",
+        "card_name": "Vine Dagger",
+        "energy": 0,
+        "attack": 20,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Gain 20 shield for each card played this round after this one."
+      },
+      {
+        "part_name": "Indian Star",
+        "card_name": "Bulwark",
+        "energy": 1,
+        "attack": 20,
+        "defense": 80,
+        "type": "melee",
+        "effect": "Reflect 40% of melee damage received back to the attacker."
+      },
+      {
+        "part_name": "Red Ear",
+        "card_name": "Slippery Shield",
+        "energy": 1,
+        "attack": 10,
+        "defense": 135,
+        "type": "melee",
+        "effect": "Add 15% of this Axie's shield to adjacent teammates."
+      },
+      {
+        "part_name": "Crocodilian",
+        "card_name": "Nile Strike",
+        "energy": 1,
+        "attack": 90,
+        "defense": 60,
+        "type": "ranged",
+        "effect": "Apply Speed- to target for 2 rounds."
+      }
+    ],
+    "tail": [
+      {
+        "part_name": "Wall Gecko",
+        "card_name": "Critical Escape",
+        "energy": 1,
+        "attack": 90,
+        "defense": 60,
+        "type": "melee",
+        "effect": "Reduce damage taken by 15% for the rest of this round."
+      },
+      {
+        "part_name": "Iguana",
+        "card_name": "Scale Dart",
+        "energy": 1,
+        "attack": 90,
+        "defense": 60,
+        "type": "ranged",
+        "effect": "Gain 1 energy when attacking an buffed target."
+      },
+      {
+        "part_name": "Tiny Dino",
+        "card_name": "Tiny Swing",
+        "energy": 1,
+        "attack": 80,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Deals 150% damage from round 4 onwards."
+      },
+      {
+        "part_name": "Snake Jar",
+        "card_name": "Jar Barrage",
+        "energy": 1,
+        "attack": 80,
+        "defense": 20,
+        "type": "ranged",
+        "effect": "Attacks that break this Axie's shield deal zero overflow damage. Max once per round."
+      },
+      {
+        "part_name": "Gila",
+        "card_name": "Neuro Toxin",
+        "energy": 1,
+        "attack": 100,
+        "defense": 55,
+        "type": "ranged",
+        "effect": "Apply Attack- to poisoned targets."
+      },
+      {
+        "part_name": "Thorny Caterpillar",
+        "card_name": "Allergic Reaction",
+        "energy": 1,
+        "attack": 105,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Deals 130% damage to targets with a debuff."
+      }
+    ]
+  },
+  "bird_cards": {
+    "mouth": [
+      {
+        "part_name": "Doubletalk",
+        "card_name": "Soothing Song",
+        "energy": 1,
+        "attack": 80,
+        "defense": 10,
+        "type": "ranged",
+        "effect": "Apply Sleep to target."
+      },
+      {
+        "part_name": "Peace Maker",
+        "card_name": "Peace Treaty",
+        "energy": 1,
+        "attack": 120,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Apply Attack- to target for 2 rounds."
+      },
+      {
+        "part_name": "Little Owl",
+        "card_name": "Dark Swoop",
+        "energy": 1,
+        "attack": 25,
+        "defense": 0,
+        "type": "melee",
+        "effect": "Target fastest enemy."
+      },
+      {
+        "part_name": "Hungry Bird",
+        "card_name": "Insectivore",
+        "energy": 1,
+        "attack": 110,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Target Bug class enemy if this Axie's HP is below 50%."
+      }
+    ],
+    "horn": [
+      {
+        "part_name": "Eggshell",
+        "card_name": "Eggbomb",
+        "energy": 1,
+        "attack": 120,
+        "defense": 0,
+        "type": "ranged",
+        "effect": "Apply Aroma to this Axie until next round."
+      },
+      {
+        "part_name": "Cuckoo",
+        "card_name": "Cockadoodle",
+        "energy": 0,
+        "attack": 0,
+        "defense": 40,
+        "type": "support",
+        "effect": "Apply Attack+ to this Axie."
+      },
+      {
+        "part_name": "Cupid",
+        "card_name": "Heart Break",
+        "energy": 1,
+        "attack": 120,
+        "defense": 20,
+        "type": "ranged",
+        "effect": "Apply Chill for 4 rounds."
+      },
+      {
+        "part_name": "Kestrel",
+        "card_name": "Ill-omened",
+        "energy": 1,
+        "attack": 130,
+        "defense": 20,
+        "type": "ranged",
+        "effect": "Apply Jinx to target for 2 rounds."
+      },
+      {
+        "part_name": "Feather Spear",
+        "card_name": "Feather Lunge",
+        "energy": 1,
+        "attack": 110,
+        "defense": 35,
+        "type": "melee",
+        "effect": "Deal 120% damage when comboed with another 'Feather Spear' card."
+      },
+      {
+        "part_name": "Spruce Spear",
+        "card_name": "Black Feather",
+        "energy": 1,
+        "attack": 120,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Apply Morale- to target for 2 rounds."
+      }
+    ],
+    "back": [
+      {
+        "part_name": "Pigeon Post",
+        "card_name": "Blackmail",
+        "energy": 1,
+        "attack": 120,
+        "defense": 10,
+        "type": "ranged",
+        "effect": "Transfer all debuffs on this Axie to target."
+      },
+      {
+        "part_name": "Kingfisher",
+        "card_name": "Patient Hunter",
+        "energy": 1,
+        "attack": 130,
+        "defense": 10,
+        "type": "melee",
+        "effect": "Target Aquatic class enemy if this Axie's HP is below 50%."
+      },
+      {
+        "part_name": "Raven",
+        "card_name": "Ill-omened",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Apply Jinx to target for 2 rounds."
+      },
+      {
+        "part_name": "Bluebird",
+        "card_name": "Trident",
+        "energy": 1,
+        "attack": 110,
+        "defense": 10,
+        "type": "ranged",
+        "effect": "Apply Morale+ to team for 2 rounds if this Axie's HP is below 50%."
+      },
+      {
+        "part_name": "Tri Feather",
+        "card_name": "Triple Scratch",
+        "energy": 1,
+        "attack": 30,
+        "defense": 10,
+        "type": "ranged",
+        "effect": "Strike 3 times randomly."
+      },
+      {
+        "part_name": "Balloon",
+        "card_name": "Balloon Pop",
+        "energy": 0,
+        "attack": 40,
+        "defense": 0,
+        "type": "ranged",
+        "effect": "Apply Fear to target for 1 turn. Apply Fear to self for 1 turn."
+      }
+    ],
+    "tail": [
+      {
+        "part_name": "Swallow",
+        "card_name": "Early Bird",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Deal 120% damage if this Axie attacks first."
+      },
+      {
+        "part_name": "The Last One",
+        "card_name": "Risky Feather",
+        "energy": 1,
+        "attack": 150,
+        "defense": 0,
+        "type": "ranged",
+        "effect": "Apply 2 stacks of Attack- to this Axie."
+      },
+      {
+        "part_name": "Cloud",
+        "card_name": "Puffy Fight",
+        "energy": 1,
+        "attack": 110,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Skip closest target if there are 2 or more enemies remaining."
+      },
+      {
+        "part_name": "Granma's Fan",
+        "card_name": "Cool Breeze",
+        "energy": 1,
+        "attack": 120,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Apply Chill to target for 2 rounds."
+      },
+      {
+        "part_name": "Post Fight",
+        "card_name": "All-out Shot",
+        "energy": 0,
+        "attack": 120,
+        "defense": 0,
+        "type": "ranged",
+        "effect": "Inflict damage to this Axie equal to 30% of its max HP."
+      },
+      {
+        "part_name": "Feather Fan",
+        "card_name": "Air Force One",
+        "energy": 1,
+        "attack": 120,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Deal 120% damage if comboed with another Bird card."
+      }
+    ]
+  },
+  "bug_cards": {
+    "mouth": [
+      {
+        "part_name": "Mosquito",
+        "card_name": "Blood Taste",
+        "energy": 1,
+        "attack": 70,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Heal this Axie by the damage inflicted with this card."
+      },
+      {
+        "part_name": "Pincer",
+        "card_name": "Dull Grip",
+        "energy": 1,
+        "attack": 20,
+        "defense": 0,
+        "type": "melee",
+        "effect": "Discard 1 random card from your opponent's hand."
+      },
+      {
+        "part_name": "Cute Bunny",
+        "card_name": "Terror Chomp",
+        "energy": 1,
+        "attack": 100,
+        "defense": 35,
+        "type": "melee",
+        "effect": "Apply Fear to target for 2 turns when played in a chain."
+      },
+      {
+        "part_name": "Square Teeth",
+        "card_name": "Mite Bite",
+        "energy": 0,
+        "attack": 30,
+        "defense": 0,
+        "type": "melee",
+        "effect": "Deals 200% damage when comboed with another Bug card."
+      }
+    ],
+    "horn": [
+      {
+        "part_name": "Lagging",
+        "card_name": "Mystic Rush",
+        "energy": 0,
+        "attack": 40,
+        "defense": 0,
+        "type": "melee",
+        "effect": "Apply Speed- to target for 2 rounds."
+      },
+      {
+        "part_name": "Antenna",
+        "card_name": "Bug Signal",
+        "energy": 1,
+        "attack": 80,
+        "defense": 60,
+        "type": "ranged",
+        "effect": "Steal 1 energy from your opponent when comboed with another 'Bug Signal' card."
+      },
+      {
+        "part_name": "Caterpillars",
+        "card_name": "Grub Surprise",
+        "energy": 1,
+        "attack": 100,
+        "defense": 50,
+        "type": "melee",
+        "effect": "Apply Fear to shielded targets."
+      },
+      {
+        "part_name": "Pliers",
+        "card_name": "Dull Grip",
+        "energy": 1,
+        "attack": 110,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Deals 115% damage when attacking shielded targets."
+      },
+      {
+        "part_name": "Parasite",
+        "card_name": "Third Glance",
+        "energy": 1,
+        "attack": 90,
+        "defense": 50,
+        "type": "melee",
+        "effect": "Discard 1 random card from your opponent's hand."
+      },
+      {
+        "part_name": "Leaf Bug",
+        "card_name": "Disguise",
+        "energy": 0,
+        "attack": 20,
+        "defense": 20,
+        "type": "melee",
+        "effect": "Gain 1 energy when comboed with a Plant card."
+      }
+    ],
+    "back": [
+      {
+        "part_name": "Snail Shell",
+        "card_name": "Sticky Sticky",
+        "energy": 1,
+        "attack": 40,
+        "defense": 60,
+        "type": "melee",
+        "effect": "Stun attacker when this Axie's shield breaks. Limits once per round."
+      },
+      {
+        "part_name": "Garish Worm",
+        "card_name": "Barb Strike",
+        "energy": 1,
+        "attack": 100,
+        "defense": 50,
+        "type": "ranged",
+        "effect": "Apply Poison to target when comboed with at least 2 other cards."
+      },
+      {
+        "part_name": "Buzz Buzz",
+        "card_name": "Bug Noise",
+        "energy": 1,
+        "attack": 110,
+        "defense": 40,
+        "type": "ranged",
+        "effect": "Apply Attack- to target."
+      },
+      {
+        "part_name": "Sandal",
+        "card_name": "Sunder",
+        "energy": 1,
+        "attack": 100,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Deals 150% damage when attacking shielded targets."
+      },
+      {
+        "part_name": "Scarab",
+        "card_name": "Scar Target",
+        "energy": 1,
+        "attack": 110,
+        "defense": 40,
+        "type": "ranged",
+        "effect": "Target cannot be healed for 2 rounds."
+      },
+      {
+        "part_name": "Spiky Wing",
+        "card_name": "Buzzing Wind",
+        "energy": 1,
+        "attack": 10,
+        "defense": 30,
+        "type": "ranged",
+        "effect": "Apply Fragile to target until next round."
+      }
+    ],
+    "tail": [
+      {
+        "part_name": "Fish Snack",
+        "card_name": "Anesthetic Bait",
+        "energy": 1,
+        "attack": 60,
+        "defense": 80,
+        "type": "melee",
+        "effect": "Apply Stun to attacker when struck by an Aquatic or Bird card. Triggers once per round."
+      },
+      {
+        "part_name": "Gravel Ant",
+        "card_name": "Numbing Lecretion",
+        "energy": 1,
+        "attack": 30,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Disable target's melee cards next round."
+      },
+      {
+        "part_name": "Pupae",
+        "card_name": "Grub Chop",
+        "energy": 1,
+        "attack": 80,
+        "defense": 40,
+        "type": "melee",
+        "effect": "Deals 150% damage when attacking an Axie in Last Stand."
+      },
+      {
+        "part_name": "Thorny Caterpillar",
+        "card_name": "Allergic Reaction",
+        "energy": 1,
+        "attack": 105,
+        "defense": 30,
+        "type": "melee",
+        "effect": "Deals 130% damage to targets with a debuff."
+      },
+      {
+        "part_name": "Twin Tail",
+        "card_name": "Twin Needle",
+        "energy": 0,
+        "attack": 30,
+        "defense": 0,
+        "type": "ranged",
+        "effect": "Attack twice when comboed with another card."
+      },
+      {
+        "part_name": "Ant",
+        "card_name": "Chemical Warfare",
+        "energy": 1,
+        "attack": 30,
+        "defense": 80,
+        "type": "melee",
+        "effect": "Apply Stench to target for 1 round."
+      }
+    ]
+  }
+}

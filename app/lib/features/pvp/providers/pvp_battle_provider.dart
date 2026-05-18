@@ -1034,6 +1034,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
               BuffType.attackUp => 'atk_up',
               BuffType.defenseUp => 'def_up',
               BuffType.speedUp => 'spd_up',
+              BuffType.moraleUp => 'morale_up',
               null => 'buff',
             },
           EffectType.debuff => switch (eff.debuffType) {
@@ -1053,6 +1054,10 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
               DebuffType.attackDown => 'atk_down',
               DebuffType.defenseDown => 'def_down',
               DebuffType.speedDown => 'spd_down',
+              DebuffType.isolate => 'isolate',
+              DebuffType.moraleDown => 'morale_down',
+              DebuffType.fragile => 'fragile',
+              DebuffType.lethal => 'lethal',
               null => 'debuff',
             },
         };

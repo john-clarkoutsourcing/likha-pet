@@ -80,26 +80,36 @@ enum TraitType { offensive, defensive, support, utility }
 
 enum EffectType { damage, shield, heal, buff, debuff, aoe, shieldBreak }
 
-enum BuffType { attackUp, defenseUp, speedUp, energized, regen }
+enum BuffType {
+  attackUp,   // +X% attack for N rounds (consumed on attack)
+  defenseUp,  // +X% defense for N rounds
+  speedUp,    // +X% speed for N rounds (affects turn order)
+  energized,  // +X bonus energy per round
+  regen,      // restore X HP per round
+  moraleUp,   // +X% morale → higher crit chance for N rounds
+}
 
 enum DebuffType {
-  attackDown,
-  defenseDown,
-  stunned,
-  poisoned,
-  burned,
-  sleep,
-  fear,
-  aroma,
-  chill,
-  jinx,
-  healBlocked,
-  critBlocked,
-  disabled,
-  reflect,
-  stench,
-  speedDown,
-  isolate
+  attackDown,   // −X% attack for N rounds
+  defenseDown,  // −X% defense for N rounds
+  stunned,      // skip next action (consumed on skip)
+  poisoned,     // lose X HP per action (stacks, ticks per card played)
+  burned,       // lose X HP per round (ticks at round start)
+  sleep,        // next hit ignores shield (removed on hit)
+  fear,         // skip next action (consumed on skip)
+  aroma,        // forced target for enemies
+  chill,        // cannot enter Last Stand
+  jinx,         // cannot deal critical hits
+  healBlocked,  // cannot receive healing
+  critBlocked,  // cannot be critically hit
+  disabled,     // next card is skipped (consumed on skip)
+  reflect,      // reflect X% of incoming damage to attacker
+  stench,       // enemies skip targeting this pet
+  speedDown,    // −X% speed for N rounds
+  isolate,      // cannot use ally-targeting cards this round
+  moraleDown,   // −X% morale → lower crit chance for N rounds
+  fragile,      // −25% defense (flat, for N rounds)
+  lethal,       // bypasses Last Stand when HP drops to zero
 }
 
 enum SkillRarity { common, rare, epic }
@@ -442,8 +452,37 @@ class TraitLibrary {
         );
       case 'aquatic-back-04':
         return trait.copyWith(tags: [...trait.tags, 'draw_if_attack_idle_target']);
+      case 'aquatic-back-06':
+        // Swift Escape: gain Speed+ when struck (reaction hook).
+        return trait.copyWith(tags: [...trait.tags, 'self_speed_up_on_hit']);
       case 'aquatic-back-08':
         return trait.copyWith(tags: [...trait.tags, 'on_shield_break_attack_up']);
+      case 'aquatic-mouth-08':
+        // Fish Hook: deal damage AND apply Attack+ to self when hitting a
+        // Plant or Reptile target. Base aquaticMouth has lifeSteal=true
+        // (inherited from Swallow/04) — override to remove it.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.damage,
+            value: trait.effect.value,          // 120 from spec
+            target: trait.effect.target,        // 'enemy'
+            selfShield: trait.effect.selfShield, // 25 from spec
+            lifeSteal: false,                   // Fish Hook has no lifesteal
+          ),
+          tags: [...trait.tags, 'self_atk_up_vs_plant_reptile'],
+        );
+      case 'aquatic-horn-06':
+        // Clam Slash: gain Attack+ when hitting Beast or Bug.
+        return trait.copyWith(tags: [...trait.tags, 'self_atk_up_vs_beast_bug']);
+      case 'aquatic-mouth-02':
+        // Angry Lam: deal 120% damage when actor HP ≤ 50%.
+        return trait.copyWith(tags: [...trait.tags, 'bonus_if_low_hp']);
+      case 'aquatic-mouth-10':
+        // Crimson Water: redirect to lowest-HP enemy when actor HP ≤ 50%.
+        return trait.copyWith(tags: [...trait.tags, 'target_injured_if_low_hp']);
+      case 'aquatic-tail-04':
+        // Tail Slap: gain 1 energy when comboed (not unconditionally).
+        return trait.copyWith(tags: [...trait.tags, 'energy_gain_on_combo']);
       case 'aquatic-horn-10':
         return trait.copyWith(tags: [...trait.tags, 'end_last_stand']);
       case 'aquatic-horn-12':
@@ -469,7 +508,9 @@ class TraitLibrary {
           ),
         );
       case 'beast-back-02':
-        return trait.copyWith(tags: [...trait.tags, 'crit_if_first']);
+        // Single Combat: guaranteed crit when played as 3rd+ card in combo.
+        // Was wrongly 'crit_if_first' (fires on 1st card — opposite of intent).
+        return trait.copyWith(tags: [...trait.tags, 'crit_on_combo_3']);
       case 'beast-back-04':
         return trait.copyWith(tags: [...trait.tags, 'draw_if_attack_aqua_bird_dawn']);
       case 'beast-back-06':
@@ -477,7 +518,9 @@ class TraitLibrary {
       case 'beast-back-08':
         return trait.copyWith(tags: [...trait.tags, 'double_damage_last_stand']);
       case 'beast-back-10':
-        return trait.copyWith(tags: [...trait.tags, 'counter_stun_plant_reptile']);
+        // Woodman Power: shield actor by actual damage dealt.
+        // Was 'counter_stun_plant_reptile' — completely wrong mechanic.
+        return trait.copyWith(tags: [...trait.tags, 'shield_equal_to_damage']);
       case 'beast-back-12':
         return trait.copyWith(tags: [...trait.tags, 'multi_hit_3']);
       case 'beast-horn-02':
@@ -489,7 +532,25 @@ class TraitLibrary {
       case 'beast-horn-10':
         return trait.copyWith(tags: [...trait.tags, 'double_crit_damage']);
       case 'beast-horn-12':
-        return trait.copyWith(tags: [...trait.tags, 'self_speed_up']);
+        // Acrobatic: Speed+ when comboed (not unconditionally).
+        // 'self_speed_up' had no handler — renamed to 'self_speed_up_on_combo'.
+        return trait.copyWith(tags: [...trait.tags, 'self_speed_up_on_combo']);
+      case 'beast-mouth-08':
+        // Death Mark: apply Lethal status to target when actor HP ≤ 50%.
+        return trait.copyWith(tags: [...trait.tags, 'apply_lethal_if_low_hp']);
+      case 'beast-tail-04':
+        // Night Steal: steal energy ONLY when comboed (not unconditionally).
+        // Base beastTail has energySteal=true — override to remove it.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.damage,
+            value: trait.effect.value,
+            target: trait.effect.target,
+            selfShield: trait.effect.selfShield,
+            energySteal: false,
+          ),
+          tags: [...trait.tags, 'energy_steal_on_combo'],
+        );
       case 'beast-tail-06':
         return trait.copyWith(tags: [...trait.tags, 'force_last_stand_if_killed']);
       case 'beast-tail-08':
@@ -571,6 +632,24 @@ class TraitLibrary {
             target: 'enemy',
           ),
         );
+      case 'bird-back-10':
+        // Patient Hunter: prefer Aquatic targets when actor HP ≤ 50%.
+        return trait.copyWith(tags: [...trait.tags, 'target_aquatic_if_low_hp']);
+      case 'bird-horn-04':
+        // Cockadoodle: Attack+ to THIS Axie only (not whole team).
+        // Base birdHorn buffs all_allies — override to self only.
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.buff,
+            value: 20,
+            buffType: BuffType.attackUp,
+            duration: 1,
+            target: 'self',
+          ),
+        );
+      case 'bird-mouth-08':
+        // Insectivore: prefer Bug targets when actor HP ≤ 50%.
+        return trait.copyWith(tags: [...trait.tags, 'target_bug_if_low_hp']);
       case 'bird-tail-08':
         return trait.copyWith(tags: [...trait.tags, 'skip_targets_in_last_stand']);
       case 'bug-back-02':
@@ -609,6 +688,20 @@ class TraitLibrary {
             target: 'enemy',
           ),
         );
+      case 'bug-back-12':
+        // Buzzing Wind: apply Fragile (−25% defense) to the enemy for 2 rounds.
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 25,
+            debuffType: DebuffType.fragile,
+            duration: 2,
+            target: 'enemy',
+          ),
+        );
+      case 'bug-horn-06':
+        // Grub Surprise: apply Fear to shielded targets.
+        return trait.copyWith(tags: [...trait.tags, 'apply_fear_if_shielded']);
       case 'bug-tail-02':
         return trait.copyWith(
           effect: const TraitEffect(
@@ -628,14 +721,13 @@ class TraitLibrary {
       case 'bug-tail-12':
         return trait.copyWith(tags: [...trait.tags, 'bonus_damage_if_debuffed']);
       case 'plant-back-04':
-        // Shroom's Grace: heal self 120 HP. Base plantBack is a shield type so
-        // _effectFromClassic produced shield(50) — override to the correct heal.
+        // Shroom Spite: heal self 240 HP. Base plantBack is shield type.
         return trait.copyWith(
           effect: TraitEffect(
             type: EffectType.heal,
-            value: 120,
+            value: 240,
             target: 'self',
-            selfShield: trait.effect.value, // spec defense=50, stored as shield value
+            selfShield: trait.effect.value, // spec defense stored as shield value
           ),
         );
       case 'plant-back-06':
@@ -666,13 +758,38 @@ class TraitLibrary {
             selfShield: trait.effect.selfShield, // 40 from spec
           ),
         );
+      case 'plant-mouth-02':
+        // Vegetal Bite: steal energy ONLY when comboed (not unconditionally).
+        // Base plantMouthVegetalBite has energySteal=true — override to remove it.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.damage,
+            value: trait.effect.value,
+            target: trait.effect.target,
+            selfShield: trait.effect.selfShield,
+            energySteal: false,
+          ),
+          tags: [...trait.tags, 'energy_steal_on_combo'],
+        );
+      case 'plant-mouth-08':
+        // Vegan Diet: lifesteal ONLY when attacking Plant targets (not always).
+        // Base plantMouth has lifeSteal=true — override to remove it.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.damage,
+            value: trait.effect.value,
+            target: trait.effect.target,
+            selfShield: trait.effect.selfShield,
+            lifeSteal: false,
+          ),
+          tags: [...trait.tags, 'lifesteal_vs_plant'],
+        );
       case 'plant-mouth-10':
-        // Forest Spirit: heal frontline ally for 120 HP.
-        // Base plantMouth is damage+lifesteal so _effectFromClassic produced wrong effect.
+        // Forest Spirit: heal frontline ally for 190 HP (was 120).
         return trait.copyWith(
           effect: TraitEffect(
             type: EffectType.heal,
-            value: 120,
+            value: 190,
             target: 'front_ally',
             selfShield: trait.effect.selfShield, // 40 from spec
           ),
@@ -702,6 +819,16 @@ class TraitLibrary {
         );
       case 'reptile-back-10':
         return trait.copyWith(tags: [...trait.tags, 'shield_when_hit']);
+      case 'reptile-horn-06':
+        // Surprise Invasion: deal 130% damage when target is faster than actor.
+        return trait.copyWith(tags: [...trait.tags, 'bonus_if_target_faster']);
+      case 'reptile-mouth-08':
+        // Why So Serious: lifesteal ONLY when attacking Aquatic targets.
+        // Base reptileMouth has no lifesteal — just add the conditional tag.
+        return trait.copyWith(tags: [...trait.tags, 'lifesteal_vs_aquatic']);
+      case 'reptile-tail-04':
+        // Scale Dart (reptile): gain 1 energy when attacking a buffed target.
+        return trait.copyWith(tags: [...trait.tags, 'energy_gain_vs_buffed']);
       case 'reptile-back-02':
         return trait.copyWith(tags: [...trait.tags, 'draw_if_shield_break']);
       case 'reptile-horn-08':
