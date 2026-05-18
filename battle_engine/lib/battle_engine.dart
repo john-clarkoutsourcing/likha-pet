@@ -137,6 +137,9 @@ class BattleEngine {
       _logger.phase('Action Phase');
       final resolver   = ActionResolver(_logger, rng: _rng);
       final ordered    = _turns.buildResolutionOrder(slotsA, slotsB);
+      final roundTraitsByPetId = {
+        for (final action in ordered) action.actor.id: action.trait,
+      };
       final comboCount = <String, int>{}; // petId → cards played this round
 
       for (final action in ordered) {
@@ -164,6 +167,7 @@ class BattleEngine {
           _teamOf(action.actor),
           _enemyTeamOf(action.actor),
           comboIndex: comboIndex,
+          roundTraitsByPetId: roundTraitsByPetId,
         );
       }
 

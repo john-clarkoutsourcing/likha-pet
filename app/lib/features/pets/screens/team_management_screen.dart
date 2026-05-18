@@ -26,12 +26,8 @@ Color _cls(CreatureClass c) => switch (c) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-bool _isActive(TeamComposition team, List<String> activeTeam) {
-  if (activeTeam.length != 3 || team.petUids.length != 3) return false;
-  return team.petUids[0] == activeTeam[0] &&
-      team.petUids[1] == activeTeam[1] &&
-      team.petUids[2] == activeTeam[2];
-}
+bool _isActive(TeamComposition team, String? activeTeamId) =>
+    activeTeamId != null && team.id == activeTeamId;
 
 int _teamPower(List<OwnedPet?> pets) {
   final valid = pets.whereType<OwnedPet>().toList();
@@ -54,8 +50,8 @@ class TeamManagementScreen extends ConsumerWidget {
     final player     = ref.watch(playerProvider);
     final teams      = List<TeamComposition>.from(player.savedTeams)
       ..sort((a, b) {
-        final aActive = _isActive(a, player.activeTeam) ? 0 : 1;
-        final bActive = _isActive(b, player.activeTeam) ? 0 : 1;
+        final aActive = _isActive(a, player.activeTeamId) ? 0 : 1;
+        final bActive = _isActive(b, player.activeTeamId) ? 0 : 1;
         return aActive.compareTo(bActive);
       });
     final canCreate  = player.roster.length >= 3;
@@ -94,7 +90,7 @@ class TeamManagementScreen extends ConsumerWidget {
                             const SizedBox(height: 12),
                         itemBuilder: (_, i) {
                           final team    = teams[i];
-                          final active  = _isActive(team, player.activeTeam);
+                          final active  = _isActive(team, player.activeTeamId);
                           final teamPets = team.petUids
                               .map((uid) => player.petById(uid))
                               .toList();

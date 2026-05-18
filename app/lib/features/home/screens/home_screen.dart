@@ -223,7 +223,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                 enemyTeamName: 'Rivals',
                               ),
                             )
-                        : () => context.push(Routes.roster),
+                        : () => context.push(Routes.teamManager),
                   ),
                   const Spacer(),
                   _TotemFooter(
@@ -286,8 +286,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildTeamFormation(PlayerData player, _HomeLayoutMetrics layout) {
-    final size = layout.contentSize;
-    final team = _resolveActiveTeam(player);
+    final size       = layout.contentSize;
+    final team       = _resolveActiveTeam(player);
+    final teamName   = player.activeComposition?.name;
     final leftRegionWidth =
         size.width - layout.totemWidth - layout.horizontalGap * 2;
     final maxHeight = size.height -
@@ -310,16 +311,103 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final leftTwo = layout.isMobile ? 0.24 : 0.24;
     final leftThree = layout.isMobile ? 0.49 : 0.47;
 
+    final nameFontSize = layout.isMobile ? 13.0 : 16.0;
+
     return Positioned(
       left: 0,
       bottom: layout.navRowHeight + layout.horizontalGap * 1.5,
       width: formationWidth,
       height: formationHeight,
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
+          // ── Active team name banner ─────────────────────────────────────
+          Positioned(
+            top: 0,
+            left: 8,
+            right: 0,
+            child: teamName != null
+                ? Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE85AA8).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFFE85AA8).withValues(alpha: 0.6),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFE85AA8).withValues(alpha: 0.25),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bolt_rounded,
+                                size: 11, color: Color(0xFFE85AA8)),
+                            const SizedBox(width: 4),
+                            Text(
+                              teamName,
+                              style: TextStyle(
+                                fontFamily: 'LilitaOne',
+                                color: const Color(0xFFFFBBDD),
+                                fontSize: nameFontSize,
+                                shadows: const [
+                                  Shadow(
+                                      color: Color(0xFF0A1224),
+                                      offset: Offset(-1, -1),
+                                      blurRadius: 1),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                : GestureDetector(
+                    onTap: () => context.push(Routes.teamManager),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4AC4D9).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF4AC4D9).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_rounded,
+                              size: 11,
+                              color: const Color(0xFF4AC4D9).withValues(alpha: 0.8)),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Set Active Team',
+                            style: TextStyle(
+                              fontFamily: 'Fredoka',
+                              color: const Color(0xFF7FE3F5).withValues(alpha: 0.7),
+                              fontSize: nameFontSize - 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
+          // ── Pet actors ──────────────────────────────────────────────────
           _PetActor(
             pet: team[0],
             label: 'FRONT',
+            positionLabel: 'FRONT',
+            positionColor: const Color(0xFFFF5252),
             size: baseSize * 0.94,
             left: formationWidth * leftOne,
             bottom: formationHeight * 0.01,
@@ -329,6 +417,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _PetActor(
             pet: team[1],
             label: 'MID',
+            positionLabel: 'MID',
+            positionColor: const Color(0xFFFFD740),
             size: baseSize,
             left: formationWidth * leftTwo,
             bottom: formationHeight * 0.0,
@@ -339,6 +429,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _PetActor(
             pet: team[2],
             label: 'BACK',
+            positionLabel: 'BACK',
+            positionColor: const Color(0xFF69F0AE),
             size: baseSize * 0.94,
             left: formationWidth * leftThree,
             bottom: formationHeight * 0.01,
@@ -422,17 +514,30 @@ class _HomeLayoutMetrics {
 
   Size get contentSize => contentRect.size;
 
+  bool get isLandscape => contentSize.width >= contentSize.height;
+
   double get horizontalGap =>
       (contentSize.width * (isMobile ? 0.018 : 0.014)).clamp(8.0, 18.0);
 
-  double get totemWidth =>
-      (isMobile ? contentSize.width * 0.29 : contentSize.width * 0.22)
-          .clamp(isMobile ? 148.0 : 220.0, isMobile ? 188.0 : 360.0);
+  double get totemWidth {
+    if (isMobile && isLandscape) {
+      return (contentSize.width * 0.35).clamp(188.0, 260.0);
+    }
 
-  double get totemHeight => math.min(
-        contentSize.height * (isMobile ? 0.66 : 0.94),
-        contentSize.height,
-      );
+    return (isMobile ? contentSize.width * 0.31 : contentSize.width * 0.22)
+        .clamp(isMobile ? 156.0 : 220.0, isMobile ? 210.0 : 360.0);
+  }
+
+  double get totemHeight {
+    if (isMobile && isLandscape) {
+      return math.min(contentSize.height * 0.82, contentSize.height);
+    }
+
+    return math.min(
+      contentSize.height * (isMobile ? 0.70 : 0.94),
+      contentSize.height,
+    );
+  }
 
   double get navButtonSize =>
       (isMobile ? contentSize.width * 0.13 : contentSize.width * 0.078)
@@ -1073,6 +1178,8 @@ class _NavAssetButton extends StatelessWidget {
 class _PetActor extends StatelessWidget {
   final OwnedPet? pet;
   final String label;
+  final String positionLabel;
+  final Color  positionColor;
   final double size;
   final double left;
   final double bottom;
@@ -1083,6 +1190,8 @@ class _PetActor extends StatelessWidget {
   const _PetActor({
     required this.pet,
     required this.label,
+    required this.positionLabel,
+    required this.positionColor,
     required this.size,
     required this.left,
     required this.bottom,
@@ -1189,6 +1298,43 @@ class _PetActor extends StatelessWidget {
                       style: _displayStyle(fontSize: size * 0.09),
                     ),
                   ),
+                // ── Position label pill (FRONT / MID / BACK) ─────────────
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: size * 0.07,
+                        vertical:   size * 0.018,
+                      ),
+                      decoration: BoxDecoration(
+                        color: positionColor.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: positionColor.withValues(alpha: 0.65),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: positionColor.withValues(alpha: 0.30),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        positionLabel,
+                        style: TextStyle(
+                          fontFamily: 'LilitaOne',
+                          color: positionColor,
+                          fontSize: (size * 0.07).clamp(8.0, 13.0),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

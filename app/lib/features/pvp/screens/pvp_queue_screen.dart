@@ -5,7 +5,6 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../pets/models/owned_pet.dart';
 import '../../pets/providers/player_provider.dart';
-import '../models/pvp_message.dart';
 import '../providers/pvp_battle_provider.dart';
 import '../providers/pvp_queue_provider.dart';
 
@@ -21,7 +20,85 @@ class _PvpQueueScreenState extends ConsumerState<PvpQueueScreen> {
   Widget build(BuildContext context) {
     final queue      = ref.watch(pvpQueueProvider);
     final playerData = ref.watch(playerProvider);
-    final team       = playerData.activeRoster;
+
+    // ── Team requirement guard ────────────────────────────────────────────────
+    if (!playerData.hasFullTeam) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.groups_rounded,
+                      size: 64, color: Color(0xFF4AC4D9)),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Team Required',
+                    style: TextStyle(
+                      fontFamily: 'LilitaOne',
+                      color: Color(0xFFEAFBFF),
+                      fontSize: 24,
+                      shadows: [Shadow(color: Color(0xAA4AC4D9), blurRadius: 12)],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'You need a full team of 3 pets with\nFRONT / MID / BACK positions set\nbefore entering the PvP Arena.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Fredoka',
+                      color: Color(0xFFAAE8F5),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  GestureDetector(
+                    onTap: () => context.go(Routes.teamManager),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF4AC4D9), Color(0xFF2B8A9C)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: const Color(0xFF7FE3F5), width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF4AC4D9).withValues(alpha: 0.5),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        'Build a Team',
+                        style: TextStyle(
+                          fontFamily: 'LilitaOne',
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => context.pop(),
+                    child: const Text('Go Back',
+                        style: TextStyle(color: Colors.white38)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final team = playerData.activeRoster;
 
     // Navigate to battle when a match is found
     ref.listen(pvpQueueProvider, (prev, next) {
@@ -191,7 +268,7 @@ class _QueueSpinnerState extends State<_QueueSpinner> {
         : '${secs}s';
 
     return Column(children: [
-      const CircularProgressIndicator(color: const Color(0xFFEF5350)),
+      const CircularProgressIndicator(color: Color(0xFFEF5350)),
       const SizedBox(height: 16),
       Text('Searching for opponent…',
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 15)),

@@ -311,6 +311,12 @@ const Map<String, ClassicCardSpec> kClassicCardSpecs = {
       defense: 30,
       energy: 1,
       description: 'Apply Chill for 4 rounds.'),
+  'bird-back-05': ClassicCardSpec(
+      name: 'Heart Break II',
+      attack: 120,
+      defense: 30,
+      energy: 1,
+      description: 'Target cannot use ally-targeting cards this round when comboed with 2 other cards.'),
   'bird-back-06': ClassicCardSpec(
       name: 'Ill-omened',
       attack: 120,
@@ -323,6 +329,12 @@ const Map<String, ClassicCardSpec> kClassicCardSpecs = {
       defense: 30,
       energy: 1,
       description: 'Transfer all debuffs on this Axie to target.'),
+  'bird-back-09': ClassicCardSpec(
+      name: 'Blackmail II',
+      attack: 120,
+      defense: 15,
+      energy: 1,
+      description: 'Deal 20% extra damage to targets that have debuffs.'),
   'bird-back-10': ClassicCardSpec(
       name: 'Patient Hunter',
       attack: 130,
@@ -341,7 +353,7 @@ const Map<String, ClassicCardSpec> kClassicCardSpecs = {
       attack: 120,
       defense: 10,
       energy: 1,
-      description: 'Apply Aroma on this Axie until next round.'),
+      description: 'Apply Aroma to the target until the next round.'),
   'bird-horn-04': ClassicCardSpec(
       name: 'Cockadoodledoo',
       attack: 0,

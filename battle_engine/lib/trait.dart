@@ -98,7 +98,8 @@ enum DebuffType {
   disabled,
   reflect,
   stench,
-  speedDown
+  speedDown,
+  isolate
 }
 
 enum SkillRarity { common, rare, epic }
@@ -199,6 +200,38 @@ class Trait {
     return t;
   }
 
+  Trait copyWith({
+    String? id,
+    String? name,
+    TraitType? type,
+    TraitPart? part,
+    int? energyCost,
+    int? cooldownMax,
+    TraitEffect? effect,
+    String? description,
+    SkillRarity? rarity,
+    String? comboTag,
+    List<String>? tags,
+    CreatureClass? partClass,
+  }) {
+    final t = Trait(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      part: part ?? this.part,
+      energyCost: energyCost ?? this.energyCost,
+      cooldownMax: cooldownMax ?? this.cooldownMax,
+      effect: effect ?? this.effect,
+      description: description ?? this.description,
+      rarity: rarity ?? this.rarity,
+      comboTag: comboTag ?? this.comboTag,
+      tags: tags ?? this.tags,
+      partClass: partClass ?? this.partClass,
+    );
+    t.cooldownRemaining = cooldownRemaining;
+    return t;
+  }
+
   /// Returns a copy of this trait with [cls] set as the partClass.
   /// Called by PartDefinition.buildTrait() so each card knows its class.
   Trait withPartClass(CreatureClass cls) {
@@ -235,7 +268,7 @@ class TraitLibrary {
     final spec = kClassicCardSpecs[cardId];
     if (spec == null) return baseTrait;
 
-    return Trait(
+    final trait = Trait(
       id: traitId,
       name: spec.name,
       type: baseTrait.type,
@@ -249,6 +282,7 @@ class TraitLibrary {
       tags: baseTrait.tags,
       partClass: baseTrait.partClass,
     );
+    return _classicOverride(trait, cardId);
   }
 
   /// Fills numeric values from [spec] while preserving the semantic effect
@@ -284,6 +318,409 @@ class TraitLibrary {
       target: base.target,
       selfShield: spec.defense,
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CARD AUTHORING GUIDE — how to add a new card
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Every card in the game is built in three steps:
+  //
+  //  STEP 1 — Add the spec to classic_card_specs.dart
+  //  ─────────────────────────────────────────────────
+  //  Key format: '<class>-<part>-<NN>'   e.g. 'bird-back-05'
+  //  Values: name, attack, defense, energy, description.
+  //  The 'attack' value becomes damage (for damage cards) or is ignored.
+  //  The 'defense' value becomes selfShield (shield the actor gains after acting).
+  //
+  //  STEP 2 — Pick or create a base TraitLibrary getter
+  //  ──────────────────────────────────────────────────
+  //  The static getters (beastHorn, plantBack, birdBack, etc.) define the
+  //  PRIMARY EFFECT TYPE for all variants of a part slot.
+  //  e.g. all 'bird_back_*' cards start as damage → back_enemy.
+  //  If the PRIMARY EFFECT TYPE you need doesn't match any existing getter,
+  //  create a new static getter (see plantMouthVegetalBite as an example).
+  //
+  //  Base getters use:  EffectType.damage / heal / shield / buff / debuff
+  //  _effectFromClassic then fills in the numeric values from the spec.
+  //
+  //  STEP 3 — Add a case in _classicOverride (this method)
+  //  ──────────────────────────────────────────────────────
+  //  Use this to specialise a card beyond what its base getter provides.
+  //
+  //  RULE A — Change PRIMARY effect type:
+  //    Use trait.copyWith(effect: TraitEffect(...)) with the new type.
+  //    Required when the card does something fundamentally different from
+  //    its class default (e.g. Eggbomb is bird-back but deals damage, not buff).
+  //    Always use  TraitEffect(... selfShield: trait.effect.selfShield)
+  //    to preserve the spec's defense value — it is already computed.
+  //
+  //  RULE B — Add a TAG for a secondary/conditional behaviour:
+  //    Use trait.copyWith(tags: [...trait.tags, 'my_new_tag']).
+  //    Tags drive ADDITIONAL logic in ActionResolver on top of the primary effect.
+  //    Use a tag (not a new effect type) when:
+  //      • The card still does its normal damage/heal/shield AND also does X
+  //      • The extra behaviour is conditional (on combo count, on shield break, etc.)
+  //
+  //  RULE C — Change effect AND add a tag:
+  //    trait.copyWith(effect: TraitEffect(...), tags: [...trait.tags, 'tag'])
+  //    Needed when the primary effect must change AND extra behaviour exists.
+  //    Example: Eggbomb changes damage target AND adds target_aroma.
+  //
+  // ── TAG REFERENCE — all recognised tags ──────────────────────────────────
+  //
+  //  ATTACKER TAGS (checked against the card being played):
+  //
+  //  Crit / damage modifiers:
+  //    crit_if_first              Guaranteed crit when comboIndex == 0
+  //    double_crit_damage         Crits deal ×3 instead of ×2
+  //    double_damage_last_stand   Actor in last stand → ×2 damage
+  //    bonus_damage_if_debuffed   Target has debuffs → ×1.2 damage
+  //    bonus_damage_vs_bug        Target is Bug class → ×1.5 damage
+  //    multi_hit_3                Strike 3 times (each hit uses kMaxAoeDamagePerHit cap)
+  //    prevent_last_stand         Kill target outright — bypass last stand
+  //    force_last_stand_if_killed Force target into last stand instead of dying
+  //    end_last_stand             Finish a target already in last stand
+  //    skip_targets_in_last_stand Prefer non-last-stand targets
+  //
+  //  Card draw (attacker draws on condition):
+  //    draw_if_attack_first            comboIndex == 0
+  //    draw_if_attack_idle_target      target had no shield (shieldBefore == 0)
+  //    draw_if_attack_aqua_bird_dawn   target is Aquatic or Bird class
+  //    draw_if_shield_not_break        attack did NOT break target's shield
+  //    attacker_energy_on_shield_break attacker gains energy when shield breaks
+  //
+  //  Self-effects after attacking:
+  //    self_aroma                 Apply Aroma to self (any card type)
+  //    self_speed_up              Apply SpeedUp to self after hitting
+  //    energy_on_crit             Gain 1 energy on any crit
+  //    attack_first_if_last_stand Go first in turn order when any pet is in last stand
+  //
+  //  Enemy control after hit:
+  //    target_aroma               Apply Aroma to hit target (mark for focus)
+  //    isolated_on_combo_3        Apply Isolate to target when comboIndex >= 2
+  //    transfer_debuffs           Move all self-debuffs to target after hit
+  //
+  //  Misc:
+  //    cleanse                    Clear all actor debuffs before primary effect
+  //
+  //  DEFENDER TAGS (checked against the DEFENDER's played card via roundTraitsByPetId):
+  //  — These live in _applyShieldBreakReactions / _applyOnHitReactions —
+  //
+  //  On shield break (defender's shield is destroyed):
+  //    on_shield_break_attack_up         Self gets AttackUp
+  //    on_shield_break_energy            Self gains 1 energy
+  //    on_shield_break_stun_attacker     Stun the attacker unconditionally
+  //    counter_stun_plant_reptile        Stun attacker only if Plant or Reptile
+  //    counter_stun_aqua_bird            Stun attacker only if Aquatic or Bird
+  //    draw_if_shield_break              Draw a card
+  //
+  //  On being hit (any damage lands):
+  //    on_hit_energy_vs_aquatic          Gain energy if hit by Aquatic
+  //    draw_if_hit_by_beast_bug_mech     Draw card if hit by Beast, Bug, or Mech
+  //    draw_if_hit_shield_held           Draw if hit but shield not broken
+  //    shield_when_hit                   Gain 20 shield when struck
+  //    disable_horn_next                 Disable attacker's horn card next round
+  //    disable_ability                   Disable attacker's next card (generic)
+  //    disable_melee_next                Disable attacker's melee card next round
+  //    disable_mouth_next                Disable attacker's mouth card next round
+  //    reflect_ranged                    Apply Reflect 40% status to self
+  //    reflect_melee                     Apply Reflect 40% status to self
+  //
+  // ─────────────────────────────────────────────────────────────────────────
+  static Trait _classicOverride(Trait trait, String cardId) {
+    switch (cardId) {
+      case 'aquatic-back-02':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.critBlocked,
+            duration: 1,
+            target: 'self',
+          ),
+        );
+      case 'aquatic-back-04':
+        return trait.copyWith(tags: [...trait.tags, 'draw_if_attack_idle_target']);
+      case 'aquatic-back-08':
+        return trait.copyWith(tags: [...trait.tags, 'on_shield_break_attack_up']);
+      case 'aquatic-horn-10':
+        return trait.copyWith(tags: [...trait.tags, 'end_last_stand']);
+      case 'aquatic-horn-12':
+        return trait.copyWith(tags: [...trait.tags, 'prevent_last_stand']);
+      case 'aquatic-tail-06':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.jinx,
+            duration: 4,
+            target: 'enemy',
+          ),
+        );
+      case 'aquatic-tail-08':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.chill,
+            duration: 4,
+            target: 'enemy',
+          ),
+        );
+      case 'beast-back-02':
+        return trait.copyWith(tags: [...trait.tags, 'crit_if_first']);
+      case 'beast-back-04':
+        return trait.copyWith(tags: [...trait.tags, 'draw_if_attack_aqua_bird_dawn']);
+      case 'beast-back-06':
+        return trait.copyWith(tags: [...trait.tags, 'attack_first_if_last_stand']);
+      case 'beast-back-08':
+        return trait.copyWith(tags: [...trait.tags, 'double_damage_last_stand']);
+      case 'beast-back-10':
+        return trait.copyWith(tags: [...trait.tags, 'counter_stun_plant_reptile']);
+      case 'beast-back-12':
+        return trait.copyWith(tags: [...trait.tags, 'multi_hit_3']);
+      case 'beast-horn-02':
+        return trait.copyWith(tags: [...trait.tags, 'crit_if_first']);
+      case 'beast-horn-04':
+        return trait.copyWith(tags: [...trait.tags, 'energy_on_crit']);
+      case 'beast-horn-08':
+        return trait.copyWith(tags: [...trait.tags, 'self_aroma']);
+      case 'beast-horn-10':
+        return trait.copyWith(tags: [...trait.tags, 'double_crit_damage']);
+      case 'beast-horn-12':
+        return trait.copyWith(tags: [...trait.tags, 'self_speed_up']);
+      case 'beast-tail-06':
+        return trait.copyWith(tags: [...trait.tags, 'force_last_stand_if_killed']);
+      case 'beast-tail-08':
+        return trait.copyWith(tags: [...trait.tags, 'draw_if_attack_first']);
+      case 'bird-back-02':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.fear,
+            duration: 1,
+            target: 'enemy',
+          ),
+        );
+      case 'bird-back-04':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.chill,
+            duration: 4,
+            target: 'enemy',
+          ),
+        );
+      case 'bird-back-05':
+        return trait.copyWith(tags: [...trait.tags, 'isolated_on_combo_3']);
+      case 'bird-back-06':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.jinx,
+            duration: 4,
+            target: 'enemy',
+          ),
+        );
+      case 'bird-back-08':
+        // Blackmail: deal damage to back enemy + transfer ALL debuffs from self
+        // to target. Base birdBack already gives damage(120, back_enemy,
+        // selfShield=30) from _effectFromClassic, so only the tag is needed.
+        return trait.copyWith(tags: [...trait.tags, 'transfer_debuffs']);
+      case 'bird-back-09':
+        // Blackmail II: deal 20% bonus damage when the target has any debuffs.
+        // Base birdBack gives damage(120, back_enemy, selfShield=15) — tag only.
+        return trait.copyWith(tags: [...trait.tags, 'bonus_damage_if_debuffed']);
+      case 'bird-horn-02':
+        // Eggbomb: deal 120 damage to enemy AND apply Aroma to the TARGET.
+        // target_aroma marks the enemy so allies preferentially focus it.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.damage,
+            value: 120, // spec.attack for bird-horn-02
+            target: 'enemy',
+            selfShield: trait.effect.selfShield, // 10 from spec
+          ),
+          tags: [...trait.tags, 'target_aroma'],
+        );
+      case 'bird-horn-08':
+        return trait.copyWith(tags: [...trait.tags, 'disable_horn_next']);
+      case 'bird-mouth-10':
+        return trait.copyWith(tags: [...trait.tags, 'target_fastest_enemy']);
+      case 'bird-mouth-02':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.sleep,
+            duration: 1,
+            target: 'enemy',
+          ),
+        );
+      case 'bird-mouth-04':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 20,
+            debuffType: DebuffType.attackDown,
+            duration: 1,
+            target: 'enemy',
+          ),
+        );
+      case 'bird-tail-08':
+        return trait.copyWith(tags: [...trait.tags, 'skip_targets_in_last_stand']);
+      case 'bug-back-02':
+        // Primary: stun the enemy when played.
+        // Reaction: stun the attacker when this pet's shield is broken (Sticky Goo).
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.stunned,
+            duration: 1,
+            target: 'enemy',
+          ),
+          tags: [...trait.tags, 'on_shield_break_stun_attacker'],
+        );
+      case 'bug-back-08':
+        // Bug Splat: +50% damage vs Bug targets (was wrongly tagged reflect_ranged).
+        return trait.copyWith(tags: [...trait.tags, 'bonus_damage_vs_bug']);
+      case 'bug-back-04':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 1,
+            debuffType: DebuffType.poisoned,
+            duration: 2,
+            target: 'enemy',
+          ),
+        );
+      case 'bug-back-10':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.healBlocked,
+            duration: 2,
+            target: 'enemy',
+          ),
+        );
+      case 'bug-tail-02':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.stench,
+            duration: 3,
+            target: 'enemy',
+          ),
+        );
+      case 'bug-tail-06':
+        return trait.copyWith(tags: [...trait.tags, 'counter_stun_aqua_bird']);
+      case 'bug-tail-08':
+        return trait.copyWith(tags: [...trait.tags, 'disable_melee_next']);
+      case 'bug-tail-10':
+        return trait.copyWith(tags: [...trait.tags, 'force_last_stand_if_killed']);
+      case 'bug-tail-12':
+        return trait.copyWith(tags: [...trait.tags, 'bonus_damage_if_debuffed']);
+      case 'plant-back-04':
+        // Shroom's Grace: heal self 120 HP. Base plantBack is a shield type so
+        // _effectFromClassic produced shield(50) — override to the correct heal.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.heal,
+            value: 120,
+            target: 'self',
+            selfShield: trait.effect.value, // spec defense=50, stored as shield value
+          ),
+        );
+      case 'plant-back-06':
+        return trait.copyWith(tags: [...trait.tags, 'cleanse']);
+      case 'plant-back-08':
+        // Aqua Stock: energy from aquatic attacker hitting you, AND energy when your shield breaks.
+        return trait.copyWith(tags: [...trait.tags, 'on_hit_energy_vs_aquatic', 'on_shield_break_energy']);
+      case 'plant-back-12':
+        // October Treat: defender draws when attacked and their shield is NOT broken.
+        return trait.copyWith(tags: [...trait.tags, 'draw_if_hit_shield_held']);
+      case 'plant-tail-06':
+        return trait.copyWith(tags: [...trait.tags, 'disable_ability']);
+      case 'plant-tail-02':
+        // Carrot Hammer: ATTACKER gains energy when this card breaks the target's shield.
+        return trait.copyWith(tags: [...trait.tags, 'attacker_energy_on_shield_break']);
+      case 'plant-tail-04':
+        return trait.copyWith(tags: [...trait.tags, 'draw_if_hit_by_beast_bug_mech']);
+      case 'plant-tail-12':
+        return trait.copyWith(tags: [...trait.tags, 'disable_mouth_next']);
+      case 'plant-horn-08':
+        // Sweet Party: heal frontline ally for 270 HP.
+        // Base plantHorn is damage type so _effectFromClassic produced damage(0).
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.heal,
+            value: 270,
+            target: 'front_ally',
+            selfShield: trait.effect.selfShield, // 40 from spec
+          ),
+        );
+      case 'plant-mouth-10':
+        // Forest Spirit: heal frontline ally for 120 HP.
+        // Base plantMouth is damage+lifesteal so _effectFromClassic produced wrong effect.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.heal,
+            value: 120,
+            target: 'front_ally',
+            selfShield: trait.effect.selfShield, // 40 from spec
+          ),
+        );
+      case 'reptile-horn-02':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 0,
+            debuffType: DebuffType.stench,
+            duration: 3,
+            target: 'enemy',
+          ),
+        );
+      case 'reptile-back-08':
+        // Bulwark: apply Reflect (40%) to self for 2 rounds AND grant the spec's
+        // defense shield. The previous const TraitEffect dropped selfShield entirely.
+        return trait.copyWith(
+          effect: TraitEffect(
+            type: EffectType.debuff,
+            value: 40, // 40% reflect per card description (was wrong 30)
+            debuffType: DebuffType.reflect,
+            duration: 2,
+            target: 'self',
+            selfShield: trait.effect.selfShield, // 80 from spec — was being lost
+          ),
+        );
+      case 'reptile-back-10':
+        return trait.copyWith(tags: [...trait.tags, 'shield_when_hit']);
+      case 'reptile-back-02':
+        return trait.copyWith(tags: [...trait.tags, 'draw_if_shield_break']);
+      case 'reptile-horn-08':
+        return trait.copyWith(tags: [...trait.tags, 'reflect_ranged']);
+      case 'reptile-tail-08':
+        return trait.copyWith(tags: [...trait.tags, 'draw_if_shield_not_break']);
+      case 'reptile-tail-12':
+        return trait.copyWith(
+          effect: const TraitEffect(
+            type: EffectType.debuff,
+            value: 20,
+            debuffType: DebuffType.speedDown,
+            duration: 1,
+            target: 'enemy',
+          ),
+        );
+      default:
+        return trait;
+    }
   }
 
   /// Minimal skeleton trait — name/description/energyCost are placeholders
@@ -373,7 +810,7 @@ class TraitLibrary {
   // ── Bird ──────────────────────────────────────────────────────────────────
   static Trait get birdHorn => withClassicCardStats(
         baseTrait: _base(id: 'bird_horn', type: TraitType.support, part: TraitPart.horn,
-            effect: const TraitEffect(type: EffectType.buff, value: 20, buffType: BuffType.attackUp, duration: 1, target: 'self')),
+            effect: const TraitEffect(type: EffectType.buff, value: 20, buffType: BuffType.attackUp, duration: 1, target: 'all_allies')),
         traitId: 'bird_horn', cardId: 'bird-horn-04');
 
   static Trait get birdBack => withClassicCardStats(
@@ -438,8 +875,8 @@ class TraitLibrary {
 
   // ── Plant variant skills ──────────────────────────────────────────────────
   static Trait get plantHorn2 => withClassicCardStats(
-        baseTrait: _base(id: 'plant_horn_2', type: TraitType.defensive, part: TraitPart.horn,
-            effect: const TraitEffect(type: EffectType.buff, value: 0, buffType: BuffType.defenseUp, duration: 1, target: 'self')),
+        baseTrait: _base(id: 'plant_horn_2', type: TraitType.support, part: TraitPart.horn,
+            effect: const TraitEffect(type: EffectType.heal, value: 120, target: 'self')),
         traitId: 'plant_horn_2', cardId: 'plant-horn-06');
 
   static Trait get plantBack2 => withClassicCardStats(

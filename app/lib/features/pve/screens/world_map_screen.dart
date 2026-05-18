@@ -13,6 +13,84 @@ class WorldMapScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final player = ref.watch(playerProvider);
+
+    // ── Team requirement guard ────────────────────────────────────────────────
+    if (!player.hasFullTeam) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.map_rounded,
+                      size: 64, color: Color(0xFF4AC4D9)),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Team Required',
+                    style: TextStyle(
+                      fontFamily: 'LilitaOne',
+                      color: Color(0xFFEAFBFF),
+                      fontSize: 24,
+                      shadows: [Shadow(color: Color(0xAA4AC4D9), blurRadius: 12)],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Assign 3 pets to FRONT / MID / BACK\nbefore setting out on an Adventure.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Fredoka',
+                      color: Color(0xFFAAE8F5),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  GestureDetector(
+                    onTap: () => context.go(Routes.teamManager),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF4AC4D9), Color(0xFF2B8A9C)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: const Color(0xFF7FE3F5), width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF4AC4D9).withValues(alpha: 0.5),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        'Build a Team',
+                        style: TextStyle(
+                          fontFamily: 'LilitaOne',
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => context.pop(),
+                    child: const Text('Go Back',
+                        style: TextStyle(color: Colors.white38)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final completed = player.completedStages.length;
     final total     = kStageRegistry.length;
 

@@ -119,24 +119,35 @@ class _ScreenState extends ConsumerState<PetRosterIntegratedScreen> {
                           _searchCtrl.clear();
                         }),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount:    2,
-                          crossAxisSpacing:  12,
-                          mainAxisSpacing:   12,
-                          childAspectRatio:  0.62,
-                        ),
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) => _PetCard(
-                          pet:    filtered[i],
-                          phase:  (i * 0.7) % (2 * math.pi),
-                          onTap:  () => context.push(
-                            '/pet/${filtered[i].uid}',
-                          ),
-                          onRename: () => _showRename(context, filtered[i]),
-                        ),
+                    : LayoutBuilder(
+                        builder: (_, gridConstraints) {
+                          final w    = gridConstraints.maxWidth;
+                          final cols = w < 500  ? 2
+                                     : w < 800  ? 3
+                                     : w < 1100 ? 4
+                                     : 5;
+                          final gap  = cols >= 4 ? 8.0 : 10.0;
+                          return GridView.builder(
+                            padding: EdgeInsets.fromLTRB(16, 8, 16, 32),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount:   cols,
+                              crossAxisSpacing: gap,
+                              mainAxisSpacing:  gap,
+                              childAspectRatio: 0.80,
+                            ),
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) => _PetCard(
+                              pet:    filtered[i],
+                              phase:  (i * 0.7) % (2 * math.pi),
+                              onTap:  () => context.push(
+                                '/pet/${filtered[i].uid}',
+                              ),
+                              onRename: () =>
+                                  _showRename(context, filtered[i]),
+                            ),
+                          );
+                        },
                       ),
               ),
             ],
@@ -556,12 +567,22 @@ class _PetCardState extends State<_PetCard>
     final def    = pet.toCreatureDefinition();
     final stats  = def.computedStats;
 
-    return GestureDetector(
+    return LayoutBuilder(
+      builder: (_, cardConstraints) {
+        final cw = cardConstraints.maxWidth;
+        // Scale footer typography with card width
+        final nameFs   = cw < 140 ? 10.0 : cw < 180 ? 11.0 : 13.0;
+        final statFs   = cw < 140 ?  8.0 : 9.0;
+        final starFs   = cw < 140 ?  8.0 : cw < 180 ? 9.0 : 10.0;
+        final footPad  = cw < 140 ?  6.0 : 10.0;
+        final radius   = cw < 140 ? 10.0 : 16.0;
+
+        return GestureDetector(
       onTap: widget.onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -584,139 +605,141 @@ class _PetCardState extends State<_PetCard>
           children: [
             // ── Sprite area ─────────────────────────────────────────────────
             Expanded(
-              child: AnimatedBuilder(
-                animation: _ctrl,
-                builder: (context, _) {
-                  final t   = _ctrl.value;
-                  final bob = math.sin(t * math.pi) * 8;
-                  final gAlpha = 0.55 + t * 0.40;
+              child: LayoutBuilder(
+                builder: (_, spriteConstraints) {
+                  final spriteSize =
+                      (spriteConstraints.maxHeight * 0.80).clamp(90.0, 280.0);
+                  return AnimatedBuilder(
+                    animation: _ctrl,
+                    builder: (context, _) {
+                      final t      = _ctrl.value;
+                      final bob    = math.sin(t * math.pi) * 8;
+                      final gAlpha = 0.55 + t * 0.40;
 
-                  return Stack(
-                    children: [
-                      // Gradient bg tint
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                accent.withValues(alpha: 0.08),
-                                accent.withValues(alpha: 0.03),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Ground glow ellipse
-                      Positioned(
-                        bottom: 8,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            width: 70,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(999),
-                              gradient: RadialGradient(
-                                colors: [
-                                  accent.withValues(alpha: gAlpha * 0.75),
-                                  Colors.transparent,
-                                ],
+                      return Stack(
+                        children: [
+                          // Gradient bg tint
+                          Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    accent.withValues(alpha: 0.08),
+                                    accent.withValues(alpha: 0.03),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      // Pet sprite with bob
-                      Positioned(
-                        bottom: 12 + bob,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: LayoutBuilder(
-                            builder: (ctx, constraints) {
-                              return PetRendererWidget.fromOwned(
+                          // Ground glow ellipse
+                          Positioned(
+                            bottom: 8,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Container(
+                                width: spriteSize * 0.65,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      accent.withValues(alpha: gAlpha * 0.75),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Pet sprite with bob
+                          Positioned(
+                            bottom: 12 + bob,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: PetRendererWidget.fromOwned(
                                 pet,
-                                size: 100,
+                                size: spriteSize,
                                 animation: 'action/idle/normal',
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      // Class tag — top-left
-                      Positioned(
-                        top: 8,
-                        left: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.22),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                                color: accent.withValues(alpha: 0.65)),
-                          ),
-                          child: Text(
-                            pet.classLabel.toUpperCase(),
-                            style: TextStyle(
-                              fontFamily: 'LilitaOne',
-                              color: accent,
-                              fontSize: 9,
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      // Generation badge — top-right
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF050810)
-                                .withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: const Color(0xFF4AC4D9)
-                                  .withValues(alpha: 0.5),
+                          // Class tag — top-left
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.22),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: accent.withValues(alpha: 0.65)),
+                              ),
+                              child: Text(
+                                pet.classLabel.toUpperCase(),
+                                style: TextStyle(
+                                  fontFamily: 'LilitaOne',
+                                  color: accent,
+                                  fontSize: 9,
+                                ),
+                              ),
                             ),
                           ),
-                          child: Text(
-                            'GEN ${pet.generation}',
-                            style: const TextStyle(
-                              fontFamily: 'LilitaOne',
-                              color: Color(0xFF4AC4D9),
-                              fontSize: 9,
+                          // Generation badge — top-right
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF050810)
+                                    .withValues(alpha: 0.8),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFF4AC4D9)
+                                      .withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Text(
+                                'GEN ${pet.generation}',
+                                style: const TextStyle(
+                                  fontFamily: 'LilitaOne',
+                                  color: Color(0xFF4AC4D9),
+                                  fontSize: 9,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      // Rename button — bottom-right corner
-                      Positioned(
-                        bottom: 8,
-                        right: 8,
-                        child: GestureDetector(
-                          onTap: widget.onRename,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.black45,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.white10),
-                            ),
-                            child: const Icon(
-                              Icons.drive_file_rename_outline,
-                              size: 12,
-                              color: Colors.amberAccent,
+                          // Rename button — bottom-right corner
+                          Positioned(
+                            bottom: 8,
+                            right: 8,
+                            child: GestureDetector(
+                              onTap: widget.onRename,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.white10),
+                                ),
+                                child: const Icon(
+                                  Icons.drive_file_rename_outline,
+                                  size: 12,
+                                  color: Colors.amberAccent,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   );
                 },
               ),
@@ -724,7 +747,7 @@ class _PetCardState extends State<_PetCard>
 
             // ── Footer ──────────────────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              padding: EdgeInsets.fromLTRB(footPad, 6, footPad, 8),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.28),
                 border: Border(
@@ -734,17 +757,17 @@ class _PetCardState extends State<_PetCard>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name row
+                  // Name + HP
                   Row(
                     children: [
                       Expanded(
                         child: Text(
                           pet.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'LilitaOne',
-                            color: Color(0xFFEAFBFF),
-                            fontSize: 13,
-                            shadows: [
+                            color: const Color(0xFFEAFBFF),
+                            fontSize: nameFs,
+                            shadows: const [
                               Shadow(
                                   color: Color(0xFF0A1224),
                                   offset: Offset(-1, -1),
@@ -758,24 +781,23 @@ class _PetCardState extends State<_PetCard>
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      // HP stat
                       Icon(Icons.favorite,
-                          size: 9,
+                          size: statFs,
                           color: const Color(0xFF66FF88)
                               .withValues(alpha: 0.9)),
                       const SizedBox(width: 2),
                       Text(
                         '${stats.hp}',
-                        style: const TextStyle(
-                          color: Color(0xFF66FF88),
-                          fontSize: 9,
+                        style: TextStyle(
+                          color: const Color(0xFF66FF88),
+                          fontSize: statFs,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  // Purity stars row
+                  const SizedBox(height: 3),
+                  // Stars + Speed
                   Row(
                     children: [
                       ...List.generate(
@@ -786,22 +808,21 @@ class _PetCardState extends State<_PetCard>
                             color: pet.purity == 4
                                 ? Colors.amber
                                 : Colors.white38,
-                            fontSize: 10,
+                            fontSize: starFs,
                           ),
                         ),
                       ),
                       const Spacer(),
-                      // Speed stat
                       Icon(Icons.bolt,
-                          size: 9,
+                          size: statFs,
                           color: const Color(0xFFFFCC44)
                               .withValues(alpha: 0.9)),
                       const SizedBox(width: 2),
                       Text(
                         '${stats.speed}',
-                        style: const TextStyle(
-                          color: Color(0xFFFFCC44),
-                          fontSize: 9,
+                        style: TextStyle(
+                          color: const Color(0xFFFFCC44),
+                          fontSize: statFs,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -814,6 +835,8 @@ class _PetCardState extends State<_PetCard>
         ),
       ),
     );
+      }, // LayoutBuilder builder
+    ); // LayoutBuilder
   }
 }
 

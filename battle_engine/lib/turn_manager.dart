@@ -54,12 +54,23 @@ class TurnManager {
       for (var i = 0; i < orderedB.length; i++)
         _Slot(action: orderedB[i], originalIndex: orderedA.length + i),
     ];
+    final anyLastStand = slots.any((slot) => slot.action.actor.isInLastStand);
 
     // Classic-like priority:
     // 1) higher speed, 2) higher HP, 3) higher skill, 4) higher morale.
     // Final tiebreaker: pet ID string comparison (then index as ultimate tiebreaker).
     // This ensures 100% deterministic ordering regardless of platform/runtime.
     slots.sort((x, y) {
+      final xBoost = x.action.trait.tags.contains('attack_first_if_last_stand') &&
+              anyLastStand
+          ? 1000
+          : 0;
+      final yBoost = y.action.trait.tags.contains('attack_first_if_last_stand') &&
+              anyLastStand
+          ? 1000
+          : 0;
+      final boostCmp = yBoost.compareTo(xBoost);
+      if (boostCmp != 0) return boostCmp;
       final speedCmp = y.speed.compareTo(x.speed); // descending — faster first
       if (speedCmp != 0) return speedCmp;
       final hpCmp = y.hp.compareTo(x.hp);

@@ -34,6 +34,21 @@ service cloud.firestore {
                         .affectedKeys()
                         .hasAny(['trophies', 'kudyapi']);
       allow delete: if false;
+
+      // ── Team compositions (subcollection) ───────────────────────────────────
+      match /teams/{teamId} {
+        allow read:   if request.auth.uid == uid;
+        allow delete: if request.auth.uid == uid;
+        // Validate that every write contains required fields and exactly 3 pets
+        allow create, update: if request.auth.uid == uid
+                              && request.resource.data.keys().hasAll(
+                                   ['name', 'petUids', 'createdAt', 'updatedAt'])
+                              && request.resource.data.petUids is list
+                              && request.resource.data.petUids.size() == 3
+                              && request.resource.data.name is string
+                              && request.resource.data.name.size() > 0
+                              && request.resource.data.name.size() <= 32;
+      }
     }
 
     // ── Pets ───────────────────────────────────────────────────────────────────

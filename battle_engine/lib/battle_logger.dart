@@ -132,6 +132,16 @@ class BattleLogger {
     events.add(ShieldBreakEvent(targetName: targetName));
   }
 
+  void drawCard(String targetName, int amount) {
+    _line('     → $targetName draws $amount card(s).');
+    events.add(CardDrawEvent(targetName: targetName, amount: amount));
+  }
+
+  void discardCard(String targetName, int amount) {
+    _line('     → $targetName discards $amount card(s).');
+    events.add(CardDiscardEvent(targetName: targetName, amount: amount));
+  }
+
   void energySteal(String actorName, String targetName, int amount) {
     _line('     → $actorName steals $amount energy from $targetName!');
     events.add(EnergyStealEvent(actorName: actorName, targetName: targetName, amount: amount, stolen: true));
@@ -297,6 +307,18 @@ class BattleEndEvent extends BattleEvent {
 class ShieldBreakEvent extends BattleEvent {
   final String targetName;
   const ShieldBreakEvent({required this.targetName});
+}
+
+class CardDrawEvent extends BattleEvent {
+  final String targetName;
+  final int amount;
+  const CardDrawEvent({required this.targetName, required this.amount});
+}
+
+class CardDiscardEvent extends BattleEvent {
+  final String targetName;
+  final int amount;
+  const CardDiscardEvent({required this.targetName, required this.amount});
 }
 
 /// [stolen] true = energy was transferred to attacker; false = destroyed only.

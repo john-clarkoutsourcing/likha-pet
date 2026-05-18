@@ -4,6 +4,7 @@ import '../models/owned_pet.dart';
 import '../models/player_data.dart';
 import '../models/team_composition.dart';
 import '../repositories/player_repository.dart';
+import '../repositories/team_firestore_repository.dart';
 
 // ── PlayerNotifier ────────────────────────────────────────────────────────────
 //
@@ -18,23 +19,48 @@ import '../repositories/player_repository.dart';
 class PlayerNotifier extends StateNotifier<PlayerData> {
   PlayerNotifier() : super(PlayerData.empty());
 
-  final _repo = PlayerRepository();
-  final _uuid = const Uuid();
+  final _repo      = PlayerRepository();
+  final _teamFs    = TeamFirestoreRepository();
+  final _uuid      = const Uuid();
+
+  // UID of the logged-in player — set via [setUserId] after auth resolves.
+  String? _uid;
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
+  /// Call once after Firebase Auth resolves to wire Firestore sync.
+  void setUserId(String uid) {
+    _uid = uid;
+  }
+
   Future<void> initialize() async {
     if (_initialized) return;
+
+    // Load local state first (fast path)
     final saved = await _repo.load();
     if (saved != null && saved.hasStarters) {
       state = saved;
     }
-    // If no saved data: leave roster empty.
-    // HomeScreen detects roster.isEmpty and redirects to StarterPackScreen,
-    // which calls addPet() interactively for each hatched egg.
+
+    // Merge Firestore teams if available (non-blocking)
+    if (_uid != null) {
+      final fsTeams      = await _teamFs.loadTeams(_uid!);
+      final fsActiveTeam = await _teamFs.loadActiveTeam(_uid!);
+
+      if (fsTeams.isNotEmpty) {
+        // Firestore is authoritative for team compositions
+        final merged = state.copyWith(
+          savedTeams: fsTeams,
+          activeTeam: fsActiveTeam ?? state.activeTeam,
+        );
+        state = merged;
+        await _repo.save(state); // Backfill local cache
+      }
+    }
+
     _initialized = true;
   }
 
@@ -52,6 +78,7 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
     assert(petUids.length == 3, 'Active team must have exactly 3 pets');
     state = state.copyWith(activeTeam: petUids);
     _persist();
+    if (_uid != null) _teamFs.setActiveTeam(_uid!, petUids);
   }
 
   /// Save the current active team as a new team composition.
@@ -84,6 +111,7 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
       savedTeams: [...state.savedTeams, newTeam],
     );
     _persist();
+    if (_uid != null) _teamFs.upsertTeam(_uid!, newTeam);
   }
 
   /// Load a saved team composition as the active team.
@@ -93,8 +121,9 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
       orElse: () => null,
     );
     if (team != null) {
-      state = state.copyWith(activeTeam: team.petUids);
+      state = state.copyWith(activeTeam: team.petUids, activeTeamId: teamId);
       _persist();
+      if (_uid != null) _teamFs.setActiveTeam(_uid!, team.petUids);
     }
   }
 
@@ -102,23 +131,27 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   void renameTeamComposition(String teamId, String newName) {
     final updated = state.savedTeams.map((t) {
       if (t.id == teamId) {
-        return t.copyWith(
-          name: newName,
-          updatedAt: DateTime.now(),
-        );
+        return t.copyWith(name: newName, updatedAt: DateTime.now());
       }
       return t;
     }).toList();
-    
     state = state.copyWith(savedTeams: updated);
     _persist();
+    final renamed = state.savedTeams.firstWhere((t) => t.id == teamId);
+    if (_uid != null) _teamFs.upsertTeam(_uid!, renamed);
   }
 
   /// Delete a saved team composition.
   void deleteTeamComposition(String teamId) {
     final updated = state.savedTeams.where((t) => t.id != teamId).toList();
-    state = state.copyWith(savedTeams: updated);
+    // Clear activeTeamId if the deleted team was active.
+    final wasActive = state.activeTeamId == teamId;
+    state = state.copyWith(
+      savedTeams:   updated,
+      activeTeamId: wasActive ? null : state.activeTeamId,
+    );
     _persist();
+    if (_uid != null) _teamFs.deleteTeam(_uid!, teamId);
   }
 
   /// Create a new team composition directly from a name and pet UIDs.
@@ -131,8 +164,14 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    state = state.copyWith(savedTeams: [...state.savedTeams, newTeam]);
+    // Newly created team becomes active immediately.
+    state = state.copyWith(
+      savedTeams:   [...state.savedTeams, newTeam],
+      activeTeam:   petUids,
+      activeTeamId: newTeam.id,
+    );
     _persist();
+    if (_uid != null) _teamFs.upsertTeam(_uid!, newTeam);
   }
 
   /// Replace the pets and/or name of an existing saved team composition.
@@ -144,6 +183,8 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
     }).toList();
     state = state.copyWith(savedTeams: updated);
     _persist();
+    final t = state.savedTeams.firstWhere((t) => t.id == teamId);
+    if (_uid != null) _teamFs.upsertTeam(_uid!, t);
   }
 
   // ── Pet management ─────────────────────────────────────────────────────────

@@ -127,6 +127,7 @@ class Pet {
   bool get isReflecting => debuffs.any((d) => d.type == DebuffType.reflect);
   bool get isStenched => debuffs.any((d) => d.type == DebuffType.stench);
   bool get isInLastStand => lastStandTicks > 0;
+  bool get isIsolated => debuffs.any((d) => d.type == DebuffType.isolate);
   bool get canEnterLastStand => !isChilled;
 
   // ── Energy helpers ─────────────────────────────────────────────────────────
@@ -238,10 +239,13 @@ class Pet {
   /// Applies [finalDamage] directly to HP (after shield absorption).
   /// [finalDamage] is expected to already have defense subtracted by the resolver.
   /// Returns actual HP lost.
-  int takeDamage(int finalDamage, {bool ignoreShield = false}) {
+  int takeDamage(int finalDamage,
+      {bool ignoreShield = false,
+      bool ignoreLastStand = false,
+      bool forceLastStand = false}) {
     if (isFainted) return 0;
 
-    if (lastStandTicks > 0) {
+    if (lastStandTicks > 0 && !ignoreLastStand) {
       lastStandTicks = (lastStandTicks - 1).clamp(0, 999);
       if (lastStandTicks <= 0) {
         hp = 0;
@@ -261,7 +265,7 @@ class Pet {
     final actual = remaining.clamp(0, 999);
     hp -= actual;
     if (hp <= 0) {
-      if (canEnterLastStand) {
+      if ((!ignoreLastStand && canEnterLastStand) || forceLastStand) {
         hp = 1;
         lastStandTicks = _computeLastStandTicks();
       } else {

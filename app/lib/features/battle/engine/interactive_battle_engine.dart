@@ -113,6 +113,7 @@ class InteractiveBattleEngine {
   final EnergyPool playerEnergy = EnergyPool();
   final EnergyPool enemyEnergy = EnergyPool();
   _RoundExecution? _roundExecution;
+  Map<String, Trait> _roundTraitsByPetId = const {};
 
   // Tracks how many cards each pet has played in the current round for combo bonus.
   final Map<String, int> _roundComboCount = {};
@@ -212,6 +213,9 @@ class InteractiveBattleEngine {
 
     logger.phase('Action Phase');
     final ordered = _turns.buildResolutionOrder(playerActions, opponentActions);
+    _roundTraitsByPetId = {
+      for (final action in ordered) action.actor.id: action.trait,
+    };
     final frozenChoices = {
       for (final e in cardChoices.entries) e.key: List<String>.from(e.value),
     };
@@ -241,7 +245,12 @@ class InteractiveBattleEngine {
 
     final action = execution.orderedActions[execution.actionIndex++];
     final logger = execution.logger;
-    final resolver = ActionResolver(logger, rng: _critRng);
+    final resolver = ActionResolver(
+      logger,
+      rng: _critRng,
+      roundTraitsByPetId: _roundTraitsByPetId,
+      onDrawCard: _handleDrawCard,
+    );
 
     if (!action.actor.isFainted) {
         if (action.actor.isStunned || action.actor.isFeared || action.actor.isDisabled) {
@@ -264,6 +273,7 @@ class InteractiveBattleEngine {
           _teamOf(action.actor),
           _enemyTeamOf(action.actor),
           comboIndex: comboIndex,
+          roundTraitsByPetId: _roundTraitsByPetId,
         );
       }
     }
@@ -328,9 +338,12 @@ class InteractiveBattleEngine {
       pet.shield = 0;
     }
 
+    _applyEndOfRoundDrawTriggers();
+
     logger.roundEnd();
     final result = _buildResult(logger, _checkWin());
     _roundExecution = null;
+    _roundTraitsByPetId = const {};
     return result;
   }
 
@@ -363,6 +376,25 @@ class InteractiveBattleEngine {
 
   bool get playerHandOverCap => _playerDeck.handSize > SkillDeck.kHandLimit;
 
+  void _handleDrawCard(String petId) {
+    final isPlayer = playerTeam.any((p) => p.id == petId);
+    final deck = isPlayer ? _playerDeck : _enemyDeck;
+    final team = isPlayer ? playerTeam : enemyTeam;
+    _drawAliveOnly(deck, team, count: 1);
+    _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
+    _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
+  }
+
+  void _applyEndOfRoundDrawTriggers() {
+    for (final pet in [...playerTeam, ...enemyTeam]) {
+      final trait = _roundTraitsByPetId[pet.id];
+      if (trait == null) continue;
+      if (trait.tags.contains('draw_if_shield_not_break') && pet.shield > 0) {
+        _handleDrawCard(pet.id);
+      }
+    }
+  }
+
   // ── Private ───────────────────────────────────────────────────────────────
 
   Pet? _lockedDamageTarget({
@@ -374,6 +406,14 @@ class InteractiveBattleEngine {
     final alive = enemyTeam.where((p) => !p.isFainted).toList();
     if (alive.isEmpty) return null;
 
+    if (trait.tags.contains('target_fastest_enemy')) {
+      final fastest = [...alive]..sort((a, b) => b.effectiveSpeed.compareTo(a.effectiveSpeed));
+      return fastest.first;
+    }
+    if (trait.tags.contains('skip_targets_in_last_stand')) {
+      final filtered = alive.where((p) => !p.isInLastStand).toList();
+      if (filtered.isNotEmpty) return filtered.first;
+    }
     return switch (trait.effect.target) {
       'back_enemy' => alive.last,
       'lowest_hp_enemy' => (alive..sort((a, b) => a.hp.compareTo(b.hp))).first,

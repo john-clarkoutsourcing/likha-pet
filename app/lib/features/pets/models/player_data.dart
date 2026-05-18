@@ -11,7 +11,8 @@ import 'team_composition.dart';
 
 class PlayerData {
   final List<OwnedPet> roster;
-  final List<String>   activeTeam;     // 3 OwnedPet UIDs
+  final List<String>   activeTeam;     // 3 OwnedPet UIDs [front, mid, back]
+  final String?        activeTeamId;   // ID of the saved TeamComposition in use
   final int            soulCrystals;
   final Set<String>    completedStages; // stage IDs ('1', '2', …)
   final List<TeamComposition> savedTeams; // team presets
@@ -19,6 +20,7 @@ class PlayerData {
   const PlayerData({
     required this.roster,
     required this.activeTeam,
+    this.activeTeamId,
     this.soulCrystals    = 0,
     this.completedStages = const {},
     this.savedTeams      = const [],
@@ -27,10 +29,17 @@ class PlayerData {
   factory PlayerData.empty() => const PlayerData(
     roster:          [],
     activeTeam:      [],
+    activeTeamId:    null,
     soulCrystals:    0,
     completedStages: {},
     savedTeams:      [],
   );
+
+  /// Returns the active saved team composition, or null if none is set.
+  TeamComposition? get activeComposition => activeTeamId == null
+      ? null
+      : savedTeams.cast<TeamComposition?>()
+            .firstWhere((t) => t?.id == activeTeamId, orElse: () => null);
 
   bool get hasStarters  => roster.isNotEmpty;
   bool get hasFullTeam  => activeTeam.length == 3;
@@ -55,6 +64,7 @@ class PlayerData {
         .map((e) => OwnedPet.fromJson(e as Map<String, dynamic>))
         .toList(),
     activeTeam:      List<String>.from(j['activeTeam'] as List),
+    activeTeamId:    j['activeTeamId'] as String?,
     soulCrystals:    (j['soulCrystals'] as int?) ?? 0,
     completedStages: Set<String>.from(
         (j['completedStages'] as List<dynamic>?) ?? []),
@@ -66,6 +76,7 @@ class PlayerData {
   Map<String, dynamic> toJson() => {
     'roster':          roster.map((p) => p.toJson()).toList(),
     'activeTeam':      activeTeam,
+    if (activeTeamId != null) 'activeTeamId': activeTeamId,
     'soulCrystals':    soulCrystals,
     'completedStages': completedStages.toList(),
     'savedTeams':      savedTeams.map((t) => t.toJson()).toList(),
@@ -78,14 +89,21 @@ class PlayerData {
   PlayerData copyWith({
     List<OwnedPet>? roster,
     List<String>?   activeTeam,
+    Object?         activeTeamId = _sentinel,
     int?            soulCrystals,
     Set<String>?    completedStages,
     List<TeamComposition>? savedTeams,
   }) => PlayerData(
     roster:          roster          ?? this.roster,
     activeTeam:      activeTeam      ?? this.activeTeam,
+    activeTeamId:    activeTeamId == _sentinel
+        ? this.activeTeamId
+        : activeTeamId as String?,
     soulCrystals:    soulCrystals    ?? this.soulCrystals,
     completedStages: completedStages ?? this.completedStages,
     savedTeams:      savedTeams      ?? this.savedTeams,
   );
 }
+
+// Sentinel so copyWith can explicitly clear activeTeamId to null.
+const Object _sentinel = Object();

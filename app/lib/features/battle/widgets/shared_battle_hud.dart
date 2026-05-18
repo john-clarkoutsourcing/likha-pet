@@ -427,13 +427,18 @@ class _BattleFloatNum {
   final String text;
   final Color color;
   final double x, y, jitter;
+  // Used for coalescing: shield floats for the same pet are merged.
+  final bool isShield;
+  final String petId;
   const _BattleFloatNum({
     required this.id,
     required this.text,
     required this.color,
     required this.x,
     required this.y,
-    this.jitter = 0.0,
+    this.jitter   = 0.0,
+    this.isShield = false,
+    this.petId    = '',
   });
 }
 
@@ -443,9 +448,18 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
   int _nextId = 0;
   Set<String> _lastAttackIds = {};
 
+  // Accumulated shield amounts per petId since the last non-shield event.
+  // Lets consecutive shield floats for the same pet merge into one display.
+  final Map<String, int> _shieldAccum = {};
+
   @override
   void didUpdateWidget(BattlefieldView old) {
     super.didUpdateWidget(old);
+    // Clear per-round shield accumulators when a new round begins
+    // (lastImpactEvent resets to null between rounds).
+    if (old.vm.lastImpactEvent != null && widget.vm.lastImpactEvent == null) {
+      _shieldAccum.clear();
+    }
     _maybeSpawnProjectiles(widget.vm);
     _maybeSpawnFloatNums(old.vm, widget.vm);
   }
@@ -467,6 +481,7 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
         required int index,
         required String text,
         required Color color,
+        bool isShield = false,
       }) {
         final positions = isPlayerTeam ? widget.playerPos : widget.opponentPos;
         final frac = positions[index.clamp(0, 2)];
@@ -482,12 +497,14 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
         );
         final pos = Offset(w * frac.dx + dashPx.dx, h * frac.dy + dashPx.dy);
         nums.add(_BattleFloatNum(
-          id: '${_nextId++}',
-          text: text,
-          color: color,
-          x: pos.dx + 30,
-          y: pos.dy - 10,
-          jitter: (rng.nextDouble() - 0.5) * 24,
+          id:       '${_nextId++}',
+          text:     text,
+          color:    color,
+          x:        pos.dx + 30,
+          y:        pos.dy - 10,
+          jitter:   (rng.nextDouble() - 0.5) * 24,
+          isShield: isShield,
+          petId:    petId,
         ));
       }
 
@@ -514,12 +531,21 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
               break;
             case 'shield':
               if (impact.shieldAmount > 0) {
+                // Accumulate shield for this pet and remove any previous
+                // shield float so we show a single total, not "20 20 20".
+                _shieldAccum[petId] =
+                    (_shieldAccum[petId] ?? 0) + impact.shieldAmount;
+                setState(() {
+                  _floatNums.removeWhere(
+                      (n) => n.isShield && n.petId == petId);
+                });
                 spawnAt(
-                  petId: petId,
+                  petId:        petId,
                   isPlayerTeam: isPlayerTeam,
-                  index: index,
-                  text: '+${impact.shieldAmount}',
-                  color: AppColors.shieldGold,
+                  index:        index,
+                  text:         '+${_shieldAccum[petId]}',
+                  color:        AppColors.shieldGold,
+                  isShield:     true,
                 );
               }
               break;
@@ -1245,6 +1271,9 @@ class BattleFloatingHpBar extends StatelessWidget {
                       fontSize: 8,
                       fontWeight: FontWeight.w800)),
               const Spacer(),
+              // Show the total shield in one place.
+              // currentShield already includes pre-applied shields from
+              // selected cards, so shieldPreview would double-count them.
               if (currentShield > 0) ...[
                 const Icon(Icons.shield, size: 8, color: AppColors.shieldGold),
                 const SizedBox(width: 1),
@@ -1253,17 +1282,6 @@ class BattleFloatingHpBar extends StatelessWidget {
                         color: AppColors.shieldGold,
                         fontSize: 8,
                         fontWeight: FontWeight.w800)),
-              ],
-              if (shieldPreview > 0) ...[
-                if (currentShield > 0) const SizedBox(width: 2),
-                Text(
-                  '+$shieldPreview',
-                  style: const TextStyle(
-                    color: AppColors.shieldGold,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
               ],
             ],
           ),

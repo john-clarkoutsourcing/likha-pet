@@ -4,6 +4,181 @@ import 'trait.dart';
 import 'action.dart';
 import 'battle_logger.dart';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACTION RESOLVER — DEVELOPER GUIDE
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// This file is the single place where every card effect is applied to live Pet
+// objects. The pipeline runs once per card played, in this strict order:
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  STAGE 1 — Pre-action guards  (top of resolve(), before energy spend)   │
+// │                                                                          │
+// │  Check whether the actor CAN act this turn.                             │
+// │  Return early (no energy spent, no cooldown) if blocked.                │
+// │                                                                          │
+// │  WHERE TO ADD:                                                           │
+// │  • A new debuff that PREVENTS an action entirely (like stun, fear, or   │
+// │    isolate) → add an `if (actor.isXxx) { ... return; }` block HERE.    │
+// │  • After the isFainted check, before spendEnergy().                     │
+// │                                                                          │
+// │  Current guards (in order):                                             │
+// │    isFainted      → skip silently                                        │
+// │    isIsolated     → skip ally-targeting cards only, consume the debuff  │
+// │    isStunned      → skip + consume stun                                 │
+// │    isFeared       → skip + consume fear                                 │
+// │    isDisabled     → skip + consume disabled                             │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  STAGE 2 — Energy spend + cooldown + cleanse tag                        │
+// │                                                                          │
+// │  actor.spendEnergy / trait.triggerCooldown run here. Do NOT move them. │
+// │  'cleanse' tag also runs here (before primary effect, so debuffs are    │
+// │  cleared even if the card itself applies new ones).                     │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  STAGE 3 — Primary effect  (the switch statement)                       │
+// │                                                                          │
+// │  Driven by TraitEffect.type set in classic_card_specs + _classicOverride│
+// │                                                                          │
+// │  EffectType.damage    → single-target hit. Target resolved by           │
+// │                         effect.target string. See TARGET STRINGS below. │
+// │  EffectType.aoe       → hits all alive enemies (or all allies).         │
+// │  EffectType.heal      → restores HP. Capped by kMaxFlatHealing (50).    │
+// │  EffectType.shield    → grants shield. Cleared at round end.            │
+// │  EffectType.buff      → applies a BuffType for N rounds.                │
+// │  EffectType.debuff    → applies a DebuffType for N rounds.              │
+// │  EffectType.shieldBreak → removes enemy shield + optionally shields     │
+// │                           self (effect.value).                          │
+// │                                                                          │
+// │  WHERE TO ADD:                                                           │
+// │  • A card whose ENTIRE behavior is one of the above → set effect.type   │
+// │    correctly in _classicOverride or the static TraitLibrary getter.     │
+// │  • A new primary effect category (rare) → add a new EffectType enum    │
+// │    value in trait.dart AND a new case here.                             │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  STAGE 4 — Post-damage tag effects  (inside EffectType.damage case)     │
+// │                                                                          │
+// │  Run AFTER the damage loop, so 'actual' and 'shieldBroke' are known.   │
+// │  Also run _applyShieldBreakReactions and _applyOnHitReactions here      │
+// │  (those check the DEFENDER's back/tail trait, not the attacker's).      │
+// │                                                                          │
+// │  WHERE TO ADD a tag that:                                               │
+// │  • Only makes sense after damage lands (need actual / shieldBroke)      │
+// │  • Targets the ENEMY (target variable is available)                     │
+// │  • Fires unconditionally on any hit → add after _applyOnHitReactions    │
+// │  • Fires only if hit dealt HP damage → condition on `actual > 0`        │
+// │  • Fires only if shield broke → condition on `shieldBroke`              │
+// │  • Fires only when comboed → condition on `comboIndex >= N`             │
+// │                                                                          │
+// │  Current tags handled here (in order after damage loop):                │
+// │    draw_if_attack_first          comboIndex == 0 → draw card            │
+// │    draw_if_attack_idle_target    shieldBefore==0 → draw card            │
+// │    draw_if_attack_aqua_bird_dawn target class → draw card               │
+// │    attacker_energy_on_shield_break  shieldBroke → actor gains energy    │
+// │    draw_if_shield_not_break      !shieldBroke → draw card               │
+// │    end_last_stand                kills last-stand target                 │
+// │    lifeSteal                     heal actor by actual HP dealt           │
+// │    energy_on_crit                isCrit → actor gains energy            │
+// │    target_aroma                  actual>0 → Aroma on target             │
+// │    isolated_on_combo_3           comboIndex>=2 → Isolate on target      │
+// │    transfer_debuffs              move actor's debuffs to target          │
+// │    reflect                       target reflects % damage back           │
+// │    energySteal / energyDrain     drain enemy energy                     │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  STAGE 5 — Post-switch shared effects  (after the switch, any type)     │
+// │                                                                          │
+// │  Runs regardless of which EffectType the card used.                     │
+// │                                                                          │
+// │  WHERE TO ADD a tag that:                                               │
+// │  • Must fire even for buff/heal/shield/debuff cards (not just damage)   │
+// │  • Does NOT need the damage-case variables (actual, target, shieldBroke)│
+// │  • Applies an effect TO THE ACTOR (self effects)                        │
+// │                                                                          │
+// │  Current items here:                                                     │
+// │    consumeAttackModifiers   clears attackUp/attackDown after offense    │
+// │    _tickPoison              all poisoned pets lose HP per action        │
+// │    self_aroma               actor gets Aroma (any card type)            │
+// │    selfShield               actor gets shield from effect.selfShield    │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  STAGE 6 — Reaction hooks  (private methods, called from Stage 3/4)     │
+// │                                                                          │
+// │  _applyShieldBreakReactions  — fires when the DEFENDER's shield breaks. │
+// │    Reads traitsByPetId[target.id] (the card the DEFENDER played).       │
+// │    WHERE TO ADD: tags that reward a pet for having their shield broken.  │
+// │      on_shield_break_attack_up  → self attack up                        │
+// │      on_shield_break_energy     → self gains energy                     │
+// │      on_shield_break_stun_attacker → stun the attacker                  │
+// │      counter_stun_aqua_bird / counter_stun_plant_reptile by class       │
+// │      draw_if_shield_break       → draw a card                           │
+// │                                                                          │
+// │  _applyOnHitReactions — fires when the DEFENDER takes any damage.       │
+// │    Reads same defender trait. Receives shieldBroke bool.                │
+// │    WHERE TO ADD: tags that trigger when a pet is struck.                │
+// │      on_hit_energy_vs_aquatic   → gain energy if hit by aquatic         │
+// │      draw_if_hit_by_beast_bug_mech → draw card by attacker class        │
+// │      draw_if_hit_shield_held    → draw if shield absorbed but held      │
+// │      counter_stun_aqua_bird / counter_stun_plant_reptile (non-break)    │
+// │      shield_when_hit            → gain a small shield on any hit        │
+// │      disable_*                  → disable attacker's next card          │
+// │      reflect_ranged / reflect_melee → apply reflect status              │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// TARGET STRINGS (effect.target)
+// ─────────────────────────────
+//  'enemy'           Front-most alive enemy (respects Aroma / Stench)
+//  'back_enemy'      Back-row enemy (pierces formation)
+//  'furthest_enemy'  Same as back_enemy
+//  'lowest_hp_enemy' Enemy with least remaining HP
+//  'fastest_enemy'   Fastest enemy (highest effectiveSpeed)
+//  'all_enemies'     Every alive enemy (AoE — use EffectType.aoe instead)
+//  'self'            The card user themselves
+//  'lowest_hp_ally'  Teammate with least HP
+//  'front_ally'      First alive teammate (index 0)
+//  'all_allies'      Every alive teammate (heals/buffs)
+//
+// DEBUFF TYPES  (DebuffType enum in trait.dart)
+// ─────────────────────────────────────────────
+//  stunned      Skip next action. Consumed immediately on skip.
+//  fear         Skip next action (same as stun, different flavour). Consumed.
+//  disabled     Skip next action (ability-specific block). Consumed.
+//  isolate      Cannot use ally-targeting cards this round. Consumed on skip.
+//  poisoned     Take N HP per action (stacks up to 13). Ticks in resolver.
+//  burned       Take N HP per round. Ticks in processStatusEffects().
+//  sleep        Next hit ignores shield. Removed when hit.
+//  aroma        Forced target for enemies (they must attack you).
+//  stench       Enemies skip targeting you (opposite of aroma).
+//  chill        Cannot enter Last Stand.
+//  jinx         Cannot deal critical hits.
+//  reflect      Reflect X% of incoming melee/ranged damage back.
+//  healBlocked  Cannot receive healing (regen, lifesteal, heal cards).
+//  critBlocked  Cannot be critically hit this round.
+//  attackDown   Reduce attack by X% for N rounds.
+//  defenseDown  Reduce defense by X% for N rounds.
+//  speedDown    Reduce speed for N rounds.
+//
+//  Duration meanings:
+//    duration = 1 → expires at end of current round (tickRoundDurations)
+//    duration = 2 → active current round + next round
+//    duration = 4 → active for 4 full rounds
+//    duration = 999 → effectively permanent (poison stacks use this)
+//
+// BUFF TYPES  (BuffType enum in trait.dart)
+// ─────────────────────────────────────────
+//  attackUp   +X% attack for N rounds. Consumed when pet attacks (!)
+//  defenseUp  +X% defense for N rounds.
+//  speedUp    +X% speed for N rounds. Affects turn order.
+//  energized  Gain +X bonus energy per round.
+//  regen      Restore X HP per round (ticks in processStatusEffects).
+//
 // ── Hard balance caps ──────────────────────────────────────────────────────────
 //
 // These caps prevent any single action from one-shotting a pet or trivialising
@@ -42,16 +217,33 @@ const int kMaxShield = 999; // Classic-style accumulated shield per round
 class ActionResolver {
   final BattleLogger log;
   final math.Random _rng;
+  final Map<String, Trait> _roundTraitsByPetId;
+  final void Function(String petId)? onDrawCard;
+  final void Function(String petId)? onDiscardCard;
 
-  ActionResolver(this.log, {required math.Random rng}) : _rng = rng;
+  ActionResolver(
+    this.log, {
+    required math.Random rng,
+    Map<String, Trait>? roundTraitsByPetId,
+    this.onDrawCard,
+    this.onDiscardCard,
+  })  : _rng = rng,
+        _roundTraitsByPetId = roundTraitsByPetId ?? const {};
 
   void resolve(Action action, List<Pet> actorTeam, List<Pet> enemyTeam,
-      {int comboIndex = 0}) {
+      {int comboIndex = 0, Map<String, Trait>? roundTraitsByPetId}) {
+    final traitsByPetId = roundTraitsByPetId ?? _roundTraitsByPetId;
     final actor = action.actor;
     final trait = action.trait;
     final effect = trait.effect;
 
     if (actor.isFainted) return;
+    const _kAllyTargets = {'all_allies', 'lowest_hp_ally', 'front_ally', 'self'};
+    if (actor.isIsolated && _kAllyTargets.contains(effect.target)) {
+      log.debuff(actor.name, 'isolate', 0, 0); // log the forced skip
+      actor.removeDebuff(DebuffType.isolate);
+      return;
+    }
     if (actor.isStunned || actor.isFeared || actor.isDisabled) {
       if (actor.isStunned) {
         log.stunSkip(actor.name);
@@ -73,10 +265,15 @@ class ActionResolver {
 
     log.action(actor.name, trait.name);
 
+    if (trait.tags.contains('cleanse') && actor.debuffs.isNotEmpty) {
+      actor.debuffs.clear();
+      log.debuff(actor.name, 'cleanse', 0, 0);
+    }
+
     switch (effect.type) {
       // ── Single-target damage ──────────────────────────────────────────────
       case EffectType.damage:
-        final target = action.primaryTarget != null
+        var target = action.primaryTarget != null
             ? (action.primaryTarget!.isFainted ? null : action.primaryTarget)
             : _resolveTarget(
                 effect.target,
@@ -84,27 +281,153 @@ class ActionResolver {
                 actorTeam,
                 enemyTeam,
               );
+        // If the primary target is dead, try to find a backup target for certain tags.
         if (target == null || target.isFainted) {
           log.noTarget();
           return;
         }
+        // If the trait has skip_targets_in_last_stand and the target is in last stand, try to find an alive non-last-stand target.
+        if (trait.tags.contains('skip_targets_in_last_stand') &&
+            target.isInLastStand) {
+          final altTarget = _preferredTarget(
+            _aliveCandidates(enemyTeam).where((p) => !p.isInLastStand).toList(),
+          );
+          if (altTarget != null) {
+            target = altTarget;
+          }
+        }
         final ignoreShield = effect.target == 'enemy' && target.isAsleep;
+        final ignoreLastStand = trait.tags.contains('prevent_last_stand');
+        final hitCount = trait.tags.contains('multi_hit_3') ? 3 : 1;
         final net = _computeDamage(actor, target, effect.value, trait,
             comboIndex: comboIndex);
-        final isCrit = _rollCrit(actor, target);
-        final dmg = _clamp(isCrit ? net * 2 : net, kMaxSingleHitDamage);
-        final actual = target.takeDamage(dmg, ignoreShield: ignoreShield);
-        if (target.isAsleep) {
-          target.removeDebuff(DebuffType.sleep);
+        final isCrit = trait.tags.contains('crit_if_first') && comboIndex == 0
+            ? true
+            : _rollCrit(actor, target);
+        final critMultiplier = trait.tags.contains('double_crit_damage') ? 3 : 2;
+        final damageBoost = trait.tags.contains('bonus_damage_if_debuffed') &&
+                target.debuffs.isNotEmpty
+            ? 1.2
+            : trait.tags.contains('bonus_damage_vs_bug') &&
+                target.creatureClass == CreatureClass.bug
+            ? 1.5
+            : 1.0;
+        final targetTrait = traitsByPetId[target.id];
+        final shieldBefore = target.shield;
+        var actual = 0;
+        for (var hit = 0; hit < hitCount; hit++) {
+          final dmg = _clamp(
+            ((isCrit ? net * critMultiplier : net) *
+                    damageBoost *
+                    (trait.tags.contains('double_damage_last_stand') &&
+                            actor.isInLastStand
+                        ? 2.0
+                        : 1.0))
+                .round(),
+            kMaxSingleHitDamage,
+          );
+          final applied = target.takeDamage(
+            dmg,
+            ignoreShield: ignoreShield,
+            ignoreLastStand: ignoreLastStand,
+            forceLastStand: trait.tags.contains('force_last_stand_if_killed'),
+          );
+          actual += applied;
+          log.damage(target.name, applied, target.hp, isCrit: isCrit);
+          if (target.isAsleep) {
+            target.removeDebuff(DebuffType.sleep);
+          }
+          if (target.isFainted) {
+            log.fainted(target.name);
+            break;
+          }
         }
-        log.damage(target.name, actual, target.hp, isCrit: isCrit);
-        if (target.isFainted) log.fainted(target.name);
+        final shieldBroke = shieldBefore > 0 && target.shield <= 0;
+        if (shieldBroke && targetTrait != null) {
+          _applyShieldBreakReactions(
+            target: target,
+            attacker: actor,
+            trait: targetTrait,
+          );
+        }
+        if (actual > 0 && targetTrait != null) {
+          _applyOnHitReactions(
+            target:     target,
+            attacker:   actor,
+            trait:      targetTrait,
+            shieldBroke: shieldBroke,
+          );
+        }
+        if (trait.tags.contains('draw_if_attack_first') && comboIndex == 0) {
+          onDrawCard?.call(actor.id);
+          log.drawCard(actor.name, 1);
+        }
+        if (trait.tags.contains('draw_if_attack_idle_target') &&
+            shieldBefore == 0) {
+          onDrawCard?.call(actor.id);
+          log.drawCard(actor.name, 1);
+        }
+        if (trait.tags.contains('draw_if_attack_aqua_bird_dawn') &&
+            (target.creatureClass == CreatureClass.aquatic ||
+                target.creatureClass == CreatureClass.bird)) {
+          onDrawCard?.call(actor.id);
+          log.drawCard(actor.name, 1);
+        }
+        // Carrot Hammer: attacker gains 1 energy when this card breaks the target's shield.
+        if (shieldBroke && trait.tags.contains('attacker_energy_on_shield_break')) {
+          actor.receiveEnergy(1);
+          log.energySteal(actor.name, actor.name, 1);
+        }
+        // October Treat (attacker side for damage cards like reptile-tail-08):
+        // draw when the attack does NOT break the target's shield.
+        if (trait.tags.contains('draw_if_shield_not_break') && !shieldBroke) {
+          onDrawCard?.call(actor.id);
+          log.drawCard(actor.name, 1);
+        }
+        if (trait.tags.contains('end_last_stand') && target.isInLastStand) {
+          target.lastStandTicks = 0;
+          target.hp = 0;
+          target.isFainted = true;
+          log.fainted(target.name);
+        }
         // Lifesteal — heal attacker by however much HP the enemy actually lost.
         // Uses kMaxFlatHealing cap so drain cards can't trivialise sustain.
         if (effect.lifeSteal && actual > 0) {
           final heal = actual.clamp(0, kMaxFlatHealing);
           actor.receiveHealing(heal);
           log.heal(actor.name, heal, actor.hp);
+        }
+        if (trait.tags.contains('energy_on_crit') && isCrit) {
+          actor.receiveEnergy(1);
+        }
+        // target_aroma: mark the hit enemy with Aroma so allies focus it.
+        if (trait.tags.contains('target_aroma') &&
+            !target.isFainted &&
+            actual > 0) {
+          target.applyDebuff(DebuffType.aroma, 0, 2);
+          log.debuff(target.name, 'aroma', 0, 2);
+        }
+        // Heart Break II: isolate target on the 3rd+ card in a combo so it
+        // cannot use ally-targeting cards for the rest of this round.
+        if (trait.tags.contains('isolated_on_combo_3') &&
+            comboIndex >= 2 &&
+            !target.isFainted) {
+          target.applyDebuff(DebuffType.isolate, 0, 1);
+          log.debuff(target.name, 'isolate', 0, 1);
+        }
+        // Blackmail: transfer all debuffs from actor to target.
+        // Fires regardless of HP damage dealt (shield may absorb the hit, but
+        // the debuffs still move). Does not fire if the target died from the hit.
+        if (trait.tags.contains('transfer_debuffs') && !target.isFainted) {
+          final toTransfer = List<StatusEffect>.from(actor.debuffs);
+          if (toTransfer.isNotEmpty) {
+            actor.debuffs.clear();
+            log.debuff(actor.name, 'cleanse', 0, 0);
+            for (final d in toTransfer) {
+              target.applyDebuff(d.type, d.value, d.roundsRemaining);
+              log.debuff(target.name, d.type.name, d.value, d.roundsRemaining);
+            }
+          }
         }
         if (target.isReflecting && actual > 0) {
           final reflect = (actual * (target.debuffs
@@ -233,6 +556,13 @@ class ActionResolver {
     // Our scale: 1 HP/stack/action keeps it proportional to our lower HP pools.
     _tickPoison([...actorTeam, ...enemyTeam], log);
 
+    // Self-aroma — applies regardless of primary effect type so that cards like
+    // Eggbomb (damage) and Sugar Rush (damage) both force-target themselves.
+    if (trait.tags.contains('self_aroma')) {
+      actor.applyDebuff(DebuffType.aroma, 0, 2); // lasts until end of next round
+      log.debuff(actor.name, 'aroma', 0, 2);
+    }
+
     // Self-shield on attack — +10% bonus when card class matches attacker class.
     if (effect.selfShield > 0) {
       int amount = effect.selfShield;
@@ -309,6 +639,128 @@ class ActionResolver {
 
   int _clamp(int value, int cap) => value.clamp(1, cap);
 
+  void _applyShieldBreakReactions({
+    required Pet target,
+    required Pet attacker,
+    required Trait trait,
+  }) {
+    // Shipwreck: attack up when your shield is broken.
+    if (trait.tags.contains('on_shield_break_attack_up')) {
+      target.applyBuff(BuffType.attackUp, 20, 1);
+      log.buff(target.name, 'attackUp', 20, 1);
+    }
+    // Aqua Stock / similar: restore 1 energy when your shield breaks.
+    if (trait.tags.contains('on_shield_break_energy')) {
+      target.receiveEnergy(1);
+      log.energySteal(target.name, target.name, 1);
+    }
+    // Sticky Goo: stun the attacker unconditionally on shield break.
+    if (trait.tags.contains('on_shield_break_stun_attacker') &&
+        !attacker.isFainted) {
+      attacker.applyDebuff(DebuffType.stunned, 0, 1);
+      log.stun(attacker.name);
+    }
+    // Anesthetic Bait / Beast-back-10: counter-stun by attacker class on shield break.
+    final hitByAquaBirdSB = attacker.creatureClass == CreatureClass.aquatic ||
+                            attacker.creatureClass == CreatureClass.bird;
+    final hitByPlantReptileSB = attacker.creatureClass == CreatureClass.plant ||
+                                attacker.creatureClass == CreatureClass.reptile;
+    if (trait.tags.contains('counter_stun_aqua_bird') &&
+        hitByAquaBirdSB &&
+        !attacker.isFainted) {
+      attacker.applyDebuff(DebuffType.stunned, 0, 1);
+      log.stun(attacker.name);
+    }
+    if (trait.tags.contains('counter_stun_plant_reptile') &&
+        hitByPlantReptileSB &&
+        !attacker.isFainted) {
+      attacker.applyDebuff(DebuffType.stunned, 0, 1);
+      log.stun(attacker.name);
+    }
+    // Ivory Chop: draw a card when your shield is broken.
+    if (trait.tags.contains('draw_if_shield_break')) {
+      onDrawCard?.call(target.id);
+      log.drawCard(target.name, 1);
+    }
+  }
+
+  void _applyOnHitReactions({
+    required Pet target,
+    required Pet attacker,
+    required Trait trait,
+    bool shieldBroke = false,
+  }) {
+    final hitByAquatic      = attacker.creatureClass == CreatureClass.aquatic;
+    final hitByBird         = attacker.creatureClass == CreatureClass.bird;
+    final hitByBeast        = attacker.creatureClass == CreatureClass.beast;
+    final hitByBug          = attacker.creatureClass == CreatureClass.bug;
+    final hitByPlantReptile = attacker.creatureClass == CreatureClass.plant ||
+                              attacker.creatureClass == CreatureClass.reptile;
+    final hitByAquaBird     = hitByAquatic || hitByBird;
+    const hitByMech         = false;
+
+    // Aqua Stock: gain 1 energy when hit by an Aquatic attacker.
+    if (trait.tags.contains('on_hit_energy_vs_aquatic') && hitByAquatic) {
+      target.receiveEnergy(1);
+      log.energySteal(target.name, attacker.name, 1);
+    }
+
+    // Cattail Slap: draw a card when hit by Beast, Bug, or Mech.
+    if (trait.tags.contains('draw_if_hit_by_beast_bug_mech') &&
+        (hitByBeast || hitByBug || hitByMech)) {
+      onDrawCard?.call(target.id);
+      log.drawCard(target.name, 1);
+    }
+
+    // October Treat: draw a card when hit and shield was NOT broken.
+    if (trait.tags.contains('draw_if_hit_shield_held') && !shieldBroke) {
+      onDrawCard?.call(target.id);
+      log.drawCard(target.name, 1);
+    }
+
+    // Anesthetic Bait / Beast-back-10: counter-stun attacker by class on ANY hit.
+    // (These tags also appear in shield-break reactions but apply here for hits
+    //  that don't break the shield.)
+    if (trait.tags.contains('counter_stun_aqua_bird') &&
+        hitByAquaBird &&
+        !attacker.isFainted &&
+        !shieldBroke) { // shield-break path already handles this case
+      attacker.applyDebuff(DebuffType.stunned, 0, 1);
+      log.stun(attacker.name);
+    }
+    if (trait.tags.contains('counter_stun_plant_reptile') &&
+        hitByPlantReptile &&
+        !attacker.isFainted &&
+        !shieldBroke) {
+      attacker.applyDebuff(DebuffType.stunned, 0, 1);
+      log.stun(attacker.name);
+    }
+
+    // Reptile-back-10 (Ivory Stab / Shield-on-hit): gain a small shield when struck.
+    if (trait.tags.contains('shield_when_hit')) {
+      target.applyShield(20);
+      log.shield(target.name, 20, target.shield);
+    }
+
+    // Headshot / Numbing Lecretion / Leek Leak: disable attacker's next card.
+    if (trait.tags.contains('disable_horn_next') ||
+        trait.tags.contains('disable_ability') ||
+        trait.tags.contains('disable_melee_next') ||
+        trait.tags.contains('disable_mouth_next')) {
+      if (!attacker.isFainted) {
+        attacker.applyDebuff(DebuffType.disabled, 0, 1);
+        log.debuff(attacker.name, 'disabled', 0, 1);
+      }
+    }
+
+    // Tiny Catapult / Bug-back-08 (Sticky Goo reflect): apply reflect status.
+    if (trait.tags.contains('reflect_ranged') ||
+        trait.tags.contains('reflect_melee')) {
+      target.applyDebuff(DebuffType.reflect, 40, 1);
+      log.debuff(target.name, 'reflect', 40, 1);
+    }
+  }
+
   // ── Target resolution ──────────────────────────────────────────────────────
   //
   // _resolveTarget   → returns a single Pet or null
@@ -331,12 +783,16 @@ class ActionResolver {
     List<Pet> enemyTeam,
   ) {
     return switch (spec) {
-      'enemy' => _preferredTarget(_aliveCandidates(enemyTeam)), // hits front
-      'lowest_hp_enemy' => _preferredTarget(_lowestHpCandidates(enemyTeam)),
-      'back_enemy' => _preferredTarget(_backRowCandidates(enemyTeam)),
-      'self' => actor,
+      'enemy'          => _preferredTarget(_aliveCandidates(enemyTeam)),
+      'lowest_hp_enemy'=> _preferredTarget(_lowestHpCandidates(enemyTeam)),
+      'fastest_enemy'  => _preferredTarget(_fastestCandidates(enemyTeam)),
+      'furthest_enemy' => _preferredTarget(_backRowCandidates(enemyTeam)),
+      'back_enemy'     => _preferredTarget(_backRowCandidates(enemyTeam)),
+      'self'           => actor,
       'lowest_hp_ally' => _lowestHp(actorTeam),
-      _ => _firstAlive(enemyTeam),
+      // front_ally = first alive teammate (used by heal cards like Forest Spirit)
+      'front_ally'     => _firstAlive(actorTeam),
+      _                => _firstAlive(enemyTeam),
     };
   }
 
@@ -347,12 +803,13 @@ class ActionResolver {
     List<Pet> enemyTeam,
   ) {
     return switch (spec) {
-      'all_enemies' => enemyTeam.where((p) => !p.isFainted).toList(),
-      'all_allies' => actorTeam.where((p) => !p.isFainted).toList(),
+      'all_enemies'    => enemyTeam.where((p) => !p.isFainted).toList(),
+      'all_allies'     => actorTeam.where((p) => !p.isFainted).toList(),
       'lowest_hp_ally' => _singleOrEmpty(_lowestHp(actorTeam)),
-      'lowest_hp_enemy' => _singleOrEmpty(_lowestHp(enemyTeam)),
-      'back_enemy' => _singleOrEmpty(_backRow(enemyTeam)),
-      _ => _singleOrEmpty(_resolveTarget(spec, actor, actorTeam, enemyTeam)),
+      'lowest_hp_enemy'=> _singleOrEmpty(_lowestHp(enemyTeam)),
+      'back_enemy'     => _singleOrEmpty(_backRow(enemyTeam)),
+      'front_ally'     => _singleOrEmpty(_firstAlive(actorTeam)),
+      _                => _singleOrEmpty(_resolveTarget(spec, actor, actorTeam, enemyTeam)),
     };
   }
 
@@ -371,6 +828,12 @@ class ActionResolver {
   List<Pet> _lowestHpCandidates(List<Pet> team) {
     final alive = _aliveCandidates(team);
     alive.sort((a, b) => a.hp.compareTo(b.hp));
+    return alive;
+  }
+
+  List<Pet> _fastestCandidates(List<Pet> team) {
+    final alive = _aliveCandidates(team);
+    alive.sort((a, b) => b.effectiveSpeed.compareTo(a.effectiveSpeed));
     return alive;
   }
 

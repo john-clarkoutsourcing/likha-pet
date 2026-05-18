@@ -13,6 +13,7 @@ export interface PetState {
   shield: number;
   energy?: number;
   isFainted: boolean;
+  lastStandTicks?: number;
   index: number;
   statusEffects: StatusEffect[];
 }
@@ -40,6 +41,7 @@ export interface CardEffect {
   lifeSteal?: boolean;
   energySteal?: boolean;
   energyDrain?: boolean;
+  tags?: string[];
 }
 
 export interface RoundExecutionInput {
@@ -112,6 +114,7 @@ export class ServerBattleExecutor {
     const teamB: PetState[] = playerBTeam.map(p => ({
       ...p, statusEffects: p.statusEffects?.map(s => ({ ...s })) ?? []
     }));
+    const selectedTraitsByPetId = new Map<string, CardEffect>();
 
     // ── Process status effects at round start ─────────────────────────────────
     for (const pet of [...teamA, ...teamB]) {
@@ -160,9 +163,11 @@ export class ServerBattleExecutor {
       const cardId   = selectedCards[0];
       const traitId   = cardTraits[cardId] ?? cardId;
       const cardFx    = resolveCardEffect(traitId, cardEffects[cardId]);
+      selectedTraitsByPetId.set(pet.uid, cardFx);
       const effectType  = cardFx.effectType;
       const effectValue = cardFx.effectValue;
       const targetPref  = cardFx.target;
+      const tags = cardFx.tags ?? [];
 
       const enemyTeam = team === 'A' ? teamB : teamA;
       const allyTeam  = team === 'A' ? teamA : teamB;
@@ -175,6 +180,10 @@ export class ServerBattleExecutor {
       let actionTarget: PetState | null = null;
       let actionTargetTeam: 'A' | 'B' = team === 'A' ? 'B' : 'A';
 
+      if (tags.includes('cleanse') && pet.statusEffects.length > 0) {
+        pet.statusEffects = [];
+      }
+
       switch (effectType) {
         // ── Offensive ───────────────────────────────────────────────────────
         case 'damage':
@@ -184,42 +193,87 @@ export class ServerBattleExecutor {
           actionTarget = enemy;
           actionTargetTeam = team === 'A' ? 'B' : 'A';
           const base = effectValue > 0 ? effectValue + rng.nextInt(8) - 4 : 30 + rng.nextInt(8) - 4;
-          damage = Math.max(1, base - Math.floor((enemy.def ?? 0) / 3));
+          const damageBoost = tags.includes('bonus_damage_if_debuffed') && enemy.statusEffects.length > 0
+            ? 1.2
+            : 1.0;
+          const critChance = Math.max(
+            0,
+            Math.min(0.3, (pet.mor * 0.001) - (enemy.spd * 0.0005)),
+          );
+          const crit = tags.includes('crit_if_first') || (critChance > 0 && rng.next() < critChance);
+          const critMultiplier = tags.includes('double_crit_damage') ? 3 : 2;
+          const hitCount = tags.includes('multi_hit_3') ? 3 : 1;
+          damage = Math.max(1, Math.round((base - Math.floor((enemy.def ?? 0) / 3)) * damageBoost));
           // Class bonus: +15% or -15% based on speed (simplified)
-           const ignoreShield = enemy.statusEffects.some(s => s.name === 'sleep');
-           const shieldAbsorb = ignoreShield ? 0 : Math.min(enemy.shield, damage);
-           enemy.shield -= shieldAbsorb;
-           enemy.hp = Math.max(0, enemy.hp - (damage - shieldAbsorb));
-           if (enemy.hp <= 0) enemy.isFainted = true;
-           if (ignoreShield) {
-             enemy.statusEffects = enemy.statusEffects.filter(s => s.name !== 'sleep');
-           }
-          if (cardFx.lifeSteal) {
-            const actual = Math.max(0, damage - shieldAbsorb);
-            if (actual > 0) {
-              healAmount = Math.min(actual, 50);
-              pet.hp = Math.min(pet.maxHp, pet.hp + healAmount);
+            const ignoreShield = enemy.statusEffects.some(s => s.name === 'sleep');
+           let totalActual = 0;
+            for (let i = 0; i < hitCount; i++) {
+              const hitDamage = Math.max(1, Math.min(90, crit ? damage * critMultiplier : damage));
+              const shieldAbsorb = ignoreShield ? 0 : Math.min(enemy.shield, hitDamage);
+              enemy.shield -= shieldAbsorb;
+              const actual = hitDamage - shieldAbsorb;
+              enemy.hp = Math.max(0, enemy.hp - actual);
+              totalActual += actual;
+              if (enemy.hp <= 0) enemy.isFainted = true;
+              if (ignoreShield) {
+                enemy.statusEffects = enemy.statusEffects.filter(s => s.name !== 'sleep');
+              }
+              if (enemy.isFainted) break;
             }
-          }
-          if (cardFx.energySteal || cardFx.energyDrain) {
-            const energyTarget = enemyTeam.find(p => !p.isFainted) ?? enemy;
-            if (energyTarget && energyTarget !== pet) {
+           const victimFx = selectedTraitsByPetId.get(enemy.uid);
+           if (victimFx?.tags?.includes('counter_stun_plant_reptile') ||
+               victimFx?.tags?.includes('counter_stun_aqua_bird')) {
+             enemy.statusEffects.push({ name: 'stun', remainingRounds: 1, magnitude: 0 });
+             statusApplied = 'stun';
+           }
+           if (victimFx?.tags?.includes('on_hit_energy_vs_aquatic')) {
+             (pet as PetState & { energy?: number }).energy =
+               ((pet as PetState & { energy?: number }).energy ?? 0) + 1;
+           }
+           if (victimFx?.tags?.includes('disable_horn_next') ||
+               victimFx?.tags?.includes('disable_ability') ||
+               victimFx?.tags?.includes('disable_melee_next')) {
+             pet.statusEffects.push({ name: 'disabled', remainingRounds: 1, magnitude: 0 });
+             statusApplied = 'disabled';
+           }
+           if ((tags.includes('end_last_stand') || tags.includes('prevent_last_stand')) && (enemy.lastStandTicks ?? 0) > 0) {
+             enemy.lastStandTicks = 0;
+             enemy.hp = 0;
+             enemy.isFainted = true;
+           }
+           if (cardFx.lifeSteal && totalActual > 0) {
+               healAmount = Math.min(totalActual, 50);
+               pet.hp = Math.min(pet.maxHp, pet.hp + healAmount);
+           }
+           if (cardFx.energySteal || cardFx.energyDrain) {
+             const energyTarget = enemyTeam.find(p => !p.isFainted) ?? enemy;
+             if (energyTarget && energyTarget !== pet) {
               (energyTarget as PetState & { energy?: number }).energy =
                 Math.max(0, ((energyTarget as PetState & { energy?: number }).energy ?? 0) - 1);
               if (cardFx.energySteal) {
                 (pet as PetState & { energy?: number }).energy =
                   ((pet as PetState & { energy?: number }).energy ?? 0) + 1;
-              }
-            }
-          }
-          const reflect = enemy.statusEffects.find(s => s.name === 'reflect');
-          if (reflect && pet.hp > 0) {
-            const reflected = Math.max(1, Math.min(90, Math.round(damage * ((reflect.magnitude ?? 0) / 100))));
-            pet.hp = Math.max(0, pet.hp - reflected);
-            if (pet.hp <= 0) pet.isFainted = true;
-          }
-          break;
-        }
+               }
+             }
+           }
+           if (tags.includes('energy_on_crit') && crit) {
+             (pet as PetState & { energy?: number }).energy =
+               ((pet as PetState & { energy?: number }).energy ?? 0) + 1;
+           }
+           if (tags.includes('self_aroma')) {
+             pet.statusEffects.push({ name: 'aroma', remainingRounds: 1, magnitude: 0 });
+           }
+           if (tags.includes('self_speed_up')) {
+             pet.statusEffects.push({ name: 'speed_up', remainingRounds: 2, magnitude: 20 });
+           }
+           const reflect = enemy.statusEffects.find(s => s.name === 'reflect');
+           if (reflect && pet.hp > 0) {
+             const reflected = Math.max(1, Math.min(90, Math.round(totalActual * ((reflect.magnitude ?? 0) / 100))));
+             pet.hp = Math.max(0, pet.hp - reflected);
+             if (pet.hp <= 0) pet.isFainted = true;
+           }
+           break;
+         }
         case 'shieldBreak': {
            const enemy = this._selectTarget(enemyTeam);
            if (!enemy) continue;

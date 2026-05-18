@@ -252,14 +252,15 @@ class TraitSystem {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   String _targetLabel(String target) => switch (target) {
-        'enemy' => 'front enemy',
-        'lowest_hp_enemy' => 'weakest enemy (pierces)',
-        'back_enemy' => 'back row enemy (pierces)',
-        'all_enemies' => 'all enemies',
-        'self' => 'self',
+        'enemy'          => 'front enemy',
+        'lowest_hp_enemy'=> 'weakest enemy (pierces)',
+        'back_enemy'     => 'back row enemy (pierces)',
+        'all_enemies'    => 'all enemies',
+        'self'           => 'self',
         'lowest_hp_ally' => 'the lowest-HP ally',
-        'all_allies' => 'all allies',
-        _ => target,
+        'all_allies'     => 'all allies',
+        'front_ally'     => 'frontline ally',
+        _                => target,
       };
 
   String _buffLabel(TraitEffect e) => switch (e.buffType) {
@@ -289,6 +290,7 @@ class TraitSystem {
         DebuffType.reflect => 'Reflect',
         DebuffType.stench => 'Inflict Stench (${e.duration} rounds)',
         DebuffType.speedDown => 'Reduce Speed (acts last 1 round)',
+        DebuffType.isolate => 'Isolate (cannot target allies)',
         null => 'Apply debuff −${e.value}',
       };
 }

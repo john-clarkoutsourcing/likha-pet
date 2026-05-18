@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spine_flutter/spine_flutter.dart';
 import 'app.dart';
 import 'core/theme/app_colors.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'features/pets/providers/player_provider.dart';
 import 'web/webview_platform_stub.dart'
     if (dart.library.html) 'web/webview_platform_web.dart';
@@ -41,8 +42,16 @@ void main() async {
 
   // Pre-initialize player data so it's ready before any screen renders.
   final container = ProviderContainer();
+
+  // Wire the logged-in user's ID into the player notifier before initialization
+  // so Firestore team sync knows which user document to read/write.
+  const storage = FlutterSecureStorage();
+  final uid = await storage.read(key: 'user_id');
+  if (uid != null) {
+    container.read(playerProvider.notifier).setUserId(uid);
+  }
+
   // On launch: initialize player data (loads saved or hatches fresh starters).
-  // Call resetAndRehatch() here once to wipe old hardcoded pure-breed pets.
   await container.read(playerProvider.notifier).initialize();
 
   runApp(

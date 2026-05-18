@@ -1,12 +1,13 @@
 import 'dart:convert' show jsonEncode, jsonDecode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import '../../../core/api/api_client.dart';
 import '../models/battle_action_log.dart';
 
 /// API service for PvP validation
 /// Submits battle logs to the server for validation and anti-cheat detection
 class PvpValidationService {
-  static const String baseUrl = 'http://localhost:3000/api/pvp';
+  static String get baseUrl => '${ApiClient.baseUrl}/api/pvp';
   final http.Client _client;
 
   PvpValidationService({http.Client? client}) : _client = client ?? http.Client();
@@ -26,7 +27,7 @@ class PvpValidationService {
         url,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer dummy-token', // TODO: Use real auth token
+          'Authorization': 'Bearer ${ApiClient.cachedToken ?? ''}',
         },
         body: body,
       ).timeout(
@@ -64,7 +65,7 @@ class PvpValidationService {
       final response = await _client.get(
         url,
         headers: {
-          'Authorization': 'Bearer dummy-token', // TODO: Use real auth token
+          'Authorization': 'Bearer ${ApiClient.cachedToken ?? ''}',
         },
       ).timeout(const Duration(seconds: 10));
 
@@ -87,7 +88,7 @@ class PvpValidationService {
       final response = await _client.get(
         url,
         headers: {
-          'Authorization': 'Bearer dummy-token', // TODO: Use real auth token
+          'Authorization': 'Bearer ${ApiClient.cachedToken ?? ''}',
         },
       ).timeout(const Duration(seconds: 10));
 
