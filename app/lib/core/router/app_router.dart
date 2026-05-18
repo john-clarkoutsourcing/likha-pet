@@ -40,21 +40,31 @@ class Routes {
   static const pvpResult     = '/pvp/result';
 }
 
-/// Create GoRouter with auth-based redirect using Riverpod
-GoRouter createGoRouter(bool isAuthenticated) {
+/// A plain ChangeNotifier that RouterGuard pings whenever auth state changes.
+/// GoRouter's refreshListenable watches it to re-run the redirect callback.
+class AuthChangeNotifier extends ChangeNotifier {
+  // Called by RouterGuard's ref.listen — public so the state class can reach it.
+  void ping() => notifyListeners();
+}
+
+/// Create a stable GoRouter.
+/// [initialAuth]      — auth state at creation time (for initialLocation only).
+/// [authNotifier]     — pinged whenever auth changes; triggers redirect re-eval.
+/// [isAuthenticated]  — closure that reads LIVE auth state, never stale.
+GoRouter createGoRouter({
+  required bool initialAuth,
+  required AuthChangeNotifier authNotifier,
+  required bool Function() isAuthenticated,
+}) {
   return GoRouter(
-    initialLocation: isAuthenticated ? Routes.home : Routes.login,
+    initialLocation: initialAuth ? Routes.home : Routes.login,
+    refreshListenable: authNotifier,
     redirect: (context, state) {
-      final isBrowser = state.uri.path == Routes.login || state.uri.path == Routes.register;
-      
-      if (!isAuthenticated && !isBrowser) {
-        return Routes.login;
-      }
-      
-      if (isAuthenticated && isBrowser) {
-        return Routes.home;
-      }
-      
+      final auth = isAuthenticated();
+      final onAuthPage = state.uri.path == Routes.login ||
+          state.uri.path == Routes.register;
+      if (!auth && !onAuthPage) return Routes.login;
+      if (auth && onAuthPage) return Routes.home;
       return null;
     },
     routes: [
@@ -151,16 +161,37 @@ GoRouter createGoRouter(bool isAuthenticated) {
 /// 
 /// This widget manages GoRouter configuration based on auth state from Riverpod.
 /// It creates a new GoRouter instance whenever auth state changes, causing redirects.
-class RouterGuard extends ConsumerWidget {
+class RouterGuard extends ConsumerStatefulWidget {
   const RouterGuard({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-    final isAuthenticated = authState == AuthState.authenticated;
+  ConsumerState<RouterGuard> createState() => _RouterGuardState();
+}
 
-    // Create a new router whenever auth state changes
-    final router = createGoRouter(isAuthenticated);
+class _RouterGuardState extends ConsumerState<RouterGuard> {
+  late final GoRouter _router;
+  final _authNotifier = AuthChangeNotifier();
+
+  @override
+  void initState() {
+    super.initState();
+    _router = createGoRouter(
+      initialAuth: ref.read(authProvider) == AuthState.authenticated,
+      authNotifier: _authNotifier,
+      isAuthenticated: () => ref.read(authProvider) == AuthState.authenticated,
+    );
+  }
+
+  @override
+  void dispose() {
+    _authNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Ping the notifier whenever auth changes — GoRouter re-runs its redirect.
+    ref.listen<AuthState>(authProvider, (_, __) => _authNotifier.ping());
 
     return MaterialApp.router(
       title: 'Likha Pet',
@@ -168,7 +199,7 @@ class RouterGuard extends ConsumerWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       ),
-      routerConfig: router,
+      routerConfig: _router,
     );
   }
 }

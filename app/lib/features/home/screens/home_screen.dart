@@ -23,6 +23,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _sceneController;
+  bool _ready = false; // true only after player init completes and roster check passes
 
   @override
   void initState() {
@@ -32,12 +33,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       vsync: this,
     )..repeat();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final player = ref.read(playerProvider);
-      if (player.roster.isEmpty && mounted) {
-        context.go(Routes.starterPack);
-      }
-    });
+    // Defer to post-frame so context.go / setState are never called
+    // during the initial build — avoids "setState called during build".
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initPlayer());
+  }
+
+  Future<void> _initPlayer() async {
+    final notifier = ref.read(playerProvider.notifier);
+
+    // Wire the user ID in case RouterGuard got here before login screen did.
+    final uid = ref.read(authProvider.notifier).userId;
+    if (uid != null) notifier.setUserId(uid);
+
+    // Always ensure initialized — may be a no-op if already done.
+    if (!notifier.isInitialized) {
+      await notifier.initialize();
+    }
+
+    if (!mounted) return;
+
+    final player = ref.read(playerProvider);
+    // Go to starter pack if:
+    //   (a) No pets yet — brand new player
+    //   (b) Pets exist but pack not complete — mid-hatch refresh
+    if (player.roster.isEmpty || !player.starterPackDone) {
+      context.go(Routes.starterPack);
+    } else {
+      setState(() => _ready = true);
+    }
   }
 
   @override
@@ -48,6 +71,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Show a clean loading screen while we initialize player data and decide
+    // whether to stay here or redirect to the starter pack. This eliminates
+    // the flicker between home and starter-pack on every login.
+    if (!_ready) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF050810),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('🐾',
+                  style: TextStyle(fontSize: 40)),
+              SizedBox(height: 16),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFF4AC4D9),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final player = ref.watch(playerProvider);
     final userEmail = ref.watch(userEmailProvider) ?? 'qiqapi@likha.pet';
     final playerName = userEmail.split('@').first;
@@ -232,18 +282,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     onRankTap: () => context.push(Routes.pvpQueue),
                     onNewsTap: () => context.push(Routes.library),
                     onProfileTap: () => context.push(Routes.roster),
-                    onSettingsTap: () async {
-                      await ref.read(authProvider.notifier).logout();
-                      if (mounted) {
-                        context.go(Routes.login);
-                      }
-                    },
+                    onLogoutTap: () => _confirmLogout(context, ref),
                   ),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _confirmLogout(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF111A28),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+        ),
+        title: const Text(
+          'Log Out',
+          style: TextStyle(
+            fontFamily: 'LilitaOne',
+            color: Color(0xFFEAFBFF),
+            fontSize: 18,
+          ),
+        ),
+        content: const Text(
+          'Are you sure you want to log out?',
+          style: TextStyle(
+            fontFamily: 'Fredoka',
+            color: Color(0xFFAAE8F5),
+            fontSize: 13,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white38)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              // Clear player data first so the next user starts with a clean slate.
+              await ref.read(playerProvider.notifier).reset();
+              await ref.read(authProvider.notifier).logout();
+              if (mounted) context.go(Routes.login);
+            },
+            child: const Text(
+              'Log Out',
+              style: TextStyle(
+                color: Color(0xFFFF4466),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -974,7 +1071,7 @@ class _TotemFooter extends StatelessWidget {
   final VoidCallback onRankTap;
   final VoidCallback onNewsTap;
   final VoidCallback onProfileTap;
-  final VoidCallback onSettingsTap;
+  final VoidCallback onLogoutTap;
 
   const _TotemFooter({
     required this.tileSize,
@@ -982,7 +1079,7 @@ class _TotemFooter extends StatelessWidget {
     required this.onRankTap,
     required this.onNewsTap,
     required this.onProfileTap,
-    required this.onSettingsTap,
+    required this.onLogoutTap,
   });
 
   @override
@@ -1009,10 +1106,11 @@ class _TotemFooter extends StatelessWidget {
           onTap: onProfileTap,
         ),
         _WoodTile(
-          icon: Icons.settings,
+          icon: Icons.logout,
           size: tileSize,
           iconSize: iconSize,
-          onTap: onSettingsTap,
+          onTap: onLogoutTap,
+          iconColor: const Color(0xFFFF6677),
         ),
       ],
     );
@@ -1024,12 +1122,14 @@ class _WoodTile extends StatelessWidget {
   final double size;
   final double iconSize;
   final VoidCallback onTap;
+  final Color? iconColor;
 
   const _WoodTile({
     required this.icon,
     required this.size,
     required this.iconSize,
     required this.onTap,
+    this.iconColor,
   });
 
   @override
@@ -1045,10 +1145,12 @@ class _WoodTile extends StatelessWidget {
             SvgPicture.asset('assets/images/ui/wooden-tile.svg', fit: BoxFit.fill),
             Icon(
               icon,
-              color: const Color(0xFFBFF0FA),
+              color: iconColor ?? const Color(0xFFBFF0FA),
               size: iconSize,
-              shadows: const [
-                Shadow(color: Color(0xAA00E5FF), blurRadius: 12),
+              shadows: [
+                Shadow(
+                    color: (iconColor ?? const Color(0xFF00E5FF)).withValues(alpha: 0.67),
+                    blurRadius: 12),
                 Shadow(color: Color(0xAA4AC4D9), blurRadius: 22),
               ],
             ),

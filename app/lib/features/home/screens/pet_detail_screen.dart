@@ -1,538 +1,641 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:likha_pet_battle_engine/trait.dart';
+
 import '../../../core/theme/app_colors.dart';
-import '../models/pet_model.dart';
-import '../providers/pet_inventory_provider.dart';
-import '../widgets/pet_sprite_display.dart';
+import '../../battle/data/creature_registry.dart';
+import '../../battle/widgets/pet_renderer_widget.dart';
+import '../../pets/models/owned_pet.dart';
+import '../../pets/providers/player_provider.dart';
 
-/// Pet Detail Screen - shows full pet information
-class PetDetailScreen extends ConsumerStatefulWidget {
+// ── Rarity colour ─────────────────────────────────────────────────────────────
+
+Color _rarityColor(String r) => switch (r.toLowerCase()) {
+  'common'     => const Color(0xFFAAAAAA),
+  'uncommon'   => const Color(0xFF44CC66),
+  'rare'       => const Color(0xFF4488FF),
+  'epic'       => const Color(0xFFCC44FF),
+  'legendary'  => const Color(0xFFFFCC00),
+  _            => Colors.white38,
+};
+
+// ── Class accent colours ──────────────────────────────────────────────────────
+
+const _kAccents = <String, Color>{
+  'bug':     Color(0xFFE85AA8),
+  'beast':   Color(0xFFF0A040),
+  'reptile': Color(0xFF4ADC7A),
+  'aquatic': Color(0xFF4AC4D9),
+  'plant':   Color(0xFFA8D94A),
+  'bird':    Color(0xFFF586A0),
+};
+
+Color _clsAccent(String cls) =>
+    _kAccents[cls.toLowerCase()] ?? const Color(0xFF4AC4D9);
+
+const _kPartLabels = {
+  'horn':  'HORN',
+  'back':  'BACK',
+  'tail':  'TAIL',
+  'mouth': 'MOUTH',
+};
+
+const _kPartIcons = {
+  'horn':  Icons.arrow_upward_rounded,
+  'back':  Icons.shield_rounded,
+  'tail':  Icons.rotate_right_rounded,
+  'mouth': Icons.record_voice_over_rounded,
+};
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+class PetDetailScreen extends ConsumerWidget {
   final String petId;
-
-  const PetDetailScreen({
-    super.key,
-    required this.petId,
-  });
+  const PetDetailScreen({super.key, required this.petId});
 
   @override
-  ConsumerState<PetDetailScreen> createState() => _PetDetailScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final player = ref.watch(playerProvider);
+    final pet = player.roster.where((p) => p.uid == petId).firstOrNull;
 
-class _PetDetailScreenState extends ConsumerState<PetDetailScreen> {
-  late TextEditingController _nameController;
-  bool _isEditing = false;
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final petsAsync = ref.watch(petInventoryProvider);
-
-    return petsAsync.when(
-      data: (allPets) {
-        final pet = allPets.where((p) => p.id == widget.petId).firstOrNull;
-
-        if (pet == null) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Pet Not Found')),
-            body: const Center(child: Text('Pet not found')),
-          );
-        }
-
-        // Initialize name controller if empty
-        if (_nameController.text.isEmpty) {
-          _nameController.text = pet.name;
-        }
-
-        return Scaffold(
-          backgroundColor: AppColors.bg,
-          appBar: AppBar(
-            backgroundColor: AppColors.surface,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => context.pop(),
-            ),
-            title: const Text('Pet Details'),
-            actions: [
-              if (!_isEditing)
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => setState(() => _isEditing = true),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Center(
-                    child: TextButton(
-                      onPressed: _isSaving ? null : () => _saveName(ref, pet),
-                      child: const Text(
-                        'Save',
-                        style: TextStyle(color: AppColors.primary),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+    if (pet == null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF050810),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0A1224),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white54),
+            onPressed: () => context.pop(),
           ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Pet Card ────────────────────────────────────────────────
-                _PetHero(pet: pet),
-                const SizedBox(height: 32),
-
-                // ── Sprite Display (DNA-based) ──────────────────────────────
-                Center(
-                  child: PetSpriteDisplay(
-                    pet: pet,
-                    size: 140,
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // ── Pet Name (Editable) ──────────────────────────────────────
-                _NameSection(
-                  name: pet.name,
-                  isEditing: _isEditing,
-                  controller: _nameController,
-                  onEditCancel: () => setState(() {
-                    _isEditing = false;
-                    _nameController.text = pet.name;
-                  }),
-                ),
-                const SizedBox(height: 28),
-
-                // ── DNA Info ─────────────────────────────────────────────────
-                _InfoSection(
-                  title: 'DNA',
-                  children: [
-                    _InfoRow(
-                      label: 'DNA Code',
-                      value: pet.dna,
-                    ),
-                    const Divider(color: AppColors.divider),
-                    _InfoRow(
-                      label: 'State',
-                      value: pet.state,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-
-                // ── Attributes ──────────────────────────────────────────────
-                _InfoSection(
-                  title: 'Attributes',
-                  children: [
-                    _InfoRow(
-                      label: 'Rarity',
-                      value: pet.attributes.rarity,
-                    ),
-                    const Divider(color: AppColors.divider),
-                    _InfoRow(
-                      label: 'Element',
-                      value: pet.attributes.element,
-                    ),
-                    const Divider(color: AppColors.divider),
-                    _InfoRow(
-                      label: 'Base Power',
-                      value: '${pet.attributes.basePower}',
-                    ),
-                    const Divider(color: AppColors.divider),
-                    _InfoRow(
-                      label: 'Color',
-                      value: pet.attributes.color,
-                    ),
-                    const Divider(color: AppColors.divider),
-                    _InfoRow(
-                      label: 'Pattern',
-                      value: pet.attributes.pattern,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-
-                // ── Timeline ─────────────────────────────────────────────────
-                _InfoSection(
-                  title: 'Timeline',
-                  children: [
-                    _InfoRow(
-                      label: 'Created',
-                      value: _formatDate(pet.createdAt),
-                    ),
-                    const Divider(color: AppColors.divider),
-                    _InfoRow(
-                      label: 'Hatch Ready At',
-                      value: _formatDate(pet.hatchTime),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 60),
-              ],
-            ),
-          ),
-        );
-      },
-      loading: () => Scaffold(
-        appBar: AppBar(title: const Text('Loading...')),
-        body: const Center(child: CircularProgressIndicator()),
-      ),
-      error: (error, st) => Scaffold(
-        appBar: AppBar(title: const Text('Error')),
-        body: Center(child: Text('Error: $error')),
-      ),
-    );
-  }
-
-  Future<void> _saveName(WidgetRef ref, PetModel pet) async {
-    final newName = _nameController.text.trim();
-
-    if (newName.isEmpty || newName == pet.name) {
-      setState(() => _isEditing = false);
-      return;
-    }
-
-    setState(() => _isSaving = true);
-
-    try {
-      // TODO: Implement API endpoint to rename pet
-      // For now, just update locally
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (mounted) {
-        setState(() {
-          _isEditing = false;
-          _isSaving = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Pet renamed successfully! ✨'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() => _isSaving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to rename: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  String _formatDate(int milliseconds) {
-    final date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
-    return '${date.month}/${date.day}/${date.year}';
-  }
-}
-
-/// Hero card showing pet visually
-class _PetHero extends StatelessWidget {
-  final PetModel pet;
-
-  const _PetHero({required this.pet});
-
-  @override
-  Widget build(BuildContext context) {
-    final rarityColor = _getRarityColor(pet.attributes.rarity);
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            rarityColor.withValues(alpha: 0.2),
-            rarityColor.withValues(alpha: 0.05),
-          ],
+          title: const Text('Pet Not Found',
+              style: TextStyle(color: Colors.white54)),
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: rarityColor, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: rarityColor.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        children: [
-          // Pet emoji
-          Text(
-            pet.isEgg ? '🥚' : pet.attributes.element,
-            style: const TextStyle(fontSize: 96),
-          ),
-          const SizedBox(height: 16),
-
-          // Pet name
-          Text(
-            pet.name,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-
-          // Rarity and state
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: rarityColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: rarityColor),
-                ),
-                child: Text(
-                  pet.attributes.rarity,
-                  style: TextStyle(
-                    color: rarityColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.primary),
-                ),
-                child: Text(
-                  pet.state,
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getRarityColor(String rarity) {
-    switch (rarity) {
-      case 'Common':
-        return Colors.grey;
-      case 'Uncommon':
-        return Colors.green;
-      case 'Rare':
-        return Colors.blue;
-      case 'Epic':
-        return Colors.purple;
-      case 'Legendary':
-        return Colors.orange;
-      default:
-        return Colors.white;
-    }
-  }
-}
-
-/// Name section with edit capability
-class _NameSection extends StatelessWidget {
-  final String name;
-  final bool isEditing;
-  final TextEditingController controller;
-  final VoidCallback onEditCancel;
-
-  const _NameSection({
-    required this.name,
-    required this.isEditing,
-    required this.controller,
-    required this.onEditCancel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (isEditing) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Edit Pet Name',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: controller,
-            decoration: InputDecoration(
-              hintText: 'Enter new name',
-              filled: true,
-              fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.divider),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.divider),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.primary, width: 2),
-              ),
-            ),
-            style: const TextStyle(color: AppColors.textPrimary),
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: onEditCancel,
-                  icon: const Icon(Icons.close),
-                  label: const Text('Cancel'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white12,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        body: const Center(
+          child: Text('Pet not found in your roster.',
+              style: TextStyle(color: Colors.white38)),
+        ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Pet Name',
-          style: TextStyle(
-            color: AppColors.textMuted,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
+    final def   = pet.toCreatureDefinition();
+    final stats = def.computedStats;
+    final accent = _clsAccent(pet.classLabel);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF050810),
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(0, -0.8),
+            radius: 1.2,
+            colors: [accent.withValues(alpha: 0.08), const Color(0x00050810)],
           ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          name,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+        child: SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              // ── Top bar ────────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+                  child: Row(children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios,
+                          color: Colors.white54, size: 18),
+                      onPressed: () => context.pop(),
+                    ),
+                    Expanded(
+                      child: Text(
+                        pet.name,
+                        style: GoogleFonts.rajdhani(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    _ClassBadge(label: pet.classLabel, accent: accent),
+                    const SizedBox(width: 8),
+                    _PurityBadge(purity: pet.purity),
+                  ]),
+                ),
+              ),
+
+              // ── Hero ───────────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: _HeroSection(pet: pet, def: def, stats: stats, accent: accent),
+              ),
+
+              // ── Stats row ──────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: _StatsRow(stats: stats, accent: accent),
+                ),
+              ),
+
+              // ── Cards section label ────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Text(
+                    'BATTLE CARDS',
+                    style: GoogleFonts.rajdhani(
+                      color: Colors.white38,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Card list ─────────────────────────────────────────────────
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _PartCard(part: def.horn,  bodyAccent: accent, cardRarity: pet.hornRarity),
+                    const SizedBox(height: 10),
+                    _PartCard(part: def.back,  bodyAccent: accent, cardRarity: pet.backRarity),
+                    const SizedBox(height: 10),
+                    _PartCard(part: def.tail,  bodyAccent: accent, cardRarity: pet.tailRarity),
+                    const SizedBox(height: 10),
+                    _PartCard(part: def.mouth, bodyAccent: accent, cardRarity: pet.mouthRarity),
+                  ]),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
-    );
-  }
-}
-
-/// Generic info section with title
-class _InfoSection extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _InfoSection({
-    required this.title,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title.toUpperCase(),
-          style: const TextStyle(
-            color: AppColors.textMuted,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.divider),
-          ),
-          child: Column(children: children),
-        ),
-      ],
-    );
-  }
-}
-
-/// Info row showing label and value
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.right,
-          ),
-        ],
       ),
     );
   }
+}
+
+// ── Hero section: sprite + name ───────────────────────────────────────────────
+
+class _HeroSection extends StatelessWidget {
+  final OwnedPet pet;
+  final CreatureDefinition def;
+  final ({int hp, int speed, int skill, int morale}) stats;
+  final Color accent;
+
+  const _HeroSection({
+    required this.pet,
+    required this.def,
+    required this.stats,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      height: 200,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1224),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.12),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Row(children: [
+        // Sprite
+        Expanded(
+          flex: 5,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(16)),
+            child: PetRendererWidget.fromOwned(pet, size: 200),
+          ),
+        ),
+        // Info
+        Expanded(
+          flex: 6,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  pet.classLabel.toUpperCase(),
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  pet.name,
+                  style: GoogleFonts.rajdhani(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 10),
+                _StatChip(icon: Icons.favorite, label: '${stats.hp} HP',
+                    color: const Color(0xFFFF4466)),
+                const SizedBox(height: 5),
+                _StatChip(icon: Icons.bolt, label: '${stats.speed} SPD',
+                    color: const Color(0xFFFFCC44)),
+                const SizedBox(height: 5),
+                Row(children: [
+                  _StatChip(
+                    icon: Icons.emoji_events,
+                    label: '${stats.morale}',
+                    color: const Color(0xFFFF8844),
+                    compact: true,
+                  ),
+                  const SizedBox(width: 8),
+                  _StatChip(
+                    icon: Icons.auto_awesome,
+                    label: '${stats.skill}',
+                    color: const Color(0xFF88CCFF),
+                    compact: true,
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Stats bar row ─────────────────────────────────────────────────────────────
+
+class _StatsRow extends StatelessWidget {
+  final ({int hp, int speed, int skill, int morale}) stats;
+  final Color accent;
+  const _StatsRow({required this.stats, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      _StatBox(label: 'HP',     value: stats.hp,     color: const Color(0xFFFF4466)),
+      const SizedBox(width: 8),
+      _StatBox(label: 'SPEED',  value: stats.speed,  color: const Color(0xFFFFCC44)),
+      const SizedBox(width: 8),
+      _StatBox(label: 'MORALE', value: stats.morale, color: const Color(0xFFFF8844)),
+      const SizedBox(width: 8),
+      _StatBox(label: 'SKILL',  value: stats.skill,  color: const Color(0xFF88CCFF)),
+    ]);
+  }
+}
+
+class _StatBox extends StatelessWidget {
+  final String label;
+  final int    value;
+  final Color  color;
+  const _StatBox({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(children: [
+        Text('$value',
+            style: TextStyle(
+                color: color, fontSize: 18, fontWeight: FontWeight.w900)),
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w700,
+                letterSpacing: 1)),
+      ]),
+    ),
+  );
+}
+
+// ── Part / card tile ──────────────────────────────────────────────────────────
+
+class _PartCard extends StatelessWidget {
+  final PartDefinition part;
+  final Color bodyAccent;
+  final String cardRarity;
+  const _PartCard({required this.part, required this.bodyAccent, required this.cardRarity});
+
+  @override
+  Widget build(BuildContext context) {
+    final trait      = part.buildTrait();
+    final partAccent = _clsAccent(part.className);
+    final slotLabel  = _kPartLabels[part.partType] ?? part.partType.toUpperCase();
+    final slotIcon   = _kPartIcons[part.partType] ?? Icons.extension;
+    final isPure     = part.partClass.name == bodyAccent.toString(); // visual only
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1224),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: partAccent.withValues(alpha: 0.30)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Card art
+        ClipRRect(
+          borderRadius:
+              const BorderRadius.horizontal(left: Radius.circular(13)),
+          child: SizedBox(
+            width: 80,
+            height: 100,
+            child: part.cardArtPath.isNotEmpty
+                ? Image.asset(
+                    part.cardArtPath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        _CardArtFallback(accent: partAccent, icon: slotIcon),
+                  )
+                : _CardArtFallback(accent: partAccent, icon: slotIcon),
+          ),
+        ),
+
+        // Info
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Slot badge + class badge + rarity badge
+                Row(children: [
+                  _Badge(
+                    label: slotLabel,
+                    color: Colors.white24,
+                    icon: slotIcon,
+                  ),
+                  const SizedBox(width: 6),
+                  _Badge(
+                    label: part.className.toUpperCase(),
+                    color: partAccent,
+                  ),
+                  const SizedBox(width: 6),
+                  _Badge(
+                    label: cardRarity.toUpperCase(),
+                    color: _rarityColor(cardRarity),
+                  ),
+                  const Spacer(),
+                  // Energy cost
+                  _EnergyPip(cost: trait.energyCost),
+                ]),
+                const SizedBox(height: 6),
+                // Card name
+                Text(
+                  trait.name,
+                  style: GoogleFonts.rajdhani(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // Card description
+                Text(
+                  trait.description.isNotEmpty
+                      ? trait.description
+                      : _effectSummary(trait),
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                // ATK / DEF chips
+                const SizedBox(height: 8),
+                _CardStatRow(trait: trait),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  String _effectSummary(Trait t) {
+    final e = t.effect;
+    return switch (e.type) {
+      EffectType.damage    => 'Deal ${e.value} damage.',
+      EffectType.aoe       => 'Deal ${e.value} AoE damage.',
+      EffectType.heal      => 'Restore ${e.value} HP.',
+      EffectType.shield    => 'Grant ${e.value} shield.',
+      EffectType.shieldBreak => 'Break enemy shield.',
+      EffectType.buff      => 'Apply ${e.buffType?.name ?? "buff"}.',
+      EffectType.debuff    => 'Apply ${e.debuffType?.name ?? "debuff"}.',
+    };
+  }
+}
+
+class _CardArtFallback extends StatelessWidget {
+  final Color accent;
+  final IconData icon;
+  const _CardArtFallback({required this.accent, required this.icon});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    color: accent.withValues(alpha: 0.08),
+    child: Center(
+      child: Icon(icon, color: accent.withValues(alpha: 0.5), size: 28),
+    ),
+  );
+}
+
+class _CardStatRow extends StatelessWidget {
+  final Trait trait;
+  const _CardStatRow({required this.trait});
+
+  @override
+  Widget build(BuildContext context) {
+    final e = trait.effect;
+    final atk = e.type == EffectType.damage || e.type == EffectType.aoe
+        ? e.value
+        : 0;
+    final def = e.selfShield > 0 ? e.selfShield : 0;
+
+    return Row(children: [
+      if (atk > 0) ...[
+        _MiniStat(label: 'ATK', value: atk, color: const Color(0xFFFF6644)),
+        const SizedBox(width: 8),
+      ],
+      if (def > 0) ...[
+        _MiniStat(label: 'DEF', value: def, color: const Color(0xFF44BBFF)),
+        const SizedBox(width: 8),
+      ],
+      if (e.type == EffectType.heal)
+        _MiniStat(label: 'HEAL', value: e.value, color: const Color(0xFF44FF88)),
+      if (e.type == EffectType.shield)
+        _MiniStat(label: 'SHIELD', value: e.value, color: const Color(0xFFFFCC44)),
+    ]);
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final String label;
+  final int    value;
+  final Color  color;
+  const _MiniStat({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(4),
+      border: Border.all(color: color.withValues(alpha: 0.35)),
+    ),
+    child: Text(
+      '$label $value',
+      style: TextStyle(
+          color: color, fontSize: 9, fontWeight: FontWeight.w800),
+    ),
+  );
+}
+
+// ── Small helpers ─────────────────────────────────────────────────────────────
+
+class _ClassBadge extends StatelessWidget {
+  final String label;
+  final Color  accent;
+  const _ClassBadge({required this.label, required this.accent});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: accent.withValues(alpha: 0.5)),
+    ),
+    child: Text(
+      label.toUpperCase(),
+      style: TextStyle(
+          color: accent, fontSize: 10, fontWeight: FontWeight.w800,
+          letterSpacing: 1),
+    ),
+  );
+}
+
+class _PurityBadge extends StatelessWidget {
+  final int purity;
+  const _PurityBadge({required this.purity});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = purity == 4
+        ? const Color(0xFFFFD700)
+        : purity >= 2
+            ? const Color(0xFF88CCFF)
+            : Colors.white38;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        '$purity/4',
+        style: TextStyle(
+            color: color, fontSize: 10, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String   label;
+  final Color    color;
+  final IconData? icon;
+  const _Badge({required this.label, required this.color, this.icon});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      if (icon != null) ...[
+        Icon(icon, color: color.withValues(alpha: 0.8), size: 9),
+        const SizedBox(width: 3),
+      ],
+      Text(label,
+          style: TextStyle(
+              color: color.withValues(alpha: 0.9),
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5)),
+    ]),
+  );
+}
+
+class _EnergyPip extends StatelessWidget {
+  final int cost;
+  const _EnergyPip({required this.cost});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFCC44).withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(
+          color: const Color(0xFFFFCC44).withValues(alpha: 0.5)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.bolt, color: Color(0xFFFFCC44), size: 10),
+      Text('$cost',
+          style: const TextStyle(
+              color: Color(0xFFFFCC44),
+              fontSize: 10,
+              fontWeight: FontWeight.w900)),
+    ]),
+  );
+}
+
+class _StatChip extends StatelessWidget {
+  final IconData icon;
+  final String   label;
+  final Color    color;
+  final bool     compact;
+  const _StatChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, color: color, size: compact ? 10 : 12),
+      const SizedBox(width: 4),
+      Text(label,
+          style: TextStyle(
+              color: Colors.white70,
+              fontSize: compact ? 10 : 12,
+              fontWeight: FontWeight.w700)),
+    ],
+  );
 }

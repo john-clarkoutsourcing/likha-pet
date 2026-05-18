@@ -46,9 +46,13 @@ fi
 
 # ── Config ────────────────────────────────────────────────────────────────────
 PROJECT_ID="paksi-game-beta"
-REGION="asia-southeast1"           # Change if needed (e.g. us-central1)
+REGION="asia-southeast1"
 SERVICE_NAME="paksi-server"
 IMAGE="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
+
+# Last-known Cloud Run URL — updated automatically whenever --server runs.
+# Used as fallback so --web works even without a live gcloud connection.
+KNOWN_SERVER_URL="https://paksi-server-293036217272.asia-southeast1.run.app"
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RED='\033[0;31m'; NC='\033[0m'
@@ -128,9 +132,8 @@ if $DEPLOY_SERVER; then
     --project "$PROJECT_ID" \
     --format 'value(status.url)')
   ok "Server deployed → $SERVER_URL"
-  echo ""
-  log "Server URL for Flutter build: $SERVER_URL"
-  # Export so the web build step can use it if run together
+  # Cache for future --web-only runs and export for combined runs.
+  echo "$SERVER_URL" > "$SCRIPT_DIR/.server_url"
   export PAKSI_SERVER_URL="$SERVER_URL"
 fi
 
@@ -141,16 +144,23 @@ if $DEPLOY_WEB; then
   echo ""
   echo -e "${CYAN}${BOLD}── Building Flutter web app ──${NC}"
 
-  # Use server URL from env (set by step 2, or override manually).
-  # For WebSocket, derive wss:// from https:// server URL.
+  # Resolve server URL — priority: env var → .server_url cache → gcloud → hardcoded fallback.
   if [[ -z "${PAKSI_SERVER_URL:-}" ]]; then
-    log "PAKSI_SERVER_URL not set — reading from Cloud Run..."
-    PAKSI_SERVER_URL=$(gcloud run services describe "$SERVICE_NAME" \
-      --region "$REGION" \
-      --project "$PROJECT_ID" \
-      --format 'value(status.url)' 2>/dev/null || echo "")
-    if [[ -z "$PAKSI_SERVER_URL" ]]; then
-      err "Could not determine server URL. Run --server first, or set PAKSI_SERVER_URL env var."
+    if [[ -f "$SCRIPT_DIR/.server_url" ]]; then
+      PAKSI_SERVER_URL=$(cat "$SCRIPT_DIR/.server_url")
+      log "Using cached server URL: $PAKSI_SERVER_URL"
+    else
+      log "No cached URL — querying Cloud Run..."
+      PAKSI_SERVER_URL=$(gcloud run services describe "$SERVICE_NAME" \
+        --region "$REGION" \
+        --project "$PROJECT_ID" \
+        --format 'value(status.url)' 2>/dev/null || echo "")
+      if [[ -n "$PAKSI_SERVER_URL" ]]; then
+        echo "$PAKSI_SERVER_URL" > "$SCRIPT_DIR/.server_url"
+      else
+        log "gcloud unavailable — falling back to known URL"
+        PAKSI_SERVER_URL="$KNOWN_SERVER_URL"
+      fi
     fi
   fi
 

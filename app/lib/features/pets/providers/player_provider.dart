@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../models/owned_pet.dart';
@@ -31,9 +32,13 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-  /// Call once after Firebase Auth resolves to wire Firestore sync.
+  /// Call after auth resolves to wire Firestore sync and force re-init.
+  /// Resets _initialized so the next initialize() loads THIS user's data,
+  /// not the stale cold-start state from a previous session or empty start.
   void setUserId(String uid) {
+    if (_uid == uid) return; // same session, nothing to reset
     _uid = uid;
+    _initialized = false; // force full reload on next initialize()
   }
 
   Future<void> initialize() async {
@@ -45,31 +50,42 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
       state = saved;
     }
 
-    // Merge Firestore teams if available (non-blocking)
+    // Merge Firestore teams if available — wrapped in try/catch so a
+    // down/unreachable emulator or network error never blocks initialization.
     if (_uid != null) {
-      final fsTeams      = await _teamFs.loadTeams(_uid!);
-      final fsActiveTeam = await _teamFs.loadActiveTeam(_uid!);
+      try {
+        final fsTeams      = await _teamFs.loadTeams(_uid!);
+        final fsActiveTeam = await _teamFs.loadActiveTeam(_uid!);
 
-      if (fsTeams.isNotEmpty) {
-        // Firestore is authoritative for team compositions
-        final merged = state.copyWith(
-          savedTeams: fsTeams,
-          activeTeam: fsActiveTeam ?? state.activeTeam,
-        );
-        state = merged;
-        await _repo.save(state); // Backfill local cache
+        if (fsTeams.isNotEmpty) {
+          final merged = state.copyWith(
+            savedTeams: fsTeams,
+            activeTeam: fsActiveTeam ?? state.activeTeam,
+          );
+          state = merged;
+          await _repo.save(state);
+        }
+      } catch (_) {
+        // Firestore unavailable (emulator down, offline, etc.) — local data
+        // is already loaded above, so we can continue without team sync.
       }
     }
 
     _initialized = true;
   }
 
+  /// Wipe all local data — called on logout so the next user starts clean.
+  Future<void> reset() async {
+    await _repo.clear();
+    _uid = null;
+    _initialized = false;
+    state = PlayerData.empty();
+  }
+
   /// Wipe all saved data and re-hatch 3 fresh random pets.
-  /// Useful for testing or a "reset account" flow.
   Future<void> resetAndRehatch() async {
     await _repo.clear();
     state = PlayerData.empty();
-    // No auto-generation — StarterPackScreen handles the hatching flow
   }
 
   // ── Team management ────────────────────────────────────────────────────────
@@ -185,6 +201,28 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
     _persist();
     final t = state.savedTeams.firstWhere((t) => t.id == teamId);
     if (_uid != null) _teamFs.upsertTeam(_uid!, t);
+  }
+
+  // ── Starter pack progress ──────────────────────────────────────────────────
+
+  /// Save the 3 generated starter pets all at once (before any hatching).
+  void saveStarterPets(List<OwnedPet> pets) {
+    state = state.copyWith(roster: pets);
+    _persist();
+  }
+
+  /// Mark one starter egg as revealed (hatching animation played).
+  void revealStarterPet(String uid) {
+    state = state.copyWith(
+      revealedStarterUids: {...state.revealedStarterUids, uid},
+    );
+    _persist();
+  }
+
+  /// Called when the player presses "Start Adventure!" — marks pack as done.
+  void completeStarterPack() {
+    state = state.copyWith(starterComplete: true);
+    _persist();
   }
 
   // ── Pet management ─────────────────────────────────────────────────────────
@@ -307,29 +345,30 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   ///   - Part classes (bytes 1-4): probabilistically inherit from each parent
   ///   - Other attributes (bytes 5-11): blend from parents with randomness
   String _breedDNA(String parentADNA, String parentBDNA) {
+    final rng    = math.Random();
     final aBytes = _dnaBytesFromHex(parentADNA);
     final bBytes = _dnaBytesFromHex(parentBDNA);
     final offspring = <int>[];
 
-    // Byte 0: Body class (50/50 from parents)
-    offspring.add(_rng.nextBool() ? aBytes[0] : bBytes[0]);
+    // Byte 0: Body class — 50/50 from each parent independently.
+    offspring.add(rng.nextBool() ? aBytes[0] : bBytes[0]);
 
-    // Bytes 1-4: Part classes (probabilistically from parents)
+    // Bytes 1-4: Part classes — each slot independently 50/50.
     for (int i = 1; i < 5; i++) {
-      offspring.add(_rng.nextBool() ? aBytes[i] : bBytes[i]);
+      offspring.add(rng.nextBool() ? aBytes[i] : bBytes[i]);
     }
 
-    // Bytes 5-11: Blend from parents with slight randomness
+    // Bytes 5-11: Visual attributes (color, rarity, element, pattern, variants).
+    // Blend from both parents with a small ±10 mutation to allow novelty.
     for (int i = 5; i < 12; i++) {
-      final avg = ((aBytes[i] + bBytes[i]) ~/ 2);
-      final mutated = avg + _rng.nextInt(-10, 10); // Small mutation
-      offspring.add(mutated.clamp(0, 255));
+      final avg     = (aBytes[i] + bBytes[i]) ~/ 2;
+      final delta   = rng.nextInt(21) - 10; // uniform -10…+10
+      offspring.add((avg + delta).clamp(0, 255));
     }
 
     return offspring.map((b) => b.toRadixString(16).padLeft(2, '0')).join('');
   }
 
-  /// Extract 12 bytes from a 24-char hex DNA string.
   List<int> _dnaBytesFromHex(String dna) {
     final bytes = <int>[];
     for (int i = 0; i < 24; i += 2) {
@@ -340,8 +379,6 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
 
   int _max(int a, int b) => a > b ? a : b;
 
-  static final _rng = _RNG();
-
   // ── Persistence ───────────────────────────────────────────────────────────
 
   void _persist() {
@@ -349,17 +386,6 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   }
 }
 
-// Tiny wrapper for pseudo-random number generation
-class _RNG {
-  bool nextBool() => DateTime.now().microsecond.isEven;
-
-  int nextInt(int min, int max) {
-    final t = DateTime.now();
-    final range = max - min;
-    final rand = ((t.microsecond * 1000 + t.millisecond) % 100000) / 100000.0;
-    return min + (rand * range).toInt();
-  }
-}
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 

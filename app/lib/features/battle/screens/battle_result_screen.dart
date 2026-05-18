@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
 import '../../pets/providers/player_provider.dart';
+import '../../pve/data/stage_registry.dart';
 import 'battle_screen.dart';
 
 // ── Args ──────────────────────────────────────────────────────────────────────
@@ -52,8 +53,11 @@ class _BattleResultState extends ConsumerState<BattleResultScreen>
   void initState() {
     super.initState();
     final outcome = widget.args.outcome;
+    final stageReward = widget.args.stageId != null
+        ? stageById(widget.args.stageId!)?.crystalReward
+        : null;
     _crystalsEarned = outcome == 'teamAWins'
-        ? _kWinCrystals
+        ? (stageReward ?? _kWinCrystals)
         : outcome == 'draw'
             ? _kDrawCrystals
             : _kLossCrystals;

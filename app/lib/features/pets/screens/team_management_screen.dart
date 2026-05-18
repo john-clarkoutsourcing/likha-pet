@@ -1129,31 +1129,40 @@ class _BuilderModalState extends State<_BuilderModal> {
     final filledCnt = _slots.where((s) => s != null).length;
     final full      = filledCnt == 3;
 
-    return Align(
-      alignment: Alignment.center,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: MediaQuery.of(context).padding.top + 20,
-          bottom: MediaQuery.of(context).padding.bottom + 20,
-        ),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0A1224),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _kCyan.withValues(alpha: 0.55), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: _kCyan.withValues(alpha: 0.30),
-                blurRadius: 36,
-                spreadRadius: 2,
-              ),
-            ],
+    // showGeneralDialog does not inject Material — wrap explicitly so
+    // TextField / InkWell / Ink widgets find their required ancestor.
+    return Material(
+      color: Colors.transparent,
+      child: Align(
+        alignment: Alignment.center,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: MediaQuery.of(context).padding.top + 20,
+            bottom: MediaQuery.of(context).padding.bottom + 20,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 600,
+              maxHeight: MediaQuery.of(context).size.height * 0.92,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A1224),
+                borderRadius: BorderRadius.circular(20),
+                border:
+                    Border.all(color: _kCyan.withValues(alpha: 0.55), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: _kCyan.withValues(alpha: 0.30),
+                    blurRadius: 36,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
             children: [
               // Modal header
               _ModalHeader(isEdit: isEdit),
@@ -1244,9 +1253,11 @@ class _BuilderModalState extends State<_BuilderModal> {
               ),
             ],
           ),
-        ),
-      ),
-    );
+        ),       // Container
+      ),         // ConstrainedBox
+    ),           // Padding
+  ),             // Align
+);               // Material
   }
 }
 

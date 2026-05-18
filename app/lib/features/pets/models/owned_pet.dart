@@ -85,10 +85,30 @@ class OwnedPet {
   }
 
   /// Visual attributes from DNA
-  String get color => _decoded.color;
-  String get rarity => _decoded.rarity;
+  String get color   => _decoded.color;
+  /// Overall rarity — derived from the average variant tier across all 4 parts.
+  /// Reflects true card quality: a Legendary pet has Legendary-tier cards.
+  String get rarity  => _decoded.rarity;
   String get element => _decoded.element;
   String get pattern => _decoded.pattern;
+
+  /// Per-slot variant tier label (Common / Uncommon / Rare / Epic / Legendary).
+  String get hornRarity  => _variantRarity(_decoded.hornVariant,  isHBT: true);
+  String get backRarity  => _variantRarity(_decoded.backVariant,  isHBT: true);
+  String get tailRarity  => _variantRarity(_decoded.tailVariant,  isHBT: true);
+  String get mouthRarity => _variantRarity(_decoded.mouthVariant, isHBT: false);
+
+  // Variant nibble 0-1 = Common, 2 = Uncommon, 3 = Rare, 4 = Epic, 5+ = Legendary.
+  static String _variantRarity(int nibble, {required bool isHBT}) {
+    final tier = nibble % (isHBT ? 6 : 4);
+    return switch (tier) {
+      0 || 1 => 'Common',
+      2      => 'Uncommon',
+      3      => isHBT ? 'Rare' : 'Rare',
+      4      => isHBT ? 'Epic' : 'Epic',
+      _      => 'Legendary',
+    };
+  }
 
   bool get canBreed => breedCount < 5;
 

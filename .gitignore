@@ -32,3 +32,4 @@ Thumbs.db
 # Firebase credentials (never commit)
 firebase-credentials.json
 .firebase/
+.server_url

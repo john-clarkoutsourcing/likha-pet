@@ -268,6 +268,35 @@ class _Header extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          // Breed CTA
+          GestureDetector(
+            onTap: () => context.push(Routes.breed),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF9C27B0).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: const Color(0xFF9C27B0).withValues(alpha: 0.55)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('🧬', style: TextStyle(fontSize: 12)),
+                  SizedBox(width: 4),
+                  Text(
+                    'Breed',
+                    style: TextStyle(
+                      fontFamily: 'LilitaOne',
+                      color: Color(0xFFCE93D8),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           // Manage Teams CTA
           GestureDetector(
             onTap: () => context.push(Routes.teamManager),
@@ -577,35 +606,39 @@ class _PetCardState extends State<_PetCard>
         final footPad  = cw < 140 ?  6.0 : 10.0;
         final radius   = cw < 140 ? 10.0 : 16.0;
 
-        return GestureDetector(
-      onTap: widget.onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF0E1A33),
-              const Color(0xFF0A1224),
-              const Color(0xFF050810),
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF0E1A33),
+                Color(0xFF0A1224),
+                Color(0xFF050810),
+              ],
+            ),
+            border: Border.all(color: accent.withValues(alpha: 0.35)),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.07),
+                blurRadius: 14,
+              ),
             ],
           ),
-          border: Border.all(color: accent.withValues(alpha: 0.35)),
-          boxShadow: [
-            BoxShadow(
-              color: accent.withValues(alpha: 0.07),
-              blurRadius: 14,
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            // ── Sprite area ─────────────────────────────────────────────────
-            Expanded(
-              child: LayoutBuilder(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              // ── Sprite area — tap here to view pet details ─────────────────
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: widget.onTap,
+                    splashColor: accent.withValues(alpha: 0.18),
+                    highlightColor: accent.withValues(alpha: 0.10),
+                    child: LayoutBuilder(
                 builder: (_, spriteConstraints) {
                   final spriteSize =
                       (spriteConstraints.maxHeight * 0.80).clamp(90.0, 280.0);
@@ -716,36 +749,17 @@ class _PetCardState extends State<_PetCard>
                               ),
                             ),
                           ),
-                          // Rename button — bottom-right corner
-                          Positioned(
-                            bottom: 8,
-                            right: 8,
-                            child: GestureDetector(
-                              onTap: widget.onRename,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.black45,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.white10),
-                                ),
-                                child: const Icon(
-                                  Icons.drive_file_rename_outline,
-                                  size: 12,
-                                  color: Colors.amberAccent,
-                                ),
-                              ),
-                            ),
-                          ),
                         ],
                       );
                     },
-                  );
-                },
-              ),
-            ),
+                  );        // AnimatedBuilder
+                },          // LayoutBuilder builder
+              ),             // LayoutBuilder
+            ),               // InkWell
+          ),                 // Material
+        ),                   // Expanded sprite area
 
-            // ── Footer ──────────────────────────────────────────────────────
+            // ── Footer — tap name to rename ────────────────────────────────
             Container(
               padding: EdgeInsets.fromLTRB(footPad, 6, footPad, 8),
               decoration: BoxDecoration(
@@ -757,30 +771,47 @@ class _PetCardState extends State<_PetCard>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name + HP
+                  // Name row — tap name or pencil icon to rename
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          pet.name,
-                          style: TextStyle(
-                            fontFamily: 'LilitaOne',
-                            color: const Color(0xFFEAFBFF),
-                            fontSize: nameFs,
-                            shadows: const [
-                              Shadow(
-                                  color: Color(0xFF0A1224),
-                                  offset: Offset(-1, -1),
-                                  blurRadius: 1),
-                              Shadow(
-                                  color: Color(0xFF0A1224),
-                                  offset: Offset(1, 1),
-                                  blurRadius: 1),
+                        child: GestureDetector(
+                          onTap: widget.onRename,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  pet.name,
+                                  style: TextStyle(
+                                    fontFamily: 'LilitaOne',
+                                    color: const Color(0xFFEAFBFF),
+                                    fontSize: nameFs,
+                                    shadows: const [
+                                      Shadow(
+                                          color: Color(0xFF0A1224),
+                                          offset: Offset(-1, -1),
+                                          blurRadius: 1),
+                                      Shadow(
+                                          color: Color(0xFF0A1224),
+                                          offset: Offset(1, 1),
+                                          blurRadius: 1),
+                                    ],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              Icon(
+                                Icons.drive_file_rename_outline,
+                                size: statFs,
+                                color: Colors.amberAccent.withValues(alpha: 0.5),
+                              ),
                             ],
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 4),
                       Icon(Icons.favorite,
                           size: statFs,
                           color: const Color(0xFF66FF88)
@@ -833,8 +864,7 @@ class _PetCardState extends State<_PetCard>
             ),
           ],
         ),
-      ),
-    );
+      ); // AnimatedContainer
       }, // LayoutBuilder builder
     ); // LayoutBuilder
   }

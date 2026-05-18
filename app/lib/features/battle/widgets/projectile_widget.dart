@@ -30,19 +30,10 @@ class ProjectileConfig {
   });
 }
 
-const kEffectProjectiles = <String, ProjectileConfig>{
-  'heal': ProjectileConfig(
-    sheetFile: 'healing_particle_effect.png',
-    assetPrefix: 'assets/images/effects/',
-    frameCount: 12,
-    amountPerRow: 4,
-    frameSize: 160,
-    textureSize: 256,
-    stepTime: 0.06,
-    scale: 1.0,
-    useScreenBlend: true,
-  ),
-};
+// Heal effect removed — no sprite sheet asset exists for it yet.
+// The heal animation is handled by PetCharacterAnimState.heal + floating +HP
+// text in shared_battle_hud.dart. Add an entry here when the sprite sheet is ready.
+const kEffectProjectiles = <String, ProjectileConfig>{};
 
 ProjectileConfig? resolveProjectileConfig({required String effectType}) =>
     kEffectProjectiles[effectType];
