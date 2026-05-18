@@ -80,7 +80,7 @@ class _RoundExecution {
 /// Interactive wrapper around the battle engine that processes one round at a time.
 ///
 /// Skill draw integration:
-///   - Each team owns an 18-card [SkillDeck] (3 pets × 3 traits × 2 copies).
+///   - Each team owns a 24-card [SkillDeck] (3 pets × 4 traits × 2 copies).
 ///   - The player's hand is drawn at construction and after each executeRound().
 ///   - Enemy AI draws and selects from its own hand during executeRound().
 ///   - [currentPlayerHand] always reflects the live hand the UI should display.
@@ -148,10 +148,10 @@ class InteractiveBattleEngine {
     }
 
     // Initial deal: 6 cards each (only happens once at battle start).
-    _drawAliveOnly(_playerDeck, playerTeam, count: 6);
+    _drawAliveOnly(_playerDeck, count: 6);
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
 
-    _drawAliveOnly(_enemyDeck, enemyTeam, count: 6);
+    _drawAliveOnly(_enemyDeck, count: 6);
     _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
   }
 
@@ -325,13 +325,13 @@ class InteractiveBattleEngine {
     }
     if (mode == BattleMode.pvp) {
       _enemyPity.injectIfNeeded(_enemyDeck, enemyTeam);
-      _drawAliveOnly(_enemyDeck, enemyTeam);
+      _drawAliveOnly(_enemyDeck);
       _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
     }
 
     // ── Prepare player's next hand ────────────────────────────────────────
     _playerPity.injectIfNeeded(_playerDeck, playerTeam);
-    _drawAliveOnly(_playerDeck, playerTeam);
+    _drawAliveOnly(_playerDeck);
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
 
     // ── Round-end status + shield cleanup ──────────────────────────────────
@@ -392,13 +392,12 @@ class InteractiveBattleEngine {
     _opponentChoices = Map.of(choices);
   }
 
-  bool get playerHandOverCap => _playerDeck.handSize > SkillDeck.kHandLimit;
+  bool get playerHandOverCap => false;
 
   void _handleDrawCard(String petId) {
     final isPlayer = playerTeam.any((p) => p.id == petId);
     final deck = isPlayer ? _playerDeck : _enemyDeck;
-    final team = isPlayer ? playerTeam : enemyTeam;
-    _drawAliveOnly(deck, team, count: 1);
+    _drawAliveOnly(deck, count: 1);
     _playerPity.update(_playerDeck.hand, _livePetIds(playerTeam));
     _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
   }
@@ -555,7 +554,7 @@ class InteractiveBattleEngine {
       _enemyDeck.play(id);
     }
     _enemyPity.injectIfNeeded(_enemyDeck, enemyTeam);
-    _drawAliveOnly(_enemyDeck, enemyTeam);
+    _drawAliveOnly(_enemyDeck);
     _enemyPity.update(_enemyDeck.hand, _livePetIds(enemyTeam));
 
     return actions;
@@ -625,27 +624,12 @@ class InteractiveBattleEngine {
   List<Pet> _enemyTeamOf(Pet p) =>
       playerTeam.contains(p) ? enemyTeam : playerTeam;
 
-  /// Draws cards while ensuring the hand keeps only cards owned by living pets.
-  void _drawAliveOnly(SkillDeck deck, List<Pet> team,
-      {int count = SkillDeck.kDrawPerTurn}) {
-    final aliveIds = _livePetIds(team).toSet();
-    if (aliveIds.isEmpty) return;
-
+  /// Draw cards exactly as the deck provides them.
+  ///
+  /// Classic behavior keeps cards from fainted pets in the cycle/hand until
+  /// played or discarded by normal deck flow.
+  void _drawAliveOnly(SkillDeck deck, {int count = SkillDeck.kDrawPerTurn}) {
     deck.drawTurn(count);
-    var safety = 0;
-    while (safety < 36) {
-      final invalid = deck.hand
-          .where((card) => !aliveIds.contains(card.ownerPetId))
-          .toList();
-      if (invalid.isEmpty) break;
-
-      for (final card in invalid) {
-        deck.discardCard(card.instanceId);
-      }
-      final redrawn = deck.drawTurn(invalid.length);
-      if (redrawn.isEmpty) break;
-      safety += invalid.length;
-    }
   }
 
   List<String> _livePetIds(List<Pet> pets) =>

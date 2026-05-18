@@ -783,7 +783,8 @@ class ActionResolver {
           log.noTarget();
           return;
         }
-        final amount = effect.value.clamp(0, kMaxShield);
+        final amount =
+            _applySameClassShieldBonus(effect.value, actor, trait).clamp(0, kMaxShield);
         target.applyShield(amount);
         log.shield(target.name, amount, target.shield);
 
@@ -825,7 +826,8 @@ class ActionResolver {
         }
         // Apply self-shield of effect.value
         if (effect.value > 0) {
-          final amount = effect.value.clamp(0, kMaxShield);
+          final amount = _applySameClassShieldBonus(effect.value, actor, trait)
+              .clamp(0, kMaxShield);
           actor.applyShield(amount);
           log.shield(actor.name, amount, actor.shield);
         }
@@ -856,10 +858,7 @@ class ActionResolver {
 
     // Self-shield on attack — +10% bonus when card class matches attacker class.
     if (effect.selfShield > 0) {
-      int amount = effect.selfShield;
-      if (trait.partClass != null && trait.partClass == actor.creatureClass) {
-        amount = (amount * 1.10).round();
-      }
+      final amount = _applySameClassShieldBonus(effect.selfShield, actor, trait);
       final shieldAmt = amount.clamp(0, kMaxShield);
       actor.applyShield(shieldAmt);
       log.shield(actor.name, shieldAmt, actor.shield);
@@ -920,6 +919,14 @@ class ActionResolver {
       m += 0.10;
     }
     return m;
+  }
+
+  int _applySameClassShieldBonus(int baseShield, Pet actor, Trait trait) {
+    if (baseShield <= 0) return 0;
+    if (trait.partClass != null && trait.partClass == actor.creatureClass) {
+      return (baseShield * 1.10).round();
+    }
+    return baseShield;
   }
 
   // ── Per-action poison ──────────────────────────────────────────────────────

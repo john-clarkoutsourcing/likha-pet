@@ -259,12 +259,11 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       (k, v) => MapEntry(k, v.where((id) => id != cardInstanceId).toList()),
     )..removeWhere((_, v) => v.isEmpty);
     final hand = _buildHandVMs(_engine.currentPlayerHand, newPending);
-    final excess = (_engine.currentPlayerHand.length - 10).clamp(0, 100);
     state = state.copyWith(
       hand: hand,
       pendingSkills: newPending,
-      needsDiscard: excess > 0,
-      excessDiscards: excess,
+      needsDiscard: false,
+      excessDiscards: 0,
     );
   }
 
@@ -583,15 +582,6 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
 
     final result = _engine.finishRound();
 
-    // Drop cards of fainted pets before updating teams.
-    final faintedIds =
-        _playerPets.where((p) => p.isFainted).map((p) => p.id).toSet();
-    for (final card in List.of(_engine.currentPlayerHand)) {
-      if (faintedIds.contains(card.ownerPetId)) {
-        _engine.discardFromPlayerHand(card.instanceId);
-      }
-    }
-
     state = state.copyWith(
       currentRound: result.state.round,
       playerTeam: _snapshotsToVMs(result.state.teamA, _playerPets),
@@ -624,52 +614,9 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
     if (!mounted) return;
 
     // ── Phase 4: Clear animations, open discard modal if needed ──────────────
-    final excess = (_engine.currentPlayerHand.length - 10).clamp(0, 100);
     state = state.copyWith(
       isResolving: false,
       newCardIds: const {},
-      needsDiscard: excess > 0,
-      excessDiscards: excess,
-    );
-
-    // If the hand is over the cap, give the player 8 seconds to discard
-    // manually. If they haven't acted by then, auto-discard for them.
-    if (excess > 0) {
-      Future.delayed(const Duration(seconds: 8), () {
-        if (mounted && state.needsDiscard) _autoDiscard();
-      });
-    }
-  }
-
-  /// Auto-discard excess cards using a priority strategy:
-  ///   1. On-cooldown cards (can't be used anyway)
-  ///   2. Non-pity cards with lowest effect value
-  void _autoDiscard() {
-    final needed = (_engine.currentPlayerHand.length - 10).clamp(0, 100);
-    if (needed <= 0) return;
-
-    final candidates = List.of(_engine.currentPlayerHand)
-      ..sort((a, b) {
-        // On-cooldown = discard first
-        final aCool = a.trait.isReady ? 1 : 0;
-        final bCool = b.trait.isReady ? 1 : 0;
-        if (aCool != bCool) return aCool.compareTo(bCool);
-        // Pity cards = keep (sort to end)
-        final aPity = a.isPity ? 1 : 0;
-        final bPity = b.isPity ? 1 : 0;
-        if (aPity != bPity) return aPity.compareTo(bPity);
-        // Lowest effect value = discard first
-        return a.trait.effect.value.compareTo(b.trait.effect.value);
-      });
-
-    for (int i = 0; i < needed && i < candidates.length; i++) {
-      _engine.discardFromPlayerHand(candidates[i].instanceId);
-    }
-
-    final newHand = _buildHandVMs(_engine.currentPlayerHand, const {});
-    state = state.copyWith(
-      hand: newHand,
-      deckDiscardSize: _engine.playerDeckDiscardSize,
       needsDiscard: false,
       excessDiscards: 0,
     );
@@ -684,6 +631,13 @@ class PveBattleNotifier extends StateNotifier<PveBattleViewModel> {
       amount += card.trait.effect.value;
     }
     amount += card.trait.effect.selfShield;
+    final owner = _playerPets.where((p) => p.id == card.ownerPetId).firstOrNull;
+    final sameClass = owner != null &&
+        card.trait.partClass != null &&
+        card.trait.partClass == owner.creatureClass;
+    if (sameClass) {
+      amount = (amount * 1.10).round();
+    }
     return amount.clamp(0, 999);
   }
 

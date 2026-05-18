@@ -527,12 +527,11 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       (k, v) => MapEntry(k, v.where((id) => id != cardInstanceId).toList()),
     )..removeWhere((_, v) => v.isEmpty);
     final hand = _buildHandVMs(_engine.currentPlayerHand, newPending);
-    final excess = (_engine.currentPlayerHand.length - 10).clamp(0, 100);
     state = state.copyWith(
       hand: hand,
       pendingSkills: newPending,
-      needsDiscard: excess > 0,
-      excessDiscards: excess,
+      needsDiscard: false,
+      excessDiscards: 0,
     );
   }
 
@@ -958,15 +957,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       _engine.finishRound(); // discard used cards + draw new hand
     } catch (e) {
       print('[PvP] ⚠️ Engine round advance failed (non-fatal): $e');
-    }
-
-    // Discard cards belonging to fainted pets.
-    final faintedIds =
-        _playerPets.where((p) => p.isFainted).map((p) => p.id).toSet();
-    for (final card in List.of(_engine.currentPlayerHand)) {
-      if (faintedIds.contains(card.ownerPetId)) {
-        _engine.discardFromPlayerHand(card.instanceId);
-      }
     }
 
     // ── 2. Override HP + status effects with server-authoritative values ─────
@@ -1588,12 +1578,11 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     await _animateDrawnCards(handBeforeIds, newHand);
     if (!mounted) return;
 
-    final excess = (_engine.currentPlayerHand.length - 10).clamp(0, 100);
     state = state.copyWith(
       isResolving: false,
       newCardIds: const {},
-      needsDiscard: excess > 0,
-      excessDiscards: excess,
+      needsDiscard: false,
+      excessDiscards: 0,
     );
   }
 

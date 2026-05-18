@@ -8,7 +8,7 @@
 
 const int kTeamEnergyStart = 3;
 const int kTeamEnergyRegen = 2;
-const int kTeamEnergyCap   = 9;
+const int kTeamEnergyCap   = 10;
 
 class EnergyPool {
   int _energy;

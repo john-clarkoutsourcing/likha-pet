@@ -5,7 +5,7 @@ Align the current game implementation with:
 - `layout_design_battle.md` (battle UI/UX layout and art direction)
 - `battle_game_mechanics.md` (Axie Classic mechanics baseline)
 
-This document is the execution baseline. Implementation starts only after approval.
+This document is the execution baseline for ongoing implementation.
 
 ---
 
@@ -29,7 +29,13 @@ This document is the execution baseline. Implementation starts only after approv
   2. Current HP (lower first)
   3. Skill (higher first)
   4. Morale (higher first)
+  5. Lowest Axie ID (absolute/canonical ID as final deterministic tie-break)
 - Align deck construction to 24-card classic cycle model (3 Axies x 4 parts x 2 copies)
+- Apply class wheel and purity modifiers in the core formula path:
+  1. +15% class advantage
+  2. -15% class disadvantage
+  3. +10% same-class card bonus
+  4. Damage and shield outputs both reflect same-class card bonus where applicable
 
 ### Expected Impact
 - Immediate mechanics parity improvements
@@ -46,10 +52,10 @@ This document is the execution baseline. Implementation starts only after approv
 ### Scope
 - Implement lane-aware closest-target behavior:
   - Standard closest targeting
-  - Split-path behavior for symmetric front options
+  - Split-path behavior for symmetric front options, with deterministic lock once path is chosen
   - Mid-lane 50/50 in symmetric split case
 - Add first-class chain detection across different Axies by class type
-- Apply generic chain effects and chain-required card conditions where applicable
+- Apply only card-specific chain-required conditions (no generic/global chain shield bonus)
 
 ### Expected Impact
 - Tactical behavior matches described lane/selection dynamics
@@ -57,6 +63,21 @@ This document is the execution baseline. Implementation starts only after approv
 
 ### Risk Notes
 - Must maintain predictable target resolution in PvP for server/client parity.
+
+---
+
+## Responsiveness & Resolution Considerations
+
+### Scope
+- Keep all battle HUD and board interactions readable and operable from 360px mobile width through tablet/desktop widths.
+- Ensure pet sprite anchor, HP bar offsets, and status icon stacks stay attached correctly under different aspect ratios.
+- Keep touch targets for cards, pets, and action buttons within safe minimum sizing on small screens.
+- Validate top HUD, battlefield, and bottom action panel spacing in both narrow and wide landscape layouts.
+
+### Done Criteria
+- No overlap/cutoff of critical HUD elements across target sizes.
+- Battle interactions remain usable without precision tapping on mobile.
+- Visual hierarchy remains consistent with the target layout across resolutions.
 
 ---
 

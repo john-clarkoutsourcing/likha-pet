@@ -57,8 +57,8 @@ class TurnManager {
     final anyLastStand = slots.any((slot) => slot.action.actor.isInLastStand);
 
     // Classic-like priority:
-    // 1) higher speed, 2) higher HP, 3) higher skill, 4) higher morale.
-    // Final tiebreaker: pet ID string comparison (then index as ultimate tiebreaker).
+    // 1) higher speed, 2) lower HP, 3) higher skill, 4) higher morale.
+    // Final tiebreaker: lowest canonical Axie ID (then index as ultimate tiebreaker).
     // This ensures 100% deterministic ordering regardless of platform/runtime.
     slots.sort((x, y) {
       final xBoost = x.action.trait.tags.contains('attack_first_if_last_stand') &&
@@ -73,13 +73,13 @@ class TurnManager {
       if (boostCmp != 0) return boostCmp;
       final speedCmp = y.speed.compareTo(x.speed); // descending — faster first
       if (speedCmp != 0) return speedCmp;
-      final hpCmp = y.hp.compareTo(x.hp);
+      final hpCmp = x.hp.compareTo(y.hp); // ascending — lower HP first
       if (hpCmp != 0) return hpCmp;
       final skillCmp = y.skill.compareTo(x.skill);
       if (skillCmp != 0) return skillCmp;
       final moraleCmp = y.morale.compareTo(x.morale);
       if (moraleCmp != 0) return moraleCmp;
-      final idCmp = x.action.actor.id.compareTo(y.action.actor.id);
+      final idCmp = _compareCanonicalAxieId(x.action.actor.id, y.action.actor.id);
       if (idCmp != 0) return idCmp;
       // Ultimate tiebreaker: original position in normalized input order
       return x.originalIndex.compareTo(y.originalIndex);
@@ -100,6 +100,21 @@ class TurnManager {
         if (!pet.isFainted) Action(actor: pet, trait: traitSelector(pet)),
     ];
   }
+}
+
+int _compareCanonicalAxieId(String a, String b) {
+  final aNum = _extractCanonicalNumericId(a);
+  final bNum = _extractCanonicalNumericId(b);
+  if (aNum != null && bNum != null && aNum != bNum) {
+    return aNum.compareTo(bNum);
+  }
+  return a.compareTo(b);
+}
+
+int? _extractCanonicalNumericId(String id) {
+  final numeric = RegExp(r'\d+').allMatches(id).map((m) => m.group(0)).join();
+  if (numeric.isEmpty) return null;
+  return int.tryParse(numeric);
 }
 
 // ── Internal sort key ─────────────────────────────────────────────────────────
