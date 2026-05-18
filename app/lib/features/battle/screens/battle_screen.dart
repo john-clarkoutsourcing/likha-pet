@@ -249,7 +249,7 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
         fit: StackFit.expand, // fill edge-to-edge, no implicit margins
         children: [
           // ── Background (full screen) ─────────────────────────────────────
-          const BattleBackgroundWidget(),
+          BattleBackgroundWidget(isBloodMoon: vm.isBloodMoon),
 
           // ── Battlefield fills full safe area ────────────────────────────
           // PvE: player on left (flipHorizontal: true = faces right),

@@ -175,7 +175,7 @@ class _PvpBattleScreenState extends ConsumerState<PvpBattleScreen>
         fit: StackFit.expand,
         children: [
           // Background — same as PvE
-          const BattleBackgroundWidget(),
+          BattleBackgroundWidget(isBloodMoon: vm.isBloodMoon),
 
           // Battlefield — player LEFT, opponent RIGHT (same POV as PvE)
           Positioned.fill(

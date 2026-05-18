@@ -991,7 +991,7 @@ class _BattlePet extends StatelessWidget {
                   ),
                   if (!isFainted)
                     Positioned(
-                      top: 0,
+                      top: -4,
                       left: 0,
                       right: 0,
                       child: BattleFloatingHpBar(
@@ -1047,14 +1047,14 @@ class _BattlePetSprite extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Positioned(
-          bottom: -4,
+          bottom: -2,
           child: Container(
-            width: size * 0.72,
-            height: 16,
+            width: size * 0.58,
+            height: 12,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(50),
               gradient: RadialGradient(colors: [
-                Colors.black.withValues(alpha: 0.55),
+                Colors.black.withValues(alpha: 0.42),
                 Colors.black.withValues(alpha: 0.0),
               ], radius: 0.85),
             ),
@@ -1074,6 +1074,8 @@ class _BattlePetSprite extends StatelessWidget {
               size: size,
               flipHorizontal: flipHorizontal,
               animation: battleAnimFor(animState, attackSlot: attackSlot),
+              figScale: 0.26,
+              yOff: 0.70,
             ),
           )
         else

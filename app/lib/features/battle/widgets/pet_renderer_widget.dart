@@ -28,9 +28,10 @@ class PetRendererWidget extends StatefulWidget {
   final double size;
   final bool flipHorizontal;
   final String animation;
+  final bool ignorePointer;
 
   /// figScale — Pixi figure scale within the 400×400 internal canvas.
-  /// Default 0.22 fills ~66% of the internal canvas height.
+  /// Default 0.24 fills ~70% of the internal canvas height.
   /// The canvas is CSS-scaled to [size] for display, so this value is
   /// independent of display size — change it only to make the pet larger/smaller.
   final double? figScale;
@@ -43,27 +44,30 @@ class PetRendererWidget extends StatefulWidget {
     this.size = 200,
     this.flipHorizontal = false,
     this.animation = 'action/idle/normal',
+    this.ignorePointer = true,
     this.figScale,
     this.scaleMult = 1.0,
-    this.yOff = 0.80,
+    this.yOff = 0.74,
   });
 
   // Fixed scale for the 400px internal canvas — display-size-independent.
-  double get _effectiveScale => figScale ?? 0.22;
+  double get _effectiveScale => figScale ?? 0.24;
 
   static PetRendererWidget fromOwned(
     OwnedPet pet, {
     double size = 200,
     bool flipHorizontal = false,
     String animation = 'action/idle/normal',
+    bool ignorePointer = true,
     double? figScale,
-    double yOff = 0.80,
+    double yOff = 0.74,
   }) =>
       PetRendererWidget(
         def: pet.toCreatureDefinition(),
         size: size,
         flipHorizontal: flipHorizontal,
         animation: animation,
+        ignorePointer: ignorePointer,
         figScale: figScale,
         yOff: yOff,
       );
@@ -426,7 +430,10 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
           child: view,
         );
       }
-      return view;
+      return IgnorePointer(
+        ignoring: widget.ignorePointer,
+        child: view,
+      );
     }
     if (_ctrl == null) return _fallback();
 
@@ -439,16 +446,19 @@ class _PetRendererWidgetState extends State<PetRendererWidget> {
       );
     }
 
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: Stack(fit: StackFit.expand, children: [
-        view,
-        if (!_pageReady)
-          const Center(
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white38)),
-      ]),
+    return IgnorePointer(
+      ignoring: widget.ignorePointer,
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Stack(fit: StackFit.expand, children: [
+          view,
+          if (!_pageReady)
+            const Center(
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white38)),
+        ]),
+      ),
     );
   }
 

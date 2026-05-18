@@ -647,7 +647,6 @@ class _PetCardState extends State<_PetCard>
                     builder: (context, _) {
                       final t      = _ctrl.value;
                       final bob    = math.sin(t * math.pi) * 8;
-                      final gAlpha = 0.55 + t * 0.40;
 
                       return Stack(
                         children: [
@@ -668,18 +667,18 @@ class _PetCardState extends State<_PetCard>
                           ),
                           // Ground glow ellipse
                           Positioned(
-                            bottom: 8,
+                            bottom: 10,
                             left: 0,
                             right: 0,
                             child: Center(
                               child: Container(
-                                width: spriteSize * 0.65,
-                                height: 16,
+                                width: spriteSize * 0.50,
+                                height: 10,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(999),
                                   gradient: RadialGradient(
                                     colors: [
-                                      accent.withValues(alpha: gAlpha * 0.75),
+                                      Colors.black.withValues(alpha: 0.30 + (t * 0.10)),
                                       Colors.transparent,
                                     ],
                                   ),
