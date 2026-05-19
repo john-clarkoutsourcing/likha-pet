@@ -32,6 +32,9 @@ import '../widgets/projectile_widget.dart';
 const double kBattlePanelH = 182.0;
 const double kBattlePanelPeekH = 32.0;
 const double kBattleSpriteBase = 142.0;
+const double kBattleHpHudBottom = 6.0;
+const double kBattleHpHudShiftX = 0.0;
+const double kBattleHpHudShiftY = 0.0;
 const _kScaleByPos = [1.55, 1.55, 1.55];
 const _kOpacityByPos = [1.00, 1.00, 1.00];
 
@@ -132,9 +135,13 @@ class BattleTopHud extends StatelessWidget {
     final rightIsPlayer = playerOnRight;
     final screenW = MediaQuery.sizeOf(context).width;
     final compact = screenW < 900;
+    final showResolvingQueue = vm.isResolving && vm.resolvingCardQueue.isNotEmpty;
+    final topHudHeight = compact
+      ? (showResolvingQueue ? 160.0 : 72.0)
+      : (showResolvingQueue ? 188.0 : 82.0);
 
     return Container(
-      height: compact ? 58 : 64,
+      height: topHudHeight,
       padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -207,6 +214,10 @@ class BattleTopHud extends StatelessWidget {
                     ],
                     const SizedBox(height: 3),
                     _BattleAttackOrderStrip(vm: vm, compact: compact),
+                    if (showResolvingQueue) ...[
+                      const SizedBox(height: 4),
+                      _BattleResolvingCardQueue(vm: vm, compact: compact),
+                    ],
                   ],
                 ),
               ),
@@ -435,6 +446,15 @@ class _BattleAttackOrderStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final alive = vm.turnOrder.where((e) => !e.isFainted).toList();
     final visible = compact && alive.length > 4 ? alive.take(4).toList() : alive;
+    // Find the currently attacking pet so we can highlight it in the strip.
+    final attackingPetId = vm.petAnimStates.entries
+        .where((e) =>
+            e.value == PetCharacterAnimState.attackMelee ||
+            e.value == PetCharacterAnimState.attackRanged ||
+            e.value == PetCharacterAnimState.attack ||
+            e.value == PetCharacterAnimState.move)
+        .map((e) => e.key)
+        .firstOrNull;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
@@ -450,6 +470,7 @@ class _BattleAttackOrderStrip extends StatelessWidget {
             number: i + 1,
             isFirst: i == 0,
             compact: compact,
+            isAttacking: visible[i].petId == attackingPetId,
           ),
         ],
         if (visible.length < alive.length)
@@ -474,68 +495,74 @@ class _BattleOrderBadge extends StatelessWidget {
   final int number;
   final bool isFirst;
   final bool compact;
+  final bool isAttacking;
   const _BattleOrderBadge(
       {required this.entry,
       required this.number,
       required this.isFirst,
-      this.compact = false});
+      this.compact = false,
+      this.isAttacking = false});
 
   @override
   Widget build(BuildContext context) {
     final c = entry.isPlayer ? AppColors.accent : AppColors.offensive;
     final size = compact
-        ? (isFirst ? 38.0 : 30.0)
-        : (isFirst ? 46.0 : 36.0);
+        ? (isFirst ? 52.0 : 42.0)
+        : (isFirst ? 64.0 : 52.0);
+    // When this pet is currently attacking, boost the visual emphasis.
+    final effectiveSize = isAttacking ? size * 1.25 : size;
+    final borderWidth = isAttacking ? 3.0 : (isFirst ? 2.0 : 1.5);
+    final glowAlpha = isAttacking ? 0.95 : (isFirst ? 0.6 : 0.0);
     return Stack(
       clipBehavior: Clip.none,
       children: [
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: size,
-          height: size,
+          width: effectiveSize,
+          height: effectiveSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: c.withValues(alpha: isFirst ? 0.30 : 0.15),
-            border: Border.all(color: c, width: isFirst ? 2.0 : 1.5),
-            boxShadow: isFirst
+            color: c.withValues(alpha: isAttacking ? 0.50 : (isFirst ? 0.30 : 0.15)),
+            border: Border.all(color: isAttacking ? Colors.white : c, width: borderWidth),
+            boxShadow: (isFirst || isAttacking)
                 ? [
                     BoxShadow(
-                        color: c.withValues(alpha: 0.6),
-                        blurRadius: 8,
-                        spreadRadius: 2)
+                        color: c.withValues(alpha: glowAlpha),
+                        blurRadius: isAttacking ? 16 : 8,
+                        spreadRadius: isAttacking ? 4 : 2)
                   ]
                 : null,
           ),
           child: ClipOval(
             child: entry.texturePath != null
                 ? Image.asset(entry.texturePath!,
-                    width: size,
-                    height: size,
+                    width: effectiveSize,
+                    height: effectiveSize,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Center(
                         child: Text(entry.name[0],
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: compact
-                                    ? (isFirst ? 11 : 9)
-                                    : (isFirst ? 13 : 10),
+                                    ? (isFirst ? 15 : 12)
+                                    : (isFirst ? 18 : 14),
                                 fontWeight: FontWeight.w900))))
                 : Center(
                     child: Text(entry.name[0],
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: compact
-                                ? (isFirst ? 11 : 9)
-                                : (isFirst ? 13 : 10),
+                                ? (isFirst ? 15 : 12)
+                                : (isFirst ? 18 : 14),
                             fontWeight: FontWeight.w900))),
           ),
         ),
         Positioned(
-          top: compact ? -3 : -4,
-          left: compact ? -3 : -4,
+          top: compact ? -4 : -5,
+          left: compact ? -4 : -5,
           child: Container(
-            width: compact ? 12 : 14,
-            height: compact ? 12 : 14,
+            width: compact ? 15 : 18,
+            height: compact ? 15 : 18,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: c,
@@ -548,12 +575,209 @@ class _BattleOrderBadge extends StatelessWidget {
               child: Text('$number',
                   style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 7,
+                      fontSize: 9,
                       fontWeight: FontWeight.w900)),
             ),
           ),
         ),
+        if (isAttacking)
+          Positioned(
+            bottom: compact ? -4 : -5,
+            right: compact ? -4 : -5,
+            child: Container(
+              width: compact ? 14 : 16,
+              height: compact ? 14 : 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                      color: c.withValues(alpha: 0.8),
+                      blurRadius: 6,
+                      spreadRadius: 1)
+                ],
+              ),
+              child: Center(
+                child: Text('⚔',
+                    style: TextStyle(
+                        fontSize: compact ? 7 : 8,
+                        height: 1)),
+              ),
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _BattleResolvingCardQueue extends StatelessWidget {
+  final PveBattleViewModel vm;
+  final bool compact;
+
+  const _BattleResolvingCardQueue({required this.vm, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final actorId = vm.resolvingCardPetId;
+    final queue = vm.resolvingCardQueue;
+    if (actorId == null || queue.isEmpty) return const SizedBox.shrink();
+
+    final actor = [...vm.playerTeam, ...vm.enemyTeam]
+        .where((p) => p.id == actorId)
+        .firstOrNull;
+    final actorName = actor?.name ?? 'Unit';
+    final isPlayer = vm.playerTeam.any((p) => p.id == actorId);
+    final accent = isPlayer ? AppColors.accent : AppColors.offensive;
+    final queueKey = '$actorId:${queue.map((e) => e.id).join('|')}';
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 5 : 6,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E1628).withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$actorName cards',
+            style: GoogleFonts.rajdhani(
+              color: Colors.white.withValues(alpha: 0.92),
+              fontSize: compact ? 9 : 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.9,
+            ),
+          ),
+          const SizedBox(height: 3),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final slide = Tween<Offset>(
+                begin: const Offset(0.20, 0),
+                end: Offset.zero,
+              ).animate(animation);
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: slide,
+                  child: child,
+                ),
+              );
+            },
+            child: Row(
+              key: ValueKey(queueKey),
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < queue.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: _ResolvingCardThumb(
+                      item: queue[i],
+                      isNext: i == 0,
+                      compact: compact,
+                      accent: accent,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResolvingCardThumb extends StatelessWidget {
+  final ResolvingCardItem item;
+  final bool isNext;
+  final bool compact;
+  final Color accent;
+
+  const _ResolvingCardThumb({
+    required this.item,
+    required this.isNext,
+    required this.compact,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final w = compact ? 62.0 : 74.0;
+    final h = compact ? 88.0 : 106.0;
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 180),
+      scale: isNext ? 1.0 : 0.92,
+      child: Opacity(
+        opacity: isNext ? 1.0 : 0.86,
+        child: Container(
+          width: w,
+          height: h,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isNext ? accent.withValues(alpha: 0.95) : Colors.white24,
+              width: isNext ? 2 : 1,
+            ),
+            color: const Color(0xFF111827),
+            boxShadow: [
+              BoxShadow(
+                color: (isNext ? accent : Colors.black)
+                    .withValues(alpha: isNext ? 0.35 : 0.25),
+                blurRadius: isNext ? 8 : 4,
+                spreadRadius: isNext ? 0.5 : 0,
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (item.imagePath != null)
+                Image.asset(
+                  item.imagePath!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              if (item.imagePath == null)
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xFF1F2937), Color(0xFF111827)],
+                    ),
+                  ),
+                ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  width: double.infinity,
+                  color: Colors.black.withValues(alpha: 0.62),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.rajdhani(
+                      color: Colors.white,
+                      fontSize: compact ? 8 : 9,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -610,6 +834,8 @@ class _BattleFloatNum {
   final double x, y, jitter;
   // Used for coalescing: shield floats for the same pet are merged.
   final bool isShield;
+  final bool isLabel;
+  final bool isCritLabel;
   final String petId;
   const _BattleFloatNum({
     required this.id,
@@ -619,6 +845,8 @@ class _BattleFloatNum {
     required this.y,
     this.jitter   = 0.0,
     this.isShield = false,
+    this.isLabel  = false,
+    this.isCritLabel = false,
     this.petId    = '',
   });
 }
@@ -659,19 +887,26 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
       void spawnAt({
         required String petId,
         required bool isPlayerTeam,
-        required int index,
+        required int positionIndex,
+        required int lane,
         required String text,
         required Color color,
         bool isShield = false,
+        bool isLabel = false,
+        bool isCritLabel = false,
+        double yOffset = -10,
       }) {
         final positions = isPlayerTeam ? widget.playerPos : widget.opponentPos;
-        final frac = positions[index.clamp(0, 2)];
+        final frac = _laneAdjust(
+          positions[positionIndex.clamp(0, 2)],
+          lane,
+        );
         final rawDash = newVm.petDashOffsets[petId] ?? Offset.zero;
         final dashPx = _dashPixelsForPet(
           vm: newVm,
           actorPetId: petId,
           isPlayerTeam: isPlayerTeam,
-          actorIndex: index,
+          actorIndex: positionIndex,
           rawDash: rawDash,
           w: w,
           h: h,
@@ -681,12 +916,193 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
           id:       '${_nextId++}',
           text:     text,
           color:    color,
-          x:        pos.dx + 30,
-          y:        pos.dy - 10,
+          x:        pos.dx + _floatAnchorX(positionIndex),
+          y:        pos.dy + yOffset,
           jitter:   (rng.nextDouble() - 0.5) * 24,
           isShield: isShield,
+          isLabel:  isLabel,
+          isCritLabel: isCritLabel,
           petId:    petId,
         ));
+      }
+
+      String normalizeToken(String raw) =>
+          raw.trim().toLowerCase().replaceAll(' ', '_');
+
+      ({String text, Color color, bool isCritLabel})? statusLabelFor(
+          String raw) {
+        final token = normalizeToken(raw);
+        switch (token) {
+          case '':
+          case 'damage':
+          case 'aoe':
+          case 'shield':
+            return null;
+          case 'shieldbreak':
+          case 'shield_break':
+            return (
+              text: 'SHIELD BREAK',
+              color: const Color(0xFFFFD166),
+              isCritLabel: false
+            );
+          case 'stun':
+          case 'stunned':
+            return (
+              text: 'Stunned!',
+              color: const Color(0xFFFFDD22),
+              isCritLabel: false
+            );
+          case 'sleep':
+            return (
+              text: 'ASLEEP',
+              color: const Color(0xFF95D5FF),
+              isCritLabel: false
+            );
+          case 'aroma':
+            return (
+              text: 'AROMA',
+              color: const Color(0xFFFF8BD8),
+              isCritLabel: false
+            );
+          case 'poison':
+          case 'poisoned':
+            return (
+              text: 'POISON',
+              color: const Color(0xFFB44FD4),
+              isCritLabel: false
+            );
+          case 'burn':
+          case 'burned':
+            return (
+              text: 'BURN',
+              color: const Color(0xFFFF6A3D),
+              isCritLabel: false
+            );
+          case 'heal':
+            return (
+              text: 'HEAL',
+              color: const Color(0xFF44FF88),
+              isCritLabel: false
+            );
+          case 'regen':
+            return (
+              text: 'REGEN',
+              color: const Color(0xFF44FF88),
+              isCritLabel: false
+            );
+          case 'crit':
+          case 'critical':
+            return (
+              text: 'CRIT',
+              color: const Color(0xFFFFB020),
+              isCritLabel: true
+            );
+          case 'atk_down':
+          case 'attack_down':
+          case 'attackdown':
+            return (
+              text: 'ATK DOWN',
+              color: const Color(0xFFFF7A7A),
+              isCritLabel: false
+            );
+          case 'def_down':
+          case 'defense_down':
+          case 'defensedown':
+            return (
+              text: 'DEF DOWN',
+              color: const Color(0xFFFFA36C),
+              isCritLabel: false
+            );
+          case 'spd_down':
+          case 'speed_down':
+          case 'speeddown':
+            return (
+              text: 'SPD DOWN',
+              color: const Color(0xFFFFC46C),
+              isCritLabel: false
+            );
+          case 'atk_up':
+          case 'attack_up':
+          case 'attackup':
+            return (
+              text: 'ATK UP',
+              color: const Color(0xFF62E88A),
+              isCritLabel: false
+            );
+          case 'def_up':
+          case 'defense_up':
+          case 'defenseup':
+            return (
+              text: 'DEF UP',
+              color: const Color(0xFF62C6FF),
+              isCritLabel: false
+            );
+          case 'spd_up':
+          case 'speed_up':
+          case 'speedup':
+            return (
+              text: 'SPD UP',
+              color: const Color(0xFF7CEBFF),
+              isCritLabel: false
+            );
+          case 'fear':
+            return (
+              text: 'FEAR',
+              color: const Color(0xFF9B8CFF),
+              isCritLabel: false
+            );
+          case 'chill':
+            return (
+              text: 'CHILL',
+              color: const Color(0xFF89C7FF),
+              isCritLabel: false
+            );
+          case 'jinx':
+            return (
+              text: 'JINX',
+              color: const Color(0xFFE09CFF),
+              isCritLabel: false
+            );
+          case 'heal_block':
+          case 'healblocked':
+            return (
+              text: 'HEAL BLOCK',
+              color: const Color(0xFFFF8C8C),
+              isCritLabel: false
+            );
+          case 'crit_block':
+          case 'critblocked':
+            return (
+              text: 'CRIT BLOCK',
+              color: const Color(0xFFFFB26B),
+              isCritLabel: false
+            );
+          case 'energy_steal':
+          case 'energysteal':
+          case 'energy_drain':
+          case 'energydrain':
+            return (
+              text: 'ENERGY STEAL',
+              color: const Color(0xFF7CEBFF),
+              isCritLabel: false
+            );
+          case 'card_discard':
+          case 'discard_card':
+          case 'carddiscard':
+          case 'discard':
+          case 'discarded':
+            return (
+              text: 'CARD DISCARDED',
+              color: const Color(0xFFFF9F6B),
+              isCritLabel: false
+            );
+          default:
+            return (
+              text: token.replaceAll('_', ' ').toUpperCase(),
+              color: const Color(0xFFE6E6E6),
+              isCritLabel: false
+            );
+        }
       }
 
       final impact = newVm.lastImpactEvent;
@@ -695,8 +1111,10 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
             impact.targetId.isNotEmpty ? impact.targetId : impact.actorId;
         final isPlayerTeam = newVm.playerTeam.any((p) => p.id == petId);
         final team = isPlayerTeam ? newVm.playerTeam : newVm.enemyTeam;
-        final index = team.indexWhere((p) => p.id == petId);
-        if (index >= 0) {
+        final petIndex = team.indexWhere((p) => p.id == petId);
+        if (petIndex >= 0) {
+          final pet = team[petIndex];
+          final posIdx = pet.position.clamp(0, 2);
           switch (impact.effectType) {
             case 'heal':
             case 'regen':
@@ -704,44 +1122,96 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
                 spawnAt(
                   petId: petId,
                   isPlayerTeam: isPlayerTeam,
-                  index: index,
+                  positionIndex: posIdx,
+                  lane: pet.lane,
                   text: '+${impact.healAmount}',
                   color: const Color(0xFF44FF88),
                 );
-              }
-              break;
-            case 'shield':
-              if (impact.shieldAmount > 0) {
-                // Accumulate shield for this pet and remove any previous
-                // shield float so we show a single total, not "20 20 20".
-                _shieldAccum[petId] =
-                    (_shieldAccum[petId] ?? 0) + impact.shieldAmount;
-                setState(() {
-                  _floatNums.removeWhere(
-                      (n) => n.isShield && n.petId == petId);
-                });
-                spawnAt(
-                  petId:        petId,
-                  isPlayerTeam: isPlayerTeam,
-                  index:        index,
-                  text:         '+${_shieldAccum[petId]}',
-                  color:        AppColors.shieldGold,
-                  isShield:     true,
-                );
-              }
-              break;
-            default:
-              if (impact.damage > 0) {
-                final isPoison = impact.statusApplied == 'poisoned' ||
-                    impact.effectType == 'poison';
+                final labelText = impact.effectType == 'regen' ? 'REGEN' : 'HEAL';
+                debugPrint('Spawning heal/regen label: $labelText, nums.length before=${nums.length}');
                 spawnAt(
                   petId: petId,
                   isPlayerTeam: isPlayerTeam,
-                  index: index,
-                  text: '-${impact.damage}',
+                  positionIndex: posIdx,
+                  lane: pet.lane,
+                  text: labelText,
+                  color: const Color(0xFF44FF88),
+                  isLabel: true,
+                  yOffset: -34,
+                );
+                debugPrint('After label spawn: nums.length=${nums.length}');
+              }
+              break;
+            default:
+              final oldTeam =
+                  isPlayerTeam ? oldVm.playerTeam : oldVm.enemyTeam;
+              final oldPetIndex = oldTeam.indexWhere((p) => p.id == petId);
+              final oldShield = oldPetIndex >= 0 ? oldTeam[oldPetIndex].shield : 0;
+              final shieldAbsorbed = (oldShield - impact.targetShieldAfter).clamp(0, 999);
+              final shownDamage = impact.damage > 0 ? impact.damage : shieldAbsorbed;
+
+              if (shownDamage > 0) {
+                final statusToken = impact.statusApplied.isNotEmpty
+                    ? impact.statusApplied
+                    : impact.effectType;
+                final effectToken = normalizeToken(impact.effectType);
+                final statusTokenNorm = normalizeToken(statusToken);
+                final isPoison =
+                    statusTokenNorm == 'poisoned' || effectToken == 'poison';
+                final labelInfo = statusLabelFor(statusToken);
+                spawnAt(
+                  petId: petId,
+                  isPlayerTeam: isPlayerTeam,
+                  positionIndex: posIdx,
+                  lane: pet.lane,
+                    text: '-$shownDamage',
                   color: isPoison
                       ? const Color(0xFFB44FD4)
                       : const Color(0xFFFF3333),
+                );
+                if (impact.isCritical) {
+                  spawnAt(
+                    petId: petId,
+                    isPlayerTeam: isPlayerTeam,
+                    positionIndex: posIdx,
+                    lane: pet.lane,
+                    text: 'CRIT',
+                    color: const Color(0xFFFFB020),
+                    isLabel: true,
+                    isCritLabel: true,
+                    yOffset: -38,
+                  );
+                }
+                if (labelInfo != null &&
+                    !(impact.isCritical && labelInfo.isCritLabel)) {
+                  spawnAt(
+                    petId: petId,
+                    isPlayerTeam: isPlayerTeam,
+                    positionIndex: posIdx,
+                    lane: pet.lane,
+                    text: labelInfo.text,
+                    color: labelInfo.color,
+                    isLabel: true,
+                    isCritLabel: labelInfo.isCritLabel,
+                    yOffset: -34,
+                  );
+                }
+              } else {
+                final statusToken = impact.statusApplied.isNotEmpty
+                    ? impact.statusApplied
+                    : impact.effectType;
+                final labelInfo = statusLabelFor(statusToken);
+                if (labelInfo == null) break;
+                spawnAt(
+                  petId: petId,
+                  isPlayerTeam: isPlayerTeam,
+                  positionIndex: posIdx,
+                  lane: pet.lane,
+                  text: labelInfo.text,
+                  color: labelInfo.color,
+                  isLabel: true,
+                  isCritLabel: labelInfo.isCritLabel,
+                  yOffset: -34,
                 );
               }
           }
@@ -761,19 +1231,20 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
           final delta = newTeam[i].hp - oldTeam[i].hp;
           if (delta == 0) continue;
           final petId = newTeam[i].id;
-          final frac = positions[i.clamp(0, 2)];
+          final posIdx = newTeam[i].position.clamp(0, 2);
+          final frac = _laneAdjust(positions[posIdx], newTeam[i].lane);
           final rawDash = dashOffsets[petId] ?? Offset.zero;
           final dashPx = _dashPixelsForPet(
             vm: newVm,
             actorPetId: petId,
             isPlayerTeam: isPlayerTeam,
-            actorIndex: i,
+            actorIndex: posIdx,
             rawDash: rawDash,
             w: w,
             h: h,
           );
           final pos = Offset(w * frac.dx + dashPx.dx, h * frac.dy + dashPx.dy);
-          final x = pos.dx + 30;
+          final x = pos.dx + _floatAnchorX(posIdx);
           final y = pos.dy - 10;
 
           if (delta < 0) {
@@ -829,16 +1300,24 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
       final targetPositions = isPlayerActor ? widget.opponentPos : widget.playerPos;
 
       final actorIdx = actorTeam.indexWhere((p) => p.id == actorId);
-      final targetIdx = targetTeam.indexWhere((p) => p.id == targetId);
-      // Fall back to first alive enemy if target not found.
-      final resolvedTargetIdx = targetIdx >= 0
-          ? targetIdx
-          : targetTeam.indexWhere((p) => !p.isFainted);
-      if (actorIdx < 0 || resolvedTargetIdx < 0) return;
+      if (actorIdx < 0) return;
+      final actorPet = actorTeam[actorIdx];
+
+      final explicitTargetIdx =
+          targetTeam.indexWhere((p) => p.id == targetId && !p.isFainted);
+      final fallbackTargetIdx = targetTeam.indexWhere((p) => !p.isFainted);
+      final resolvedTargetIdx =
+          explicitTargetIdx >= 0 ? explicitTargetIdx : fallbackTargetIdx;
+      if (resolvedTargetIdx < 0) return;
+      final targetPet = targetTeam[resolvedTargetIdx];
+
+      final actorPosIdx = actorPet.position.clamp(0, actorPositions.length - 1);
+      final targetPosIdx =
+          targetPet.position.clamp(0, targetPositions.length - 1);
 
       const spriteOffset = 29.0;
-      final startFrac = actorPositions[actorIdx.clamp(0, actorPositions.length - 1)];
-      final endFrac = targetPositions[resolvedTargetIdx.clamp(0, targetPositions.length - 1)];
+      final startFrac = actorPositions[actorPosIdx];
+      final endFrac = targetPositions[targetPosIdx];
       final start = Offset(w * startFrac.dx + spriteOffset, h * startFrac.dy + spriteOffset);
       final end   = Offset(w * endFrac.dx   + spriteOffset, h * endFrac.dy   + spriteOffset);
 
@@ -923,6 +1402,7 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
                     shieldPreview: _previewShieldForPet(vm, pet),
                   ),
                 ),
+                key: ValueKey(pet.id),
                 dash: _dashPixelsForPet(
                   vm: vm, actorPetId: pet.id, isPlayerTeam: false,
                   actorIndex: posIdx,
@@ -965,6 +1445,7 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
                     shieldPreview: _previewShieldForPet(vm, pet),
                   ),
                 ),
+                key: ValueKey(pet.id),
                 dash: _dashPixelsForPet(
                   vm: vm, actorPetId: pet.id, isPlayerTeam: true,
                   actorIndex: posIdx,
@@ -996,14 +1477,21 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
   // Offset y by lane so pets in the same row don't overlap.
   // lane=0 upper, lane=1 center (no shift), lane=2 lower.
   static Offset _laneAdjust(Offset base, int lane) {
-    const kLaneSpacing = 0.07; // fraction of screen height per lane step
+    const kLaneSpacing = 0.10; // fraction of screen height per lane step
     return Offset(base.dx, base.dy + (lane - 1) * kLaneSpacing);
   }
 
+  static double _floatAnchorX(int positionIndex) {
+    final idx = positionIndex.clamp(0, 2);
+    final spriteSize = kBattleSpriteBase * _kScaleByPos[idx];
+    return (spriteSize + 16.0) * 0.5;
+  }
+
   Widget _placed(double w, double h, Offset pos, Widget child,
-      {Offset dash = Offset.zero}) {
+      {Offset dash = Offset.zero, Key? key}) {
     final p = Offset(w * pos.dx + dash.dx, h * pos.dy + dash.dy);
     return AnimatedPositioned(
+      key: key,
       duration: const Duration(milliseconds: 420),
       curve: Curves.easeInOutCubic,
       left: p.dx,
@@ -1022,45 +1510,11 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     required double h,
   }) {
     if (rawDash == Offset.zero) return Offset.zero;
-
-    final actorPositions = isPlayerTeam ? widget.playerPos : widget.opponentPos;
-    final targetPositions =
-        isPlayerTeam ? widget.opponentPos : widget.playerPos;
-    final targetTeam = isPlayerTeam ? vm.enemyTeam : vm.playerTeam;
-
-    final explicitTargetId = vm.petDashTargets[actorPetId];
-    int targetIndex = -1;
-    if (explicitTargetId != null) {
-      targetIndex = targetTeam
-          .indexWhere((p) => p.id == explicitTargetId && !p.isFainted);
-      if (targetIndex < 0) return Offset.zero;
-    }
-    if (targetIndex < 0) {
-      targetIndex = targetTeam.indexWhere((p) => !p.isFainted);
-    }
-    if (targetIndex < 0) return Offset.zero;
-
-    final actorSpriteSize =
-        kBattleSpriteBase * _kScaleByPos[actorIndex.clamp(0, 2)];
-    final targetSpriteSize =
-        kBattleSpriteBase * _kScaleByPos[targetIndex.clamp(0, 2)];
-    final actorFrac = actorPositions[actorIndex.clamp(0, 2)];
-    final targetFrac = targetPositions[targetIndex.clamp(0, 2)];
-    final actorCenter = Offset(w * actorFrac.dx, h * actorFrac.dy) +
-        Offset(actorSpriteSize * 0.5, actorSpriteSize * 0.5);
-    final targetCenter = Offset(w * targetFrac.dx, h * targetFrac.dy) +
-        Offset(targetSpriteSize * 0.5, targetSpriteSize * 0.5);
-
-    final toTarget = targetCenter - actorCenter;
-    final distance = toTarget.distance;
-    if (distance < 1.0) return Offset.zero;
-
-    final minGap = math.max(8.0, (actorSpriteSize + targetSpriteSize) * 0.06);
-    final dashDist = math.max(0.0, distance - minGap);
-    if (dashDist <= 0) return Offset.zero;
-
-    return Offset(
-        toTarget.dx / distance * dashDist, toTarget.dy / distance * dashDist);
+    // rawDash is already a screen-fraction offset computed by the provider
+    // (direction × capped magnitude). Convert to pixels directly so the HUD
+    // exactly matches the intended lunge distance — no separate gap logic here
+    // (the provider already clamps maxDash to prevent reaching the enemy).
+    return Offset(rawDash.dx * w, rawDash.dy * h);
   }
 
   (int, int) _displayHpForPet(PveBattleViewModel vm, PetViewModel pet) {
@@ -1163,18 +1617,25 @@ class _BattlePet extends StatelessWidget {
                   ),
                   if (!isFainted)
                     Positioned(
-                      top: -4,
+                      bottom: kBattleHpHudBottom,
                       left: 0,
                       right: 0,
-                      child: BattleFloatingHpBar(
-                        pet: pet,
-                        currentHp: hp,
-                        currentShield: shield,
-                        shieldPreview: shieldPreview,
-                        width: barWidth,
-                        hpBarDuration: snapHpBars
-                            ? Duration.zero
-                          : const Duration(milliseconds: 620),
+                      child: Transform.translate(
+                        // Hot reload these constants to tune the HP HUD in real time.
+                        offset: const Offset(
+                          kBattleHpHudShiftX,
+                          kBattleHpHudShiftY,
+                        ),
+                        child: BattleFloatingHpBar(
+                          pet: pet,
+                          currentHp: hp,
+                          currentShield: shield,
+                          shieldPreview: shieldPreview,
+                          width: barWidth,
+                          hpBarDuration: snapHpBars
+                              ? Duration.zero
+                            : const Duration(milliseconds: 620),
+                        ),
                       ),
                     ),
                 ],
@@ -1436,46 +1897,97 @@ class BattleFloatingHpBar extends StatelessWidget {
           // ── Status icons row ──────────────────────────────────────────────
           if (statuses.isNotEmpty)
             SizedBox(
-              height: 16,
+              height: 22,
               child: Align(
                 alignment: Alignment.center,
                 child: Wrap(
-                  spacing: 3,
+                  spacing: 4,
                   runSpacing: 0,
                   alignment: WrapAlignment.center,
-                  children: statuses.map((status) {
-                    return Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Image.asset(
-                          status.assetPath,
-                          width: 14,
-                          height: 14,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.bolt_rounded,
-                            size: 10,
-                            color: Colors.white,
-                          ),
-                        ),
-                        if (status.stacksOrRounds > 1)
-                          Positioned(
-                            right: -5,
-                            top: -3,
-                            child: Text(
-                              '${status.stacksOrRounds}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                height: 1,
-                                fontWeight: FontWeight.w900,
-                                shadows: [
-                                  Shadow(color: Colors.black87, blurRadius: 2),
-                                ],
+                  children: statuses.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final status = entry.value;
+                    return TweenAnimationBuilder<double>(
+                      key: ValueKey('${pet.id}:${status.assetPath}:${status.stacksOrRounds}:$i'),
+                      duration: const Duration(milliseconds: 520),
+                      curve: Curves.easeOutCubic,
+                      tween: Tween(begin: 0, end: 1),
+                      builder: (context, t, _) {
+                        final pulse = math.sin(t * math.pi);
+                        final scale = 1.0 + (0.18 * pulse);
+                        final glowAlpha = 0.20 + (0.32 * pulse);
+                        return Transform.scale(
+                          scale: scale,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 18,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0C1222).withValues(alpha: 0.88),
+                                  borderRadius: BorderRadius.circular(99),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.42),
+                                    width: 0.9,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.55),
+                                      blurRadius: 4,
+                                      spreadRadius: 0.4,
+                                    ),
+                                    BoxShadow(
+                                      color: const Color(0xFFFFE08A).withValues(alpha: glowAlpha),
+                                      blurRadius: 7,
+                                      spreadRadius: 0.6,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Image.asset(
+                                    status.assetPath,
+                                    width: 14,
+                                    height: 14,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.bolt_rounded,
+                                      size: 11,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (status.stacksOrRounds > 1)
+                                Positioned(
+                                  right: -6,
+                                  top: -5,
+                                  child: Container(
+                                    padding:
+                                        const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFB020),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(color: Colors.black87, width: 0.8),
+                                    ),
+                                    child: Text(
+                                      '${status.stacksOrRounds}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8,
+                                        height: 1,
+                                        fontWeight: FontWeight.w900,
+                                        shadows: [
+                                          Shadow(color: Colors.black87, blurRadius: 2),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                      ],
+                        );
+                      },
                     );
                   }).toList(growable: false),
                 ),
@@ -1514,7 +2026,17 @@ class BattleFloatingHpBar extends StatelessWidget {
                           height: 1,
                         ),
                       )
-                    : Icon(_classIcon(className), size: 11, color: Colors.white),
+                    : Image.asset(
+                        _classIconAsset(className),
+                        width: 14,
+                        height: 14,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.adjust_rounded,
+                          size: 11,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
               const SizedBox(width: 3),
               Expanded(
@@ -1564,44 +2086,37 @@ class BattleFloatingHpBar extends StatelessWidget {
                         ),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: Stack(
-                          children: [
-                            Container(
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.55),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            LayoutBuilder(
-                              builder: (context, constraints) {
-                                // In Last Stand, bar pulses at full width in gold
-                                final barWidth = inLastStand
-                                    ? constraints.maxWidth
-                                    : constraints.maxWidth * hpRatio;
-                                return AnimatedContainer(
-                                  duration: effectiveHpDuration,
-                                  curve: Curves.easeOutCubic,
-                                  width: barWidth,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: hpColor,
-                                    borderRadius: BorderRadius.circular(2),
-                                    boxShadow: inLastStand
-                                        ? [
-                                            BoxShadow(
-                                              color: _kLastStandColor
-                                                  .withValues(alpha: 0.6),
-                                              blurRadius: 4,
-                                            )
-                                          ]
-                                        : null,
+                        child: inLastStand
+                            ? _LastStandSegmentedBar(
+                                ticks: pet.lastStandTicks,
+                                color: _kLastStandColor,
+                              )
+                            : Stack(
+                                children: [
+                                  Container(
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.55),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
                                   ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
+                                  LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final barWidth = constraints.maxWidth * hpRatio;
+                                      return AnimatedContainer(
+                                        duration: effectiveHpDuration,
+                                        curve: Curves.easeOutCubic,
+                                        width: barWidth,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          color: hpColor,
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
                       ),
                     ],
                   ),
@@ -1688,14 +2203,38 @@ class BattleFloatingHpBar extends StatelessWidget {
 
     for (final d in pet.activeDebuffs) {
       final map = {
+        'poisoned': '${base}poison-stroke.png',
+        'poison': '${base}poison-stroke.png',
         'burned': '${base}critical-stroke.png',
+        'burn': '${base}critical-stroke.png',
+        'fear': '${base}fear-stroke.png',
+        'aroma': '${base}aroma-stroke.png',
         'stench': '${base}stench-stroke.png',
+        'stunned': '${base}stun-stroke.png',
+        'stun': '${base}stun-stroke.png',
         'attackDown': '${base}attack-down-stroke.png',
         'attack_down': '${base}attack-down-stroke.png',
+        'atk_down': '${base}attack-down-stroke.png',
         'defenseDown': '${base}fragile-stroke.png',
         'defense_down': '${base}fragile-stroke.png',
+        'def_down': '${base}fragile-stroke.png',
         'speedDown': '${base}speed-down-stroke.png',
         'speed_down': '${base}speed-down-stroke.png',
+        'spd_down': '${base}speed-down-stroke.png',
+        'sleep': '${base}sleep-stroke.png',
+        'chill': '${base}chill-stroke.png',
+        'jinx': '${base}jinx-stroke.png',
+        'healBlocked': '${base}heal-block-stroke.png',
+        'heal_block': '${base}heal-block-stroke.png',
+        'critBlocked': '${base}critical-block-stroke.png',
+        'crit_block': '${base}critical-block-stroke.png',
+        'disabled': '${base}disable-ability-stroke.png',
+        'reflect': '${base}damage-reflect-stroke.png',
+        'isolate': '${base}untargetable-stroke.png',
+        'moraleDown': '${base}morale-down.png',
+        'morale_down': '${base}morale-down.png',
+        'fragile': '${base}fragile-stroke.png',
+        'lethal': '${base}lethal-stroke.png',
       };
       final icon = map[d] ?? '${base}debuff-stroke.png';
       out.add(_HudStatus(
@@ -1708,12 +2247,17 @@ class BattleFloatingHpBar extends StatelessWidget {
       final map = {
         'attackUp': '${base}attack-up-stroke.png',
         'attack_up': '${base}attack-up-stroke.png',
+        'atk_up': '${base}attack-up-stroke.png',
         'defenseUp': '${base}raise-shield-stroke.png',
         'defense_up': '${base}raise-shield-stroke.png',
+        'def_up': '${base}raise-shield-stroke.png',
         'speedUp': '${base}speed-up-stroke.png',
         'speed_up': '${base}speed-up-stroke.png',
+        'spd_up': '${base}speed-up-stroke.png',
         'regen': '${base}self-heal-stroke.png',
         'energized': '${base}gain-energy-stroke.png',
+        'moraleUp': '${base}morale-up-stroke.png',
+        'morale_up': '${base}morale-up-stroke.png',
       };
       out.add(_HudStatus(
         assetPath: map[b] ?? '${base}buff-stroke.png',
@@ -1724,15 +2268,122 @@ class BattleFloatingHpBar extends StatelessWidget {
     return out;
   }
 
-  static IconData _classIcon(String className) => switch (className) {
-        'plant' => Icons.local_florist_rounded,
-        'aquatic' => Icons.water_drop_rounded,
-        'beast' => Icons.pets_rounded,
-        'reptile' => Icons.forest_rounded,
-        'bird' => Icons.flutter_dash_rounded,
-        'bug' => Icons.bug_report_rounded,
-        _ => Icons.adjust_rounded,
+  static String _classIconAsset(String className) => switch (className) {
+        'plant' => 'assets/images/icons/mini-plant.png',
+        'aquatic' => 'assets/images/icons/mini-aquatic.png',
+        'beast' => 'assets/images/icons/mini-beast.png',
+        'reptile' => 'assets/images/icons/mini-reptile.png',
+        'bird' => 'assets/images/icons/mini-bird.png',
+        'bug' => 'assets/images/icons/mini-bug.png',
+        _ => 'assets/images/icons/mini-hidden_1.png',
       };
+}
+
+class _LastStandSegmentedBar extends StatefulWidget {
+  final int ticks;
+  final Color color;
+
+  const _LastStandSegmentedBar({
+    required this.ticks,
+    required this.color,
+  });
+
+  @override
+  State<_LastStandSegmentedBar> createState() => _LastStandSegmentedBarState();
+}
+
+class _LastStandSegmentedBarState extends State<_LastStandSegmentedBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _auraCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _auraCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1250),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _auraCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final segmentCount = widget.ticks.clamp(1, 6);
+
+    return SizedBox(
+      height: 6,
+      child: AnimatedBuilder(
+        animation: _auraCtrl,
+        builder: (context, _) {
+          final t = _auraCtrl.value;
+          final glowAlpha = 0.35 + (math.sin(t * math.pi * 2) + 1) * 0.15;
+          final blur = 4.0 + (math.sin(t * math.pi * 2) + 1) * 1.8;
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        widget.color.withValues(alpha: glowAlpha),
+                        widget.color.withValues(alpha: 0.12),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.color.withValues(alpha: glowAlpha),
+                        blurRadius: blur,
+                        spreadRadius: 0.4,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Row(
+                children: List.generate(segmentCount, (index) {
+                  return Expanded(
+                    child: Container(
+                      height: 6,
+                      margin: EdgeInsets.only(
+                        left: index == 0 ? 0 : 0.8,
+                        right: index == segmentCount - 1 ? 0 : 0.8,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(1.4),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            const Color(0xFFFFE08A),
+                            widget.color,
+                            const Color(0xFFE27400),
+                          ],
+                        ),
+                        border: Border.all(
+                          color: const Color(0xFFFFF0C2).withValues(alpha: 0.7),
+                          width: 0.4,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _HudStatus {
@@ -1823,20 +2474,34 @@ class _BattleFloatingNumberWidgetState
     extends State<_BattleFloatingNumberWidget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double> _rise, _fade, _scale;
+  late final Animation<double> _rise, _fade, _scale, _shake;
 
   @override
   void initState() {
     super.initState();
+    final isLabel = widget.num.isLabel;
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1300));
-    _rise = Tween(begin: 0.0, end: -72.0)
+        vsync: this,
+        duration: Duration(milliseconds: isLabel ? 1400 : 1600));
+    // Rise higher for labels so they sit above the damage number
+    _rise = Tween(begin: 0.0, end: isLabel ? -60.0 : -96.0)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _fade = Tween(begin: 1.0, end: 0.0).animate(
-        CurvedAnimation(parent: _ctrl, curve: const Interval(0.5, 1.0)));
-    _scale = Tween(begin: 1.6, end: 1.0).animate(CurvedAnimation(
-        parent: _ctrl,
-        curve: const Interval(0.0, 0.4, curve: Curves.easeOutBack)));
+        CurvedAnimation(parent: _ctrl, curve: const Interval(0.55, 1.0)));
+    // Punchy elastic pop-in: numbers scale from 2.4 → 1.0, labels 1.8 → 1.0
+    _scale = Tween(begin: isLabel ? 1.8 : 2.4, end: 1.0).animate(
+        CurvedAnimation(
+            parent: _ctrl,
+            curve: const Interval(0.0, 0.35, curve: Curves.elasticOut)));
+    // Horizontal shake for damage (not labels)
+    _shake = isLabel
+        ? const AlwaysStoppedAnimation(0.0)
+        : TweenSequence<double>([
+            TweenSequenceItem(tween: Tween(begin: 0.0, end: -6.0), weight: 1),
+            TweenSequenceItem(tween: Tween(begin: -6.0, end: 6.0), weight: 2),
+            TweenSequenceItem(tween: Tween(begin: 6.0, end: 0.0), weight: 1),
+          ]).animate(
+            CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.25)));
     _ctrl.forward().then((_) => widget.onDone());
   }
 
@@ -1849,6 +2514,10 @@ class _BattleFloatingNumberWidgetState
   @override
   Widget build(BuildContext context) {
     final n = widget.num;
+    final isLabel = n.isLabel;
+    final isCritLabel = n.isCritLabel;
+    // Labels: 13px; numbers: 32px — big & readable like a game
+    final textSize = isLabel ? 13.0 : 32.0;
     return Positioned(
       left: n.x + n.jitter,
       top: n.y,
@@ -1857,24 +2526,91 @@ class _BattleFloatingNumberWidgetState
         builder: (_, __) => Opacity(
           opacity: _fade.value,
           child: Transform.translate(
-            offset: Offset(0, _rise.value),
+            offset: Offset(_shake.value, _rise.value),
             child: Transform.scale(
               scale: _scale.value,
-              child: Stack(children: [
-                Text(n.text,
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        foreground: Paint()
-                          ..style = PaintingStyle.stroke
-                          ..strokeWidth = 3
-                          ..color = Colors.black87)),
-                Text(n.text,
-                    style: TextStyle(
-                        color: n.color,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900)),
-              ]),
+              child: isLabel
+                  ? Container(
+                      padding:
+                          EdgeInsets.symmetric(
+                            horizontal: isCritLabel ? 11 : 9,
+                            vertical: isCritLabel ? 5 : 4,
+                          ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            isCritLabel
+                                ? const Color(0xFFFFE066).withValues(alpha: 0.98)
+                                : n.color.withValues(alpha: 0.95),
+                            isCritLabel
+                                ? const Color(0xFFFF7B00).withValues(alpha: 0.88)
+                                : n.color.withValues(alpha: 0.65),
+                          ],
+                        ),
+                        border: Border.all(
+                          color: isCritLabel
+                              ? const Color(0xFFFFF4C2).withValues(alpha: 0.95)
+                              : Colors.white.withValues(alpha: 0.70),
+                          width: isCritLabel ? 1.4 : 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isCritLabel
+                                ? const Color(0xFFFF8A00).withValues(alpha: 0.72)
+                                : n.color.withValues(alpha: 0.55),
+                            blurRadius: isCritLabel ? 14 : 10,
+                            spreadRadius: isCritLabel ? 2 : 1,
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        n.text,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isCritLabel ? 15 : textSize,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          letterSpacing: isCritLabel ? 1.5 : 1.0,
+                          shadows: [
+                            const Shadow(color: Colors.black87, blurRadius: 3),
+                            if (isCritLabel)
+                              const Shadow(
+                                  color: Color(0xFFFF3D00), blurRadius: 10),
+                          ],
+                        ),
+                      ),
+                    )
+                  : Stack(children: [
+                      // Thick black stroke for legibility
+                      Text(n.text,
+                          style: TextStyle(
+                              fontSize: textSize,
+                              fontWeight: FontWeight.w900,
+                              foreground: Paint()
+                                ..style = PaintingStyle.stroke
+                                ..strokeWidth = 4.5
+                                ..color = Colors.black87)),
+                      // Coloured fill with glow
+                      Text(n.text,
+                          style: TextStyle(
+                            color: n.color,
+                            fontSize: textSize,
+                            fontWeight: FontWeight.w900,
+                            shadows: [
+                              Shadow(
+                                color: n.color.withValues(alpha: 0.6),
+                                blurRadius: 14,
+                              ),
+                              Shadow(
+                                color: n.color.withValues(alpha: 0.3),
+                                blurRadius: 28,
+                              ),
+                            ],
+                          )),
+                    ]),
             ),
           ),
         ),
@@ -1911,8 +2647,6 @@ class BattleBottomPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (vm.isResolving) return const SizedBox.shrink();
-
     return SizedBox(
       height: kBattlePanelH,
       child: Stack(
@@ -2501,6 +3235,8 @@ class _BattleSkillCardState extends State<BattleSkillCard> {
                             energyCost: t.energyCost,
                             canAfford: t.canAfford,
                             frameColor: tc,
+                            attack: attack,
+                            defense: defense,
                           ),
                   ),
 
@@ -2672,12 +3408,16 @@ class _PartCardFace extends StatelessWidget {
   final int energyCost;
   final bool canAfford;
   final Color frameColor;
+  final int attack;
+  final int defense;
 
   const _PartCardFace({
     required this.artPath,
     required this.energyCost,
     required this.canAfford,
     required this.frameColor,
+    this.attack = 0,
+    this.defense = 0,
   });
 
   @override
@@ -2730,6 +3470,71 @@ class _PartCardFace extends StatelessWidget {
                     height: 1,
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+
+        // Attack / Defense stats — bottom bar
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.black.withValues(alpha: 0.82),
+                  Colors.black.withValues(alpha: 0.65),
+                ],
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (attack > 0)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('⚔',
+                          style: TextStyle(fontSize: 8, height: 1)),
+                      const SizedBox(width: 2),
+                      Text(
+                        '$attack',
+                        style: const TextStyle(
+                          color: Color(0xFFFF6060),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  const SizedBox.shrink(),
+                if (defense > 0)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🛡',
+                          style: TextStyle(fontSize: 8, height: 1)),
+                      const SizedBox(width: 2),
+                      Text(
+                        '$defense',
+                        style: const TextStyle(
+                          color: Color(0xFF60CFFF),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  const SizedBox.shrink(),
               ],
             ),
           ),

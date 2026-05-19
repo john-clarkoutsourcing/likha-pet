@@ -25,13 +25,13 @@ import 'pvp_result_screen.dart';
 
 const _kPlayerPos = [
   Offset(0.30, 0.34), // FRONT — nearest to centre
-  Offset(0.15, 0.18), // MID
-  Offset(0.10, 0.50), // BACK
+  Offset(0.20, 0.34), // MID
+  Offset(0.10, 0.34), // BACK
 ];
 const _kOpponentPos = [
   Offset(0.50, 0.34), // FRONT — nearest to centre
-  Offset(0.65, 0.18), // MID
-  Offset(0.75, 0.50), // BACK
+  Offset(0.60, 0.34), // MID
+  Offset(0.70, 0.34), // BACK
 ];
 
 const _kRoundSeconds = 30;

@@ -487,25 +487,11 @@ class TraitLibrary {
       case 'aquatic-horn-12':
         return trait.copyWith(tags: [...trait.tags, 'prevent_last_stand']);
       case 'aquatic-tail-06':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.jinx,
-            duration: 4,
-            target: 'enemy',
-          ),
-        );
+        // Black Bubble: deal 110 damage AND apply Jinx for 4 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_jinx_4']);
       case 'aquatic-tail-08':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.chill,
-            duration: 4,
-            target: 'enemy',
-          ),
-        );
+        // Water Sphere: deal 110 damage AND apply Chill for 4 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_chill_4']);
       case 'aquatic-tail-12':
         // Chitin Jump: targets the furthest (back-row) enemy instead of front.
         // When in a combo, the combo-lock mechanic makes all subsequent cards
@@ -586,37 +572,19 @@ class TraitLibrary {
           ),
         );
       case 'bird-back-02':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.fear,
-            duration: 1,
-            target: 'enemy',
-          ),
-        );
+        // Balloon Pop: deal 40 damage AND apply Fear for 1 turn.
+        return trait.copyWith(tags: [...trait.tags, 'apply_fear_1']);
       case 'bird-back-04':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.chill,
-            duration: 4,
-            target: 'enemy',
-          ),
-        );
+        // Heart Break: deal 120 damage AND apply Chill for 4 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_chill_4']);
       case 'bird-back-05':
         return trait.copyWith(tags: [...trait.tags, 'isolated_on_combo_3']);
       case 'bird-back-06':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.jinx,
-            duration: 4,
-            target: 'enemy',
-          ),
-        );
+        // Ill-omened: deal 120 damage AND apply Jinx for 4 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_jinx_4']);
+      case 'bird-back-12':
+        // Triple Threat: deal 40 damage, then attack again if this Axie has any debuffs.
+        return trait.copyWith(tags: [...trait.tags, 'attack_again_if_debuffed']);
       case 'bird-back-08':
         // Blackmail: deal damage to back enemy + transfer ALL debuffs from self
         // to target. Base birdBack already gives damage(120, back_enemy,
@@ -670,24 +638,19 @@ class TraitLibrary {
           ),
         );
       case 'bird-mouth-02':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.sleep,
-            duration: 1,
-            target: 'enemy',
-          ),
-        );
+        // Soothing Song: deal 60 damage (ignore shield) AND apply Sleep for 1 turn.
+        return trait.copyWith(tags: [...trait.tags, 'apply_sleep_1', 'ignore_shield']);
       case 'bird-mouth-04':
+        // Peace Treaty: deal damage PLUS apply Attack- for 2 rounds.
+        // Must preserve the base damage from spec (120) and selfShield (30).
         return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 20,
-            debuffType: DebuffType.attackDown,
-            duration: 1,
+          effect: TraitEffect(
+            type: EffectType.damage,
+            value: trait.effect.value,          // 120 from spec
             target: 'enemy',
+            selfShield: trait.effect.selfShield, // 30 from spec
           ),
+          tags: [...trait.tags, 'apply_attack_down_2'],
         );
       case 'bird-back-10':
         // Patient Hunter: prefer Aquatic targets when actor HP ≤ 50%.
@@ -726,17 +689,10 @@ class TraitLibrary {
         // All-out Shot: deal damage then inflict 30% of own max HP back on self.
         return trait.copyWith(tags: [...trait.tags, 'self_damage_30pct_max_hp']);
       case 'bug-back-02':
-        // Primary: stun the enemy when played.
-        // Reaction: stun the attacker when this pet's shield is broken (Sticky Goo).
+        // Sticky Goo: deal 40 damage AND apply Stun for 1 turn.
+        // Reaction: stun the attacker when this pet's shield is broken.
         return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.stunned,
-            duration: 1,
-            target: 'enemy',
-          ),
-          tags: [...trait.tags, 'on_shield_break_stun_attacker'],
+          tags: [...trait.tags, 'apply_stun_1', 'on_shield_break_stun_attacker'],
         );
       case 'bug-back-08':
         // Bug Splat: +50% damage vs Bug targets (was wrongly tagged reflect_ranged).
@@ -768,39 +724,17 @@ class TraitLibrary {
         // Terror Chomp: apply Fear for 2 turns when played in a class chain.
         return trait.copyWith(tags: [...trait.tags, 'apply_fear_on_chain']);
       case 'bug-back-10':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.healBlocked,
-            duration: 2,
-            target: 'enemy',
-          ),
-        );
+        // Scarab Curse: deal 100 damage AND apply HealBlocked for 2 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_heal_blocked_2']);
       case 'bug-back-12':
-        // Buzzing Wind: apply Fragile (−25% defense) to the enemy for 2 rounds.
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 25,
-            debuffType: DebuffType.fragile,
-            duration: 2,
-            target: 'enemy',
-          ),
-        );
+        // Buzzing Wind: deal 10 damage AND apply Fragile for 2 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_fragile_2']);
       case 'bug-horn-06':
         // Grub Surprise: apply Fear to shielded targets.
         return trait.copyWith(tags: [...trait.tags, 'apply_fear_if_shielded']);
       case 'bug-tail-02':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.stench,
-            duration: 3,
-            target: 'enemy',
-          ),
-        );
+        // Chemical Warfare: deal 60 damage AND apply Stench for 3 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_stench_3']);
       case 'bug-tail-06':
         return trait.copyWith(tags: [...trait.tags, 'counter_stun_aqua_bird']);
       case 'bug-tail-08':
@@ -917,24 +851,23 @@ class TraitLibrary {
         );
       case 'reptile-mouth-04':
         // Kotaro Bite: gain 1 energy when the target is faster than this Axie.
-        return trait.copyWith(tags: [...trait.tags, 'energy_if_target_faster']);
+        // Advanced variant: also steals Speed (twin-state +20/-20 for 2 rounds).
+        return trait.copyWith(tags: [
+          ...trait.tags,
+          'energy_if_target_faster',
+          'steal_speed_20_2',
+        ]);
       case 'reptile-mouth-10':
         // Chomp: apply Stun to target when this Axie plays 3 or more cards this round.
         return trait.copyWith(tags: [...trait.tags, 'stun_on_combo_3_total']);
       case 'reptile-horn-02':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 0,
-            debuffType: DebuffType.stench,
-            duration: 3,
-            target: 'enemy',
-          ),
-        );
+        // Poo Fling: deal 70 damage AND apply Stench for 3 rounds.
+        return trait.copyWith(tags: [...trait.tags, 'apply_stench_3']);
       case 'reptile-back-08':
         // Bulwark: apply Reflect (40%) to self for 2 rounds AND grant the spec's
         // defense shield. The previous const TraitEffect dropped selfShield entirely.
         return trait.copyWith(
+          tags: [...trait.tags, 'self_aroma'],
           effect: TraitEffect(
             type: EffectType.debuff,
             value: 40, // 40% reflect per card description (was wrong 30)
@@ -970,15 +903,8 @@ class TraitLibrary {
       case 'reptile-tail-08':
         return trait.copyWith(tags: [...trait.tags, 'draw_if_shield_not_break']);
       case 'reptile-tail-12':
-        return trait.copyWith(
-          effect: const TraitEffect(
-            type: EffectType.debuff,
-            value: 20,
-            debuffType: DebuffType.speedDown,
-            duration: 1,
-            target: 'enemy',
-          ),
-        );
+        // Venom Spray: deal 20 damage AND apply SpeedDown for 1 round.
+        return trait.copyWith(tags: [...trait.tags, 'apply_speed_down_1']);
       default:
         return trait;
     }

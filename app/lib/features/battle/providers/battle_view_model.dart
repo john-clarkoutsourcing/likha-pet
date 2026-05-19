@@ -20,11 +20,24 @@ class PvpMatchEndData {
       {required this.winnerUid, required this.dispute, required this.mmrDelta});
 }
 
+class ResolvingCardItem {
+  final String id;
+  final String name;
+  final String? imagePath;
+
+  const ResolvingCardItem({
+    required this.id,
+    required this.name,
+    this.imagePath,
+  });
+}
+
 class BattleImpactEvent {
   final int id;
   final String actorId;
   final String targetId;
   final String effectType;
+  final bool isCritical;
   final int damage;
   final int healAmount;
   final int shieldAmount;
@@ -40,6 +53,7 @@ class BattleImpactEvent {
     required this.actorId,
     required this.targetId,
     required this.effectType,
+    this.isCritical = false,
     required this.damage,
     required this.healAmount,
     required this.shieldAmount,
@@ -589,6 +603,14 @@ class PveBattleViewModel {
   final Map<String, List<String>> pendingSkills;
   final bool isResolving;
 
+  /// During resolve: actor pet id whose queued cards are being shown under
+  /// attack-order HUD. Null when no card queue is currently displayed.
+  final String? resolvingCardPetId;
+
+  /// During resolve: remaining card names for [resolvingCardPetId] in the
+  /// exact execution order for this unit turn.
+  final List<ResolvingCardItem> resolvingCardQueue;
+
   final List<CardViewModel> hand;
   final int deckDrawSize;
   final int deckDiscardSize;
@@ -660,6 +682,8 @@ class PveBattleViewModel {
     this.selectedPetId,
     this.pendingSkills = const {},
     this.isResolving = false,
+    this.resolvingCardPetId,
+    this.resolvingCardQueue = const [],
     this.hand = const [],
     this.deckDrawSize = 0,
     this.deckDiscardSize = 0,
@@ -736,6 +760,9 @@ class PveBattleViewModel {
     String? selectedPetId,
     Map<String, List<String>>? pendingSkills,
     bool? isResolving,
+    String? resolvingCardPetId,
+    List<ResolvingCardItem>? resolvingCardQueue,
+    bool clearResolvingCardQueue = false,
     List<CardViewModel>? hand,
     int? deckDrawSize,
     int? deckDiscardSize,
@@ -775,6 +802,12 @@ class PveBattleViewModel {
             clearSelectedPet ? null : (selectedPetId ?? this.selectedPetId),
         pendingSkills: pendingSkills ?? this.pendingSkills,
         isResolving: isResolving ?? this.isResolving,
+        resolvingCardPetId: clearResolvingCardQueue
+          ? null
+          : (resolvingCardPetId ?? this.resolvingCardPetId),
+        resolvingCardQueue: clearResolvingCardQueue
+          ? const []
+          : (resolvingCardQueue ?? this.resolvingCardQueue),
         hand: hand ?? this.hand,
         deckDrawSize: deckDrawSize ?? this.deckDrawSize,
         deckDiscardSize: deckDiscardSize ?? this.deckDiscardSize,

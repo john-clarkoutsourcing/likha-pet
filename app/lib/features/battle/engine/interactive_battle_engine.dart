@@ -48,12 +48,14 @@ class ActionStepResult {
   final Action action;
   final BattleState state;
   final String log;
+  final List<BattleEvent> events;
   final bool isRoundComplete;
 
   const ActionStepResult({
     required this.action,
     required this.state,
     required this.log,
+    required this.events,
     required this.isRoundComplete,
   });
 }
@@ -285,6 +287,7 @@ class InteractiveBattleEngine {
     execution.actionIndex++;
     final chainContext = execution.chainContexts[actionIndex];
     final logger = execution.logger;
+    final prevEventCount = logger.events.length;
     final resolver = ActionResolver(
       logger,
       rng: _critRng,
@@ -334,6 +337,9 @@ class InteractiveBattleEngine {
         roundLog: logger.transcript,
       ),
       log: logger.transcript,
+      events: List<BattleEvent>.unmodifiable(
+        logger.events.sublist(prevEventCount),
+      ),
       isRoundComplete: isRoundComplete,
     );
   }

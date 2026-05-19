@@ -177,6 +177,7 @@ class PvpRoundHit extends PvpMessage {
   final String actorUid;
   final String actorTeam;
   final String effectType;
+  final bool   isCrit;
   final int    damage;
   final int    healAmount;
   final int    shieldAmount;
@@ -196,6 +197,7 @@ class PvpRoundHit extends PvpMessage {
     required this.actorUid,
     required this.actorTeam,
     required this.effectType,
+    this.isCrit = false,
     required this.damage,
     required this.healAmount,
     required this.shieldAmount,
@@ -215,6 +217,7 @@ class PvpRoundHit extends PvpMessage {
     actorUid:          j['actorUid']          as String,
     actorTeam:         j['actorTeam']         as String,
     effectType:        j['effectType']        as String? ?? 'damage',
+    isCrit:            (j['isCrit']           as bool?) ?? false,
     damage:            (j['damage']           as num?)?.toInt() ?? 0,
     healAmount:        (j['healAmount']       as num?)?.toInt() ?? 0,
     shieldAmount:      (j['shieldAmount']     as num?)?.toInt() ?? 0,

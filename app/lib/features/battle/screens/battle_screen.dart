@@ -35,17 +35,18 @@ const _kRoundSeconds = 45;
 /// Battlefield positions as (left%, top%) fractions.
 /// Battlefield = full SafeArea height (~331 px).
 /// Card panel overlays bottom 168 px → pets above y < (331-168)/331 ≈ 0.49 are clear.
-// Positions = fractions of FULL screen (no SafeArea inset).
-// Full screen ~375px tall, card panel 168px → y < 0.45 visible above panel.
+// Positions = row anchors only.
+// x = front/mid/back depth, y = shared center lane baseline.
+// Top/center/bottom is applied separately in shared_battle_hud.dart via pet.lane.
 const _kPlayerPos = [
-  Offset(0.30, 0.34), // FRONT
-  Offset(0.15, 0.18), // MID
-  Offset(0.10, 0.50), // BACK
+  Offset(0.34, 0.34), // FRONT
+  Offset(0.20, 0.34), // MID
+  Offset(0.06, 0.34), // BACK
 ];
 const _kEnemyPos = [
-  Offset(0.50, 0.34), // FRONT
-  Offset(0.65, 0.18), // MID
-  Offset(0.75, 0.50), // BACK
+  Offset(0.46, 0.34), // FRONT
+  Offset(0.60, 0.34), // MID
+  Offset(0.74, 0.34), // BACK
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────

@@ -1712,7 +1712,7 @@ class _RosterPickerCard extends StatelessWidget {
     final def      = pet.toCreatureDefinition();
     final cls      = def.bodyClass;
     final color    = _cls(cls);
-    final posColor = _selected ? _kSlotColors[slotIdx] : null;
+    final posColor = _selected ? _kSlotColors[slotIdx ~/ 3] : null;
 
     return GestureDetector(
       onTap: (canAdd || _selected) ? onTap : null,
@@ -1792,7 +1792,7 @@ class _RosterPickerCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                ['F', 'M', 'B'][slotIdx],
+                                ['F', 'M', 'B'][slotIdx ~/ 3],
                                 style: const TextStyle(
                                   color: Colors.black87,
                                   fontSize: 8,

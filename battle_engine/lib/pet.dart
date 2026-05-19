@@ -26,7 +26,7 @@ class StatusEffect {
 
 class BuffEffect {
   final BuffType type;
-  final int value;
+  int value;  // Mutable so buff stacks can accumulate (Attack+/Speed+/Morale+)
   int roundsRemaining;
 
   BuffEffect({
@@ -259,7 +259,8 @@ class Pet {
   int takeDamage(int finalDamage,
       {bool ignoreShield = false,
       bool ignoreLastStand = false,
-      bool forceLastStand = false}) {
+      bool forceLastStand = false,
+      double shieldDamageMultiplier = 1.0}) {
     if (isFainted) return 0;
 
     // If already in Last Stand, consume ticks instead of taking normal damage
@@ -275,9 +276,20 @@ class Pet {
     int remaining = finalDamage.clamp(1, 999);
 
     if (!ignoreShield && shield > 0) {
-      final absorbed = remaining.clamp(0, shield);
-      shield -= absorbed;
-      remaining -= absorbed;
+      final shieldMult = shieldDamageMultiplier < 1.0 ? 1.0 : shieldDamageMultiplier;
+      if (shieldMult > 1.0) {
+        // Fragile-style interaction: incoming damage chunks shield harder,
+        // but HP spill-over still comes from the same raw hit.
+        final amplifiedShieldDmg = (remaining * shieldMult).round().clamp(1, 999);
+        final absorbedShield = amplifiedShieldDmg.clamp(0, shield);
+        shield -= absorbedShield;
+        final rawSpent = (absorbedShield / shieldMult).ceil();
+        remaining = (remaining - rawSpent).clamp(0, 999);
+      } else {
+        final absorbed = remaining.clamp(0, shield);
+        shield -= absorbed;
+        remaining -= absorbed;
+      }
     }
 
     final actual = remaining.clamp(0, 999);
@@ -316,12 +328,44 @@ class Pet {
   }
 
   void applyBuff(BuffType type, int value, int duration) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // STACKING BUFFS (additive stacks with max cap)
+    // ═══════════════════════════════════════════════════════════════════════
+    // Attack+, Speed+, Morale+ each stack additively up to 5 stacks (100%)
+    if (type == BuffType.attackUp || type == BuffType.speedUp || type == BuffType.moraleUp) {
+      final existing = buffs.where((b) => b.type == type).firstOrNull;
+      const maxValue = 100; // 5 stacks × 20% = 100%
+      if (existing != null) {
+        // Increase existing stack
+        existing.value = (existing.value + value).clamp(0, maxValue);
+        existing.roundsRemaining = duration;
+        return;
+      }
+      // New buff
+      buffs.add(BuffEffect(type: type, value: value.clamp(0, maxValue), roundsRemaining: duration));
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DURATION-RESETTING BUFFS (Highest Duration Wins)
+    // ═══════════════════════════════════════════════════════════════════════
+    // For other buffs, apply duration-reset rule
+    final existing = buffs.where((b) => b.type == type).firstOrNull;
+    if (existing != null) {
+      // Keep the higher duration
+      existing.roundsRemaining = duration > existing.roundsRemaining ? duration : existing.roundsRemaining;
+      return;
+    }
+
+    // Default: add new buff
     buffs.add(BuffEffect(type: type, value: value, roundsRemaining: duration));
   }
 
   void applyDebuff(DebuffType type, int value, int duration) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // STACKING POISON (infinite stacks, persistent)
+    // ═══════════════════════════════════════════════════════════════════════
     if (type == DebuffType.poisoned) {
-      // Stacking poison: add 1 stack (value = stacks, capped at 13).
       final existing = debuffs.where((d) => d.type == DebuffType.poisoned).firstOrNull;
       if (existing != null) {
         existing.value = (existing.value + 1).clamp(1, 13);
@@ -330,14 +374,72 @@ class Pet {
       debuffs.add(StatusEffect(type: type, value: 1, roundsRemaining: 999));
       return;
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STACKING DEBUFFS (additive stacks with max cap)
+    // ═══════════════════════════════════════════════════════════════════════
+    // Attack- (max 3), Speed- (max 5), Morale- (max 5)
+    const stackingDebuffsMaxes = {
+      DebuffType.attackDown: 3,
+      DebuffType.speedDown: 5,
+      DebuffType.moraleDown: 5,
+    };
+
+    if (stackingDebuffsMaxes.containsKey(type)) {
+      final maxStack = stackingDebuffsMaxes[type]!;
+      final existing = debuffs.where((d) => d.type == type).firstOrNull;
+      if (existing != null) {
+        // Increase stack: each stack is typically -20%, cap at max
+        existing.value = (existing.value + value).clamp(1, maxStack * 20);
+        // Reset duration to the new duration value
+        existing.roundsRemaining = duration;
+        return;
+      }
+      // New debuff — add it
+      debuffs.add(StatusEffect(type: type, value: value, roundsRemaining: duration));
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DURATION-RESETTING DEBUFFS (Highest Duration Wins)
+    // ═══════════════════════════════════════════════════════════════════════
+    // Aroma, Chill, Fear, Jinx, Stun, Fragile, Lethal
+    const durationResettingDebuffs = {
+      DebuffType.aroma,
+      DebuffType.chill,
+      DebuffType.fear,
+      DebuffType.jinx,
+      DebuffType.stunned,
+      DebuffType.fragile,
+      DebuffType.lethal,
+    };
+
+    if (durationResettingDebuffs.contains(type)) {
+      final existing = debuffs.where((d) => d.type == type).firstOrNull;
+      if (existing != null) {
+        // Keep the higher duration (Highest Duration Wins rule)
+        existing.roundsRemaining = duration > existing.roundsRemaining ? duration : existing.roundsRemaining;
+        return;
+      }
+      // New debuff — add it
+      debuffs.add(StatusEffect(type: type, value: value, roundsRemaining: duration));
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SPECIAL CASE: STENCH (Duration-Resetting)
+    // ═══════════════════════════════════════════════════════════════════════
     if (type == DebuffType.stench) {
       final existing = debuffs.where((d) => d.type == DebuffType.stench).firstOrNull;
       if (existing != null) {
-        existing.roundsRemaining =
-            duration > existing.roundsRemaining ? duration : existing.roundsRemaining;
+        existing.roundsRemaining = duration > existing.roundsRemaining ? duration : existing.roundsRemaining;
         return;
       }
+      debuffs.add(StatusEffect(type: type, value: value, roundsRemaining: duration));
+      return;
     }
+
+    // Default: add new debuff
     debuffs.add(StatusEffect(type: type, value: value, roundsRemaining: duration));
   }
 

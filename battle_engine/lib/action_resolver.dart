@@ -504,22 +504,33 @@ class ActionResolver {
         //  3. Per-card _resolveTarget fallback → _preferredTarget respects
         //     Stench and Aroma correctly.
         final canUsePrimaryTarget = effect.target != 'enemy';
-        var target = canUsePrimaryTarget &&
-              action.primaryTarget != null &&
-                    !action.primaryTarget!.isFainted &&
-                    !action.primaryTarget!.isStenched
+        final hasLockedPrimaryTarget = canUsePrimaryTarget && action.primaryTarget != null;
+        final hasLockedComboTarget =
+            !hasLockedPrimaryTarget &&
+            comboTarget != null &&
+            _kEnemySingleTargetSpecs.contains(effect.target);
+
+        // If this card had a pre-locked target and that target is now dead,
+        // the card fizzles instead of retargeting another unit.
+        if (hasLockedPrimaryTarget && action.primaryTarget!.isFainted) {
+          log.noTarget();
+          return;
+        }
+        if (hasLockedComboTarget && comboTarget.isFainted) {
+          log.noTarget();
+          return;
+        }
+
+        var target = hasLockedPrimaryTarget && !action.primaryTarget!.isStenched
             ? action.primaryTarget
-            : comboTarget != null &&
-                      !comboTarget.isFainted &&
-                      !comboTarget.isStenched &&
-                      _kEnemySingleTargetSpecs.contains(effect.target)
-                  ? comboTarget
-                  : _resolveTarget(
-                      effect.target,
-                      actor,
-                      actorTeam,
-                      enemyTeam,
-                    );
+            : hasLockedComboTarget && !comboTarget.isStenched
+                ? comboTarget
+                : _resolveTarget(
+                    effect.target,
+                    actor,
+                    actorTeam,
+                    enemyTeam,
+                  );
         // No valid target found — skip this card silently.
         if (target == null || target.isFainted) {
           log.noTarget();
@@ -564,9 +575,15 @@ class ActionResolver {
           if (alt != null) target = alt;
         }
 
-        final ignoreShield = effect.target == 'enemy' && target.isAsleep;
+        final ignoreShield = (effect.target == 'enemy' && target.isAsleep) ||
+            trait.tags.contains('ignore_shield');
         final ignoreLastStand = trait.tags.contains('prevent_last_stand');
-        final hitCount = trait.tags.contains('multi_hit_3') ? 3 : 1;
+        final hitCount = trait.tags.contains('multi_hit_3')
+            ? 3
+            : (trait.tags.contains('attack_again_if_debuffed') &&
+                    actor.debuffs.isNotEmpty)
+                ? 2
+                : 1;
         // Declare shieldBefore and targetTrait here so damageBoost can reference them.
         final targetTrait = traitsByPetId[target.id];
         final shieldBefore = target.shield;
@@ -642,21 +659,33 @@ class ActionResolver {
         }
 
         var actual = 0;
+        var consumedFearOnIncomingHit = false;
         for (var hit = 0; hit < hitCount; hit++) {
           final dmg = _clamp(
             ((isCrit ? net * critMultiplier : net) * damageBoost).round(),
             kMaxSingleHitDamage,
+          );
+          final shieldDamageMultiplier = _shieldDamageMultiplierForTarget(
+            target,
+            ignoreShield: ignoreShield,
           );
           final applied = target.takeDamage(
             dmg,
             ignoreShield: ignoreShield,
             ignoreLastStand: ignoreLastStand,
             forceLastStand: trait.tags.contains('force_last_stand_if_killed'),
+            shieldDamageMultiplier: shieldDamageMultiplier,
           );
           actual += applied;
           log.damage(target.name, applied, target.hp, isCrit: isCrit);
           if (target.isAsleep) {
             target.removeDebuff(DebuffType.sleep);
+          }
+          // Fear consumes when the unit is physically hit, even before its turn.
+          if (!consumedFearOnIncomingHit && target.isFeared) {
+            consumedFearOnIncomingHit = true;
+            target.removeDebuff(DebuffType.fear);
+            log.debuff(target.name, 'fear', 0, 0);
           }
           if (target.isFainted) {
             log.fainted(target.name);
@@ -823,6 +852,42 @@ class ActionResolver {
             log.energySteal(actor.name, enemy.name, drained);
           }
         }
+        // Twin-state stat steal: the target loses a stat while actor gains
+        // the same amount for the same duration.
+        final landedHit = actual > 0 || (shieldBefore > target.shield);
+        if (landedHit && trait.tags.contains('steal_attack_20_2')) {
+          _applyTwinStatSteal(
+            actor: actor,
+            target: target,
+            downType: DebuffType.attackDown,
+            upType: BuffType.attackUp,
+            value: 20,
+            duration: 2,
+            logKey: 'attack',
+          );
+        }
+        if (landedHit && trait.tags.contains('steal_speed_20_2')) {
+          _applyTwinStatSteal(
+            actor: actor,
+            target: target,
+            downType: DebuffType.speedDown,
+            upType: BuffType.speedUp,
+            value: 20,
+            duration: 2,
+            logKey: 'speed',
+          );
+        }
+        if (landedHit && trait.tags.contains('steal_morale_20_2')) {
+          _applyTwinStatSteal(
+            actor: actor,
+            target: target,
+            downType: DebuffType.moraleDown,
+            upType: BuffType.moraleUp,
+            value: 20,
+            duration: 2,
+            logKey: 'morale',
+          );
+        }
         // Scale Dart: gain 1 energy if the target has any active buff.
         if (trait.tags.contains('energy_gain_vs_buffed') &&
             target.buffs.isNotEmpty) {
@@ -877,6 +942,57 @@ class ActionResolver {
             !target.isFainted) {
           target.applyDebuff(DebuffType.fear, 0, 2);
           log.debuff(target.name, 'fear', 0, 2);
+        }
+        // Peace Treaty: apply Attack- for 2 rounds.
+        if (trait.tags.contains('apply_attack_down_2') &&
+            !target.isFainted) {
+          target.applyDebuff(DebuffType.attackDown, 20, 2);
+          log.debuff(target.name, 'attackDown', 20, 2);
+        }
+        // Apply Chill on hit (Heart Break, Water Sphere, etc.)
+        if (trait.tags.contains('apply_chill_4') && !target.isFainted) {
+          target.applyDebuff(DebuffType.chill, 0, 4);
+          log.debuff(target.name, 'chill', 0, 4);
+        }
+        // Apply Jinx on hit (Ill-omened, Black Bubble, etc.)
+        if (trait.tags.contains('apply_jinx_4') && !target.isFainted) {
+          target.applyDebuff(DebuffType.jinx, 0, 4);
+          log.debuff(target.name, 'jinx', 0, 4);
+        }
+        // Apply Fear on hit (Balloon Pop)
+        if (trait.tags.contains('apply_fear_1') && !target.isFainted) {
+          target.applyDebuff(DebuffType.fear, 0, 1);
+          log.debuff(target.name, 'fear', 0, 1);
+        }
+        // Apply Stench on hit (Poo Fling, Chemical Warfare)
+        if (trait.tags.contains('apply_stench_3') && !target.isFainted) {
+          target.applyDebuff(DebuffType.stench, 0, 3);
+          log.debuff(target.name, 'stench', 0, 3);
+        }
+        // Apply Stun on hit (Sticky Goo primary)
+        if (trait.tags.contains('apply_stun_1') && !target.isFainted) {
+          target.applyDebuff(DebuffType.stunned, 0, 1);
+          log.stun(target.name);
+        }
+        // Apply HealBlocked on hit (Scarab Curse)
+        if (trait.tags.contains('apply_heal_blocked_2') && !target.isFainted) {
+          target.applyDebuff(DebuffType.healBlocked, 0, 2);
+          log.debuff(target.name, 'healBlocked', 0, 2);
+        }
+        // Apply Fragile on hit (Buzzing Wind)
+        if (trait.tags.contains('apply_fragile_2') && !target.isFainted) {
+          target.applyDebuff(DebuffType.fragile, 25, 2);
+          log.debuff(target.name, 'fragile', 25, 2);
+        }
+        // Apply SpeedDown on hit (Venom Spray)
+        if (trait.tags.contains('apply_speed_down_1') && !target.isFainted) {
+          target.applyDebuff(DebuffType.speedDown, 0, 1);
+          log.debuff(target.name, 'speedDown', 0, 1);
+        }
+        // Apply Sleep on hit (Soothing Song)
+        if (trait.tags.contains('apply_sleep_1') && !target.isFainted) {
+          target.applyDebuff(DebuffType.sleep, 0, 1);
+          log.debuff(target.name, 'sleep', 0, 1);
         }
         // Kotaro Bite: gain 1 energy when the target is faster than this Axie.
         if (trait.tags.contains('energy_if_target_faster') &&
@@ -989,6 +1105,16 @@ class ActionResolver {
       log.debuff(actor.name, 'aroma', 0, 2);
     }
 
+    // Optional taunt helper tag: mark frontline ally as forced target.
+    // This reuses Aroma semantics so enemy targeting naturally locks onto it.
+    if (trait.tags.contains('taunt_front_ally_2')) {
+      final ally = _firstAlive(actorTeam);
+      if (ally != null && !ally.isFainted) {
+        ally.applyDebuff(DebuffType.aroma, 0, 2);
+        log.debuff(ally.name, 'aroma', 0, 2);
+      }
+    }
+
     // Acrobatic (beast-horn-12): gain Speed+ when used as the 2nd+ card in a combo.
     if (trait.tags.contains('self_speed_up_on_combo') && comboIndex >= 1) {
       actor.applyBuff(BuffType.speedUp, 20, 1);
@@ -1006,23 +1132,44 @@ class ActionResolver {
 
   // ── Damage formula ─────────────────────────────────────────────────────────
   //
-  // Final damage = (base × classMult) + comboBonus
+  // Proper calculation order (Axie Classic):
+  //   1. Apply class bonuses to card base damage: (cardDmg × sameClassBonus × classAdvantage)
+  //   2. Add attacker's effective attack (which already includes Attack- debuff reduction)
+  //   3. Subtract defender's effective defense
+  //   4. Add skill combo bonus: (cardDmg × skill) / 500
   //
-  // Combo bonus (Axie Skill mechanic):
-  //   Each card after the first in a round adds: (cardAttack × skill) / 500
-  //   comboIndex 0 = first card (no bonus), 1 = second card, etc.
+  // Example (Bird with skill 35 using Peace Treaty (base 120) vs Beast):
+  //   Class Math: 120 × 1.10 (bird) × 1.15 (vs beast) = 151.8
+  //   Pre-Defense: 30 (base atk) + 151.8 = 181.8
+  //   Post-Defense: 181.8 - 30 (def) = 151.8
+  //   Combo Bonus (if combo): (120 × 35) / 500 = 8.4
+  //   Total: 151.8 + 8.4 = 160.2 → 160 damage
   //
-  // Class advantage (+15%) and same-class card bonus (+10%) stack:
-  //   Bird using a Bird card against Beast = ×1.25 damage
+  // Attack- debuffs are already factored into attacker.effectiveAttack (−20% per stack).
+  // Defense- debuffs and fragile status are already factored into defender.effectiveDefense.
 
   int _computeDamage(
       Pet attacker, Pet defender, int traitBaseValue, Trait trait,
       {int comboIndex = 0}) {
+    // Step 1: Apply class bonuses (advantage ±15% and same-class +10%) to card base damage
+    final classMultiplied =
+        (traitBaseValue.toDouble() * _classMult(attacker, defender, trait))
+            .round();
+
+    // Step 2: Add attacker's effective attack (includes Attack- debuff reduction)
+    final preDefense =
+        (attacker.effectiveAttack + classMultiplied).clamp(1, 999);
+
+    // Step 3: Subtract defender's effective defense
+    final postDefense = (preDefense - defender.effectiveDefense).clamp(1, 999);
+
+    // Step 4: Add skill combo bonus (Axie Skill mechanic)
+    // Each card after the first in a combo adds bonus damage.
     final comboBonus =
         comboIndex > 0 ? (traitBaseValue * attacker.skill ~/ 500) : 0;
-    final raw = attacker.effectiveAttack + traitBaseValue + comboBonus;
-    final base = (raw - defender.effectiveDefense).clamp(1, 999);
-    return (base * _classMult(attacker, defender, trait)).round().clamp(1, 999);
+
+    // Step 5: Cap at max single-hit damage
+    return (postDefense + comboBonus).clamp(1, kMaxSingleHitDamage);
   }
 
   // ── Critical hit ──────────────────────────────────────────────────────────
@@ -1084,6 +1231,31 @@ class ActionResolver {
   }
 
   int _clamp(int value, int cap) => value.clamp(1, cap);
+
+  double _shieldDamageMultiplierForTarget(Pet target, {required bool ignoreShield}) {
+    if (ignoreShield || target.shield <= 0) return 1.0;
+    final hasDefenseDown = target.debuffs.any((d) => d.type == DebuffType.defenseDown);
+    if (target.isFragile || hasDefenseDown) {
+      return 2.0;
+    }
+    return 1.0;
+  }
+
+  void _applyTwinStatSteal({
+    required Pet actor,
+    required Pet target,
+    required DebuffType downType,
+    required BuffType upType,
+    required int value,
+    required int duration,
+    required String logKey,
+  }) {
+    if (target.isFainted) return;
+    target.applyDebuff(downType, value, duration);
+    actor.applyBuff(upType, value, duration);
+    log.debuff(target.name, '${logKey}Down', value, duration);
+    log.buff(actor.name, '${logKey}Up', value, duration);
+  }
 
   void _applyShieldBreakReactions({
     required Pet target,
