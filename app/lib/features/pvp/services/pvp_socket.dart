@@ -19,6 +19,7 @@ class PvpSocket {
   Timer? _reconnectTimer;
   int _reconnectDelayMs = 1000;
   String? _resumeMatchId;
+  bool _authRejected = false;
 
   // Messages queued while the socket is still connecting.
   final List<Map<String, dynamic>> _pendingQueue = [];
@@ -31,6 +32,7 @@ class PvpSocket {
     _resumeMatchId = resumeMatchId;
     _reconnectDelayMs = 1000;
     _disposed = false;
+    _authRejected = false;
     _connect(jwt);
   }
 
@@ -67,8 +69,15 @@ class PvpSocket {
       if (_resumeMatchId != null) {
         send(OutMatchResume(matchId: _resumeMatchId!).toJson());
       }
-    }).catchError((_) {
-      // Connection failed — reconnect will handle it.
+    }).catchError((e) {
+      if (_looksLikeAuthError(e)) {
+        _authRejected = true;
+        _controller.add(const PvpError(
+          code: 'WS_AUTH',
+          message: 'Arena session invalid or expired. Please log in again.',
+        ));
+      }
+      // Connection failed — reconnect/onDone handlers will manage retries.
     });
 
     _channel!.stream.listen(
@@ -83,15 +92,40 @@ class PvpSocket {
         final msg = PvpMessage.tryParse(raw.toString());
         if (msg != null) _controller.add(msg);
       },
-      onError: (_) {
+      onError: (e) {
         _connected = false;
+        if (_looksLikeAuthError(e)) {
+          _authRejected = true;
+          _controller.add(const PvpError(
+            code: 'WS_AUTH',
+            message: 'Arena session invalid or expired. Please log in again.',
+          ));
+          return;
+        }
+        _controller.add(PvpError(
+          code: 'WS_ERROR',
+          message: 'WebSocket error: $e',
+        ));
         _scheduleReconnect(jwt);
       },
       onDone: () {
         _connected = false;
+        if (_authRejected) return;
+        _controller.add(const PvpError(
+          code: 'WS_CLOSED',
+          message: 'Connection lost. Reconnecting to Arena...',
+        ));
         if (!_disposed) _scheduleReconnect(jwt);
       },
     );
+  }
+
+  bool _looksLikeAuthError(Object error) {
+    final msg = error.toString().toLowerCase();
+    return msg.contains('401') ||
+        msg.contains('unauthorized') ||
+        msg.contains('forbidden') ||
+        msg.contains('jwt');
   }
 
   void _flushPending() {
@@ -112,8 +146,12 @@ class PvpSocket {
   }
 }
 
-PvpSocket connectPvpSocket({String? resumeMatchId}) {
-  final jwt = ApiClient.cachedToken ?? '';
-  PvpSocket.instance.connect(jwt, resumeMatchId: resumeMatchId);
+PvpSocket connectPvpSocket({String? jwt, String? resumeMatchId}) {
+  final token = jwt ?? ApiClient.cachedToken ?? '';
+  if (token.isEmpty) {
+    // Let caller surface auth UX; keep helper non-throwing.
+    return PvpSocket.instance;
+  }
+  PvpSocket.instance.connect(token, resumeMatchId: resumeMatchId);
   return PvpSocket.instance;
 }

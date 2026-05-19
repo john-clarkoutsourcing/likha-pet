@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/pvp_message.dart';
 import '../services/pvp_socket.dart';
@@ -56,8 +57,16 @@ class PvpQueueNotifier extends StateNotifier<PvpQueueState> {
       state = state.copyWith(phase: QueuePhase.idle, error: 'Not authenticated');
       return;
     }
+    if (_isJwtExpired(jwt)) {
+      await _ref.read(authProvider.notifier).logout();
+      state = state.copyWith(
+        phase: QueuePhase.idle,
+        error: 'Session expired. Please log in again.',
+      );
+      return;
+    }
 
-    connectPvpSocket();
+    connectPvpSocket(jwt: jwt);
     _sub?.cancel();
     _sub = PvpSocket.instance.messages.listen(_onMessage);
 
@@ -97,6 +106,26 @@ class PvpQueueNotifier extends StateNotifier<PvpQueueState> {
   void _cleanup() {
     _sub?.cancel();
     _sub = null;
+  }
+
+  bool _isJwtExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return false;
+      var payload = parts[1];
+      payload = payload.replaceAll('-', '+').replaceAll('_', '/');
+      while (payload.length % 4 != 0) {
+        payload += '=';
+      }
+      final jsonStr = utf8.decode(base64.decode(payload));
+      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final exp = (map['exp'] as num?)?.toInt();
+      if (exp == null) return false;
+      final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return exp <= nowSecs;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

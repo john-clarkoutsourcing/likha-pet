@@ -38,7 +38,11 @@ export class PvpGateway {
       let payload: JWTPayload;
       try {
         payload = jwt.verify(token, JWT_SECRET) as JWTPayload;
-      } catch {
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : 'unknown jwt verify error';
+        console.warn(
+          `[PvP] WS auth rejected (${pathname}) tokenLen=${token.length} reason=${reason}`,
+        );
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
