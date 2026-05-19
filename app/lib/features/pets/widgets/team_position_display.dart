@@ -33,7 +33,7 @@ class TeamPositionDisplay extends StatelessWidget {
     return Row(
       children: List.generate(3, (slot) {
         final pet = _getPetAt(slot);
-        final label = TeamComposition.positionLabel(slot);
+        final label = BattleRow.fromIndex(slot).label;
         return Expanded(
           child: _PositionSlot(
             label: label,

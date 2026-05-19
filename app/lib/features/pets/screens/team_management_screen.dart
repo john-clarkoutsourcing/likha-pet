@@ -91,12 +91,13 @@ class TeamManagementScreen extends ConsumerWidget {
                         itemBuilder: (_, i) {
                           final team    = teams[i];
                           final active  = _isActive(team, player.activeTeamId);
-                          final teamPets = team.petUids
-                              .map((uid) => player.petById(uid))
+                          final teamPets = team.slots
+                              .map((s) => player.petById(s.petUid))
                               .toList();
                           return _TeamCard(
                             key:      ValueKey(team.id),
                             team:     team,
+                            teamSlots: team.slots,
                             teamPets: teamPets,
                             isActive: active,
                             onSetActive: () => ref
@@ -143,13 +144,13 @@ class TeamManagementScreen extends ConsumerWidget {
       pageBuilder: (ctx, a1, a2) => _BuilderModal(
         editing:  editing,
         roster:   allPets,
-        onSave: (name, petUids) {
+        onSave: (name, slots) {
           if (editing != null) {
             ref.read(playerProvider.notifier)
-                .updateTeamComposition(editing.id, name, petUids);
+                .updateTeamComposition(editing.id, name, slots);
           } else {
             ref.read(playerProvider.notifier)
-                .createTeamComposition(name, petUids);
+                .createTeamComposition(name, slots);
           }
         },
       ),
@@ -442,6 +443,7 @@ class _InfoBanner extends StatelessWidget {
 
 class _TeamCard extends StatefulWidget {
   final TeamComposition   team;
+  final List<TeamSlot>    teamSlots;
   final List<OwnedPet?>   teamPets;
   final bool              isActive;
   final VoidCallback      onSetActive;
@@ -452,6 +454,7 @@ class _TeamCard extends StatefulWidget {
   const _TeamCard({
     super.key,
     required this.team,
+    required this.teamSlots,
     required this.teamPets,
     required this.isActive,
     required this.onSetActive,
@@ -654,13 +657,14 @@ class _TeamCardState extends State<_TeamCard> {
             padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
             child: Row(
               children: List.generate(3, (i) {
-                final pet = i < widget.teamPets.length
-                    ? widget.teamPets[i]
-                    : null;
+                final pet = i < widget.teamPets.length ? widget.teamPets[i] : null;
+                final teamSlot = i < widget.teamSlots.length
+                    ? widget.teamSlots[i]
+                    : const TeamSlot(petUid: '', row: BattleRow.front, lane: BattleLane.center);
                 return Expanded(
                   child: Padding(
                     padding: EdgeInsets.only(right: i < 2 ? 8 : 0),
-                    child: _MiniPetCell(pet: pet, slot: i),
+                    child: _MiniPetCell(pet: pet, teamSlot: teamSlot),
                   ),
                 );
               }),
@@ -864,21 +868,20 @@ class _CardAction extends StatelessWidget {
 
 class _MiniPetCell extends StatelessWidget {
   final OwnedPet? pet;
-  final int       slot;
+  final TeamSlot  teamSlot;
 
-  const _MiniPetCell({required this.pet, required this.slot});
+  const _MiniPetCell({required this.pet, required this.teamSlot});
 
-  static const _kSlotLabels = ['FRONT', 'MID', 'BACK'];
-  static const _kSlotColors = [
-    Color(0xFFFF5252),
-    Color(0xFFFFD740),
-    Color(0xFF69F0AE),
-  ];
+  Color _rowColor(BattleRow row) => switch (row) {
+    BattleRow.front => const Color(0xFFFF5252),
+    BattleRow.mid => const Color(0xFFFFD740),
+    BattleRow.back => const Color(0xFF69F0AE),
+  };
 
   @override
   Widget build(BuildContext context) {
-    final posColor = _kSlotColors[slot];
-    final posLabel = _kSlotLabels[slot];
+    final posColor = _rowColor(teamSlot.row);
+    final posLabel = '${teamSlot.row.label} · ${teamSlot.lane.label.toUpperCase()}';
 
     if (pet == null) {
       return Container(
@@ -1062,7 +1065,7 @@ class _EmptyState extends StatelessWidget {
 class _BuilderModal extends StatefulWidget {
   final TeamComposition?                          editing;
   final List<OwnedPet>                            roster;
-  final void Function(String, List<String>)       onSave;
+  final void Function(String, List<TeamSlot>)      onSave;
 
   const _BuilderModal({
     this.editing,
@@ -1075,24 +1078,28 @@ class _BuilderModal extends StatefulWidget {
 }
 
 class _BuilderModalState extends State<_BuilderModal> {
-  // 3 selected pets (null = empty slot)
-  late final List<OwnedPet?> _slots;
+  // 3x3 grid cells (row-major order, 0..8). Each cell can hold one pet.
+  late final List<OwnedPet?> _cells;
+  int? _selectedCell;
   late final TextEditingController _nameCtrl;
 
   @override
   void initState() {
     super.initState();
+    _cells = List<OwnedPet?>.filled(9, null);
     if (widget.editing != null) {
-      _slots = widget.editing!.petUids.map((uid) {
-        return widget.roster
-            .cast<OwnedPet?>()
-            .firstWhere((p) => p?.uid == uid, orElse: () => null);
-      }).toList();
-    } else {
-      _slots = [null, null, null];
+      for (final slot in widget.editing!.slots) {
+        final pet = widget.roster.cast<OwnedPet?>().firstWhere(
+              (p) => p?.uid == slot.petUid,
+              orElse: () => null,
+            );
+        final cellIndex = slot.row.index * 3 + slot.lane.index;
+        if (cellIndex >= 0 && cellIndex < _cells.length) {
+          _cells[cellIndex] = pet;
+        }
+      }
     }
-    _nameCtrl = TextEditingController(
-        text: widget.editing?.name ?? '');
+    _nameCtrl = TextEditingController(text: widget.editing?.name ?? '');
   }
 
   @override
@@ -1102,31 +1109,48 @@ class _BuilderModalState extends State<_BuilderModal> {
   }
 
   bool get _canSave =>
-      _slots.every((s) => s != null) && _nameCtrl.text.trim().isNotEmpty;
+      _cells.where((s) => s != null).length == 3 &&
+      _nameCtrl.text.trim().isNotEmpty;
 
   void _onPickerTap(OwnedPet pet) {
-    final existingIdx = _slots.indexWhere((s) => s?.uid == pet.uid);
+    final existingIdx = _cells.indexWhere((s) => s?.uid == pet.uid);
     if (existingIdx >= 0) {
-      setState(() => _slots[existingIdx] = null);
+      setState(() => _cells[existingIdx] = null);
     } else {
-      final emptyIdx = _slots.indexOf(null);
-      if (emptyIdx >= 0) setState(() => _slots[emptyIdx] = pet);
+      if (_selectedCell != null && _cells[_selectedCell!] == null) {
+        setState(() => _cells[_selectedCell!] = pet);
+      } else {
+        final emptyIdx = _cells.indexOf(null);
+        if (emptyIdx >= 0) setState(() => _cells[emptyIdx] = pet);
+      }
     }
   }
 
-  void _clearSlot(int i) => setState(() => _slots[i] = null);
+  void _clearCell(int i) => setState(() => _cells[i] = null);
+
+  void _selectCell(int i) => setState(() => _selectedCell = i);
 
   void _doSave() {
     final name = _nameCtrl.text.trim();
     if (!_canSave || name.isEmpty) return;
-    widget.onSave(name, _slots.map((p) => p!.uid).toList());
+    final slots = <TeamSlot>[];
+    for (var i = 0; i < _cells.length; i++) {
+      final pet = _cells[i];
+      if (pet == null) continue;
+      slots.add(TeamSlot(
+        petUid: pet.uid,
+        row: BattleRow.fromIndex(i ~/ 3),
+        lane: BattleLane.fromIndex(i % 3),
+      ));
+    }
+    widget.onSave(name, slots);
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final isEdit    = widget.editing != null;
-    final filledCnt = _slots.where((s) => s != null).length;
+    final filledCnt = _cells.where((s) => s != null).length;
     final full      = filledCnt == 3;
 
     // showGeneralDialog does not inject Material — wrap explicitly so
@@ -1173,22 +1197,41 @@ class _BuilderModalState extends State<_BuilderModal> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // LINEUP section
-                      const _SectionLabel('LINEUP'),
+                      const _SectionLabel('FORMATION · 3×3 GRID'),
                       const SizedBox(height: 8),
-                      Row(
-                        children: List.generate(3, (i) {
-                          return Expanded(
-                            child: Padding(
-                              padding:
-                                  EdgeInsets.only(right: i < 2 ? 8 : 0),
-                              child: _SlotCell(
-                                slot:    i,
-                                pet:     _slots[i],
-                                onClear: () => _clearSlot(i),
-                              ),
-                            ),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: 9,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 0.86,
+                        ),
+                        itemBuilder: (_, i) {
+                          final row = BattleRow.fromIndex(i ~/ 3);
+                          final lane = BattleLane.fromIndex(i % 3);
+                          return _FormationCell(
+                            row: row,
+                            lane: lane,
+                            pet: _cells[i],
+                            selected: _selectedCell == i,
+                            onTap: () => _selectCell(i),
+                            onClear: _cells[i] == null ? null : () => _clearCell(i),
                           );
-                        }),
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Tap a grid cell, then tap a pet below to place it.\nYou can build 2 FRONT + 1 MID, 1 FRONT + 2 BACK, or any 3-slot mix the battle rules allow.',
+                        style: TextStyle(
+                          fontFamily: 'Fredoka',
+                          color: Color(0xFF7FE3F5),
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
                       ),
                       const SizedBox(height: 18),
                       // TEAM NAME section
@@ -1206,7 +1249,7 @@ class _BuilderModalState extends State<_BuilderModal> {
                               full ? 'ROSTER · TAP TO SWAP' : 'ROSTER · TAP TO ADD'),
                           const Spacer(),
                           Text(
-                            '$filledCnt / 3 selected',
+                            '$filledCnt / 3 placed',
                             style: const TextStyle(
                               fontFamily: 'Fredoka',
                               color: Color(0xFF7FE3F5),
@@ -1229,8 +1272,8 @@ class _BuilderModalState extends State<_BuilderModal> {
                         itemCount: widget.roster.length,
                         itemBuilder: (_, i) {
                           final pet      = widget.roster[i];
-                          final slotIdx  =
-                              _slots.indexWhere((s) => s?.uid == pet.uid);
+                            final slotIdx  =
+                              _cells.indexWhere((s) => s?.uid == pet.uid);
                           return _RosterPickerCard(
                             pet:      pet,
                             slotIdx:  slotIdx, // -1 = not selected
@@ -1338,142 +1381,148 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-// ── Slot cell (in modal) ──────────────────────────────────────────────────────
+// ── Formation cell (3×3 grid) ────────────────────────────────────────────────
 
-class _SlotCell extends StatelessWidget {
-  final int       slot;
+class _FormationCell extends StatelessWidget {
+  final BattleRow row;
+  final BattleLane lane;
   final OwnedPet? pet;
-  final VoidCallback onClear;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
 
-  const _SlotCell({
-    required this.slot,
+  const _FormationCell({
+    required this.row,
+    required this.lane,
     required this.pet,
-    required this.onClear,
+    required this.selected,
+    required this.onTap,
+    this.onClear,
   });
+
+  Color get _rowColor => switch (row) {
+        BattleRow.front => const Color(0xFFFF5252),
+        BattleRow.mid => const Color(0xFFFFD740),
+        BattleRow.back => const Color(0xFF69F0AE),
+      };
 
   @override
   Widget build(BuildContext context) {
-    if (pet == null) {
-      return Container(
-        height: 110,
+    final color = _rowColor;
+    final hasPet = pet != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
         decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.14)
+              : Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _kCyan.withValues(alpha: 0.35),
-            style: BorderStyle.solid,
+            color: selected
+                ? color.withValues(alpha: 0.95)
+                : color.withValues(alpha: 0.35),
+            width: selected ? 2 : 1,
           ),
-          color: _kCyan.withValues(alpha: 0.05),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.25),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _kCyan.withValues(alpha: 0.12),
-                border:
-                    Border.all(color: _kCyan.withValues(alpha: 0.4)),
+            if (hasPet)
+              Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(11),
+                      ),
+                    ),
+                    child: Text(
+                      '${row.label} · ${lane.label.toUpperCase()}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'LilitaOne',
+                        color: color,
+                        fontSize: 8,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: PetRendererWidget.fromOwned(pet!, size: 52),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+                    child: Text(
+                      pet!.name,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'LilitaOne',
+                        color: Color(0xFFEAFBFF),
+                        fontSize: 9,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_rounded,
+                        size: 18, color: color.withValues(alpha: 0.8)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${row.label}\n${lane.label.toUpperCase()}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'LilitaOne',
+                        color: color.withValues(alpha: 0.85),
+                        fontSize: 8,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(Icons.add_rounded,
-                  size: 16, color: _kCyan),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'SLOT ${slot + 1}',
-              style: const TextStyle(
-                fontFamily: 'LilitaOne',
-                color: _kCyan,
-                fontSize: 9,
-                letterSpacing: 1,
+            if (hasPet && onClear != null)
+              Positioned(
+                top: 5,
+                right: 5,
+                child: GestureDetector(
+                  onTap: onClear,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Icon(Icons.close_rounded,
+                        size: 12, color: Colors.white54),
+                  ),
+                ),
               ),
-            ),
           ],
         ),
-      );
-    }
-
-    final def   = pet!.toCreatureDefinition();
-    final cls   = def.bodyClass;
-    final color = _cls(cls);
-
-    return Container(
-      height: 110,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.65), width: 2),
-        color: color.withValues(alpha: 0.08),
-        boxShadow: [
-          BoxShadow(
-              color: color.withValues(alpha: 0.18), blurRadius: 10),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Center(
-                child: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: PetRendererWidget.fromOwned(pet!, size: 56),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                      color: color.withValues(alpha: 0.55)),
-                ),
-                child: Text(
-                  cls.displayName.toUpperCase(),
-                  style: TextStyle(
-                    fontFamily: 'LilitaOne',
-                    color: color,
-                    fontSize: 8,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text(
-                  pet!.name,
-                  style: const TextStyle(
-                    fontFamily: 'LilitaOne',
-                    color: Color(0xFFEAFBFF),
-                    fontSize: 9,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-          // X button
-          Positioned(
-            top: 5,
-            right: 5,
-            child: GestureDetector(
-              onTap: onClear,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Icon(Icons.close_rounded,
-                    size: 12, color: Colors.white54),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -1,0 +1,16 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Static game assets — publicly readable, never client-writable
+    match /assets/spines/{allPaths=**} {
+      allow read:  if true;
+      allow write: if false;
+    }
+
+    // Everything else is private by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

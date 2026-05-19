@@ -48,31 +48,30 @@ extension CreatureClassStats on CreatureClass {
   //   plant 200/31  aquatic 160/39  beast 140/35
   //   reptile 165/35  bird 120/43  bug 155/31
 
+  // Raw base stats per the universal combat spec (pre-scaling).
+  // Scaling is applied in CreatureDefinition.toPet():
+  //   Battle HP    = (total_hp    × 6) + 150
+  //   Battle Stats = (total_stat  × 4) + 100
   ({int hp, int speed, int skill, int morale}) get baseBodyStats =>
       switch (this) {
-        CreatureClass.plant => (hp: 192, speed: 31, skill: 20, morale: 20),
-        CreatureClass.aquatic => (hp: 156, speed: 31, skill: 25, morale: 17),
-        CreatureClass.beast => (hp: 140, speed: 31, skill: 25, morale: 28),
-        CreatureClass.reptile => (hp: 157, speed: 31, skill: 20, morale: 22),
-        CreatureClass.bird => (hp: 120, speed: 35, skill: 23, morale: 20),
-        CreatureClass.bug => (hp: 151, speed: 31, skill: 25, morale: 23),
+        CreatureClass.plant   => (hp: 43, speed: 31, skill: 31, morale: 35),
+        CreatureClass.aquatic => (hp: 39, speed: 39, skill: 35, morale: 27),
+        CreatureClass.beast   => (hp: 31, speed: 35, skill: 31, morale: 43),
+        CreatureClass.reptile => (hp: 39, speed: 39, skill: 35, morale: 27),
+        CreatureClass.bird    => (hp: 31, speed: 43, skill: 35, morale: 31),
+        CreatureClass.bug     => (hp: 35, speed: 31, skill: 35, morale: 39),
       };
 
-  // ── Part stat bonus per part (×4 for a pure-breed creature) ─────────────
-  //
-  // Matches the reference card game's per-part contribution table:
-  //   Plant +3HP +1Morale  |  Aquatic +3Speed +1HP   |  Beast  +3Morale +1Speed
-  //   Bird  +3Speed +1Morale | Bug +3Morale +1HP    |  Reptile +3HP +1Speed
-  // (scaled ÷1.5 → ×2/×1 to fit our 4-part system)
-
+  // Per-part raw stat bonus (spec: 6 parts in classic; we use 4 active parts).
+  // Pure-breed with 4 of the same part: adds 4× this bonus to body base.
   ({int hp, int speed, int skill, int morale}) get partStatBonus =>
       switch (this) {
-        CreatureClass.plant => (hp: 2, speed: 0, skill: 0, morale: 1),
-        CreatureClass.aquatic => (hp: 1, speed: 2, skill: 0, morale: 0),
-        CreatureClass.beast => (hp: 0, speed: 1, skill: 0, morale: 2),
-        CreatureClass.bird => (hp: 0, speed: 2, skill: 0, morale: 1),
-        CreatureClass.bug => (hp: 1, speed: 0, skill: 0, morale: 2),
-        CreatureClass.reptile => (hp: 2, speed: 1, skill: 0, morale: 0),
+        CreatureClass.plant   => (hp: 3, speed: 0, skill: 0, morale: 1),
+        CreatureClass.reptile => (hp: 3, speed: 1, skill: 0, morale: 0),
+        CreatureClass.aquatic => (hp: 1, speed: 3, skill: 0, morale: 0),
+        CreatureClass.bird    => (hp: 0, speed: 3, skill: 1, morale: 0),
+        CreatureClass.bug     => (hp: 1, speed: 0, skill: 3, morale: 0),
+        CreatureClass.beast   => (hp: 0, speed: 1, skill: 0, morale: 3),
       };
 }
 

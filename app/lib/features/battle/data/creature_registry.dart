@@ -133,16 +133,22 @@ class CreatureDefinition {
 
   /// Build a fresh Pet — call once per battle, never share between sessions.
   /// [displayName] overrides the default creature name (e.g., for player-named pets).
-  Pet toPet({String? displayName}) {
+  /// [row] and [lane] describe the 3×3 formation position.
+  Pet toPet({String? displayName, int row = 0, int lane = 1}) {
     final s = computedStats;
+    // Apply universal scaling formulas (spec §2):
+    //   Battle HP    = (total_hp_stat × 6) + 150
+    //   Battle Stats = (total_stat    × 4) + 100
     return Pet(
       id: id,
       name: displayName ?? name,
       creatureClass: bodyClass,
-      maxHp: s.hp,
-      speed: s.speed,
-      morale: s.morale,
-      skill: s.skill,
+      maxHp:  (s.hp    * 6) + 150,
+      speed:  (s.speed * 4) + 100,
+      morale: (s.morale * 4) + 100,
+      skill:  (s.skill  * 4) + 100,
+      row: row,
+      lane: lane,
       traits: parts.map((p) => p.buildTrait()).toList(),
     );
   }

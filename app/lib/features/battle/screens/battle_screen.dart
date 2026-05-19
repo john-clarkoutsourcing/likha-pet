@@ -30,7 +30,7 @@ class BattleScreenArgs {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const _kRoundSeconds = 30;
+const _kRoundSeconds = 45;
 
 /// Battlefield positions as (left%, top%) fractions.
 /// Battlefield = full SafeArea height (~331 px).
@@ -277,6 +277,66 @@ class _BattleScreenState extends ConsumerState<BattleScreen>
               // PvE: player on left (playerOnRight: false)
               child: BattleTopHud(vm: vm, timer: _timer),
             ),
+          ),
+
+          // ── Center countdown: shown when ≤10s remain ─────────────────────
+          AnimatedBuilder(
+            animation: _timer,
+            builder: (_, __) {
+              final secsLeft = ((_kRoundSeconds * (1 - _timer.value)).ceil())
+                  .clamp(0, _kRoundSeconds);
+              if (secsLeft > 10 || vm.isResolving || vm.isBattleOver) {
+                return const SizedBox.shrink();
+              }
+              return Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: AnimatedScale(
+                      scale: secsLeft <= 3 ? 1.3 : 1.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.72),
+                          border: Border.all(
+                            color: secsLeft <= 3
+                                ? const Color(0xFFFF3333)
+                                : const Color(0xFFFF8C00),
+                            width: 3,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (secsLeft <= 3
+                                      ? const Color(0xFFFF3333)
+                                      : const Color(0xFFFF8C00))
+                                  .withValues(alpha: 0.5),
+                              blurRadius: 20,
+                              spreadRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$secsLeft',
+                            style: TextStyle(
+                              fontFamily: 'LilitaOne',
+                              color: secsLeft <= 3
+                                  ? const Color(0xFFFF3333)
+                                  : Colors.white,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
 
           // ── Battle feed just above the card panel ────────────────────────

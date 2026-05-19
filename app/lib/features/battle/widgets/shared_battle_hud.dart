@@ -484,8 +484,8 @@ class _BattleOrderBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = entry.isPlayer ? AppColors.accent : AppColors.offensive;
     final size = compact
-        ? (isFirst ? 28.0 : 22.0)
-        : (isFirst ? 32.0 : 26.0);
+        ? (isFirst ? 38.0 : 30.0)
+        : (isFirst ? 46.0 : 36.0);
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -893,73 +893,87 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
             ),
           ),
 
-          // Opponent pets
-          for (var i = 0; i < vm.enemyTeam.length; i++)
-            _placed(
-              w,
-              h,
-              widget.opponentPos[i],
-              _BattlePet(
-                pet: vm.enemyTeam[i],
-                flipHorizontal: widget.opponentFlipHorizontal,
-                hasSkill: false,
-                positionIndex: i,
-                animState: vm.petAnimStates[vm.enemyTeam[i].id],
-                attackSlot: vm.petAttackSlots[vm.enemyTeam[i].id],
-                onTap: widget.onOpponentPetTap != null
-                    ? () => widget.onOpponentPetTap!(vm.enemyTeam[i])
-                    : null,
-                snapHpBars: widget.snapHpBars,
-                displayHp: _displayHpForPet(vm, vm.enemyTeam[i]).$1,
-                displayShield: _displayHpForPet(vm, vm.enemyTeam[i]).$2,
-                shieldPreview: _previewShieldForPet(vm, vm.enemyTeam[i]),
-              ),
-              dash: _dashPixelsForPet(
-                vm: vm,
-                actorPetId: vm.enemyTeam[i].id,
-                isPlayerTeam: false,
-                actorIndex: i,
-                rawDash: vm.petDashOffsets[vm.enemyTeam[i].id] ?? Offset.zero,
-                w: w,
-                h: h,
-              ),
-            ),
+          // Opponent pets — use pet.position (= pet.row) for visual slot
+          for (var i = 0; i < vm.enemyTeam.length; i++) ...[
+            if (i < widget.opponentPos.length) () {
+              final pet = vm.enemyTeam[i];
+              final posIdx = pet.position.clamp(0, widget.opponentPos.length - 1);
+              final base  = widget.opponentPos[posIdx];
+              final pos   = _laneAdjust(base, pet.lane);
+              final anim  = vm.petAnimStates[pet.id];
+              final isAttacking = anim == PetCharacterAnimState.attackMelee ||
+                  anim == PetCharacterAnimState.attackRanged;
+              return _placed(w, h, pos,
+                AnimatedScale(
+                  scale: isAttacking ? 1.10 : 1.0,
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOutBack,
+                  child: _BattlePet(
+                    pet: pet,
+                    flipHorizontal: widget.opponentFlipHorizontal,
+                    hasSkill: false,
+                    positionIndex: posIdx,
+                    animState: anim,
+                    attackSlot: vm.petAttackSlots[pet.id],
+                    onTap: widget.onOpponentPetTap != null
+                        ? () => widget.onOpponentPetTap!(pet) : null,
+                    snapHpBars: widget.snapHpBars,
+                    displayHp: _displayHpForPet(vm, pet).$1,
+                    displayShield: _displayHpForPet(vm, pet).$2,
+                    shieldPreview: _previewShieldForPet(vm, pet),
+                  ),
+                ),
+                dash: _dashPixelsForPet(
+                  vm: vm, actorPetId: pet.id, isPlayerTeam: false,
+                  actorIndex: posIdx,
+                  rawDash: vm.petDashOffsets[pet.id] ?? Offset.zero,
+                  w: w, h: h,
+                ),
+              );
+            }(),
+          ],
 
-          // Player pets
-          for (var i = 0; i < vm.playerTeam.length; i++)
-            _placed(
-              w,
-              h,
-              widget.playerPos[i],
-              _BattlePet(
-                pet: vm.playerTeam[i],
-                flipHorizontal: widget.playerFlipHorizontal,
-                hasSkill:
-                    vm.pendingSkills[vm.playerTeam[i].id]?.isNotEmpty ?? false,
-                positionIndex: i,
-                animState: vm.petAnimStates[vm.playerTeam[i].id],
-                attackSlot: vm.petAttackSlots[vm.playerTeam[i].id],
-                onTap: widget.onPlayerPetTap != null
-                    ? () => widget.onPlayerPetTap!(vm.playerTeam[i])
-                    : null,
-                onLongPress: widget.onPlayerPetLongPress != null
-                    ? () => widget.onPlayerPetLongPress!(vm.playerTeam[i])
-                    : null,
-                snapHpBars: widget.snapHpBars,
-                displayHp: _displayHpForPet(vm, vm.playerTeam[i]).$1,
-                displayShield: _displayHpForPet(vm, vm.playerTeam[i]).$2,
-                shieldPreview: _previewShieldForPet(vm, vm.playerTeam[i]),
-              ),
-              dash: _dashPixelsForPet(
-                vm: vm,
-                actorPetId: vm.playerTeam[i].id,
-                isPlayerTeam: true,
-                actorIndex: i,
-                rawDash: vm.petDashOffsets[vm.playerTeam[i].id] ?? Offset.zero,
-                w: w,
-                h: h,
-              ),
-            ),
+          // Player pets — use pet.position (= pet.row) for visual slot
+          for (var i = 0; i < vm.playerTeam.length; i++) ...[
+            if (i < widget.playerPos.length) () {
+              final pet = vm.playerTeam[i];
+              final posIdx = pet.position.clamp(0, widget.playerPos.length - 1);
+              final base  = widget.playerPos[posIdx];
+              final pos   = _laneAdjust(base, pet.lane);
+              final anim  = vm.petAnimStates[pet.id];
+              final isAttacking = anim == PetCharacterAnimState.attackMelee ||
+                  anim == PetCharacterAnimState.attackRanged;
+              return _placed(w, h, pos,
+                AnimatedScale(
+                  scale: isAttacking ? 1.10 : 1.0,
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOutBack,
+                  child: _BattlePet(
+                    pet: pet,
+                    flipHorizontal: widget.playerFlipHorizontal,
+                    hasSkill: vm.pendingSkills[pet.id]?.isNotEmpty ?? false,
+                    positionIndex: posIdx,
+                    animState: anim,
+                    attackSlot: vm.petAttackSlots[pet.id],
+                    onTap: widget.onPlayerPetTap != null
+                        ? () => widget.onPlayerPetTap!(pet) : null,
+                    onLongPress: widget.onPlayerPetLongPress != null
+                        ? () => widget.onPlayerPetLongPress!(pet) : null,
+                    snapHpBars: widget.snapHpBars,
+                    displayHp: _displayHpForPet(vm, pet).$1,
+                    displayShield: _displayHpForPet(vm, pet).$2,
+                    shieldPreview: _previewShieldForPet(vm, pet),
+                  ),
+                ),
+                dash: _dashPixelsForPet(
+                  vm: vm, actorPetId: pet.id, isPlayerTeam: true,
+                  actorIndex: posIdx,
+                  rawDash: vm.petDashOffsets[pet.id] ?? Offset.zero,
+                  w: w, h: h,
+                ),
+              );
+            }(),
+          ],
 
           // Projectiles
           for (final p in _projectiles)
@@ -979,12 +993,19 @@ class _BattlefieldViewState extends ConsumerState<BattlefieldView> {
     });
   }
 
+  // Offset y by lane so pets in the same row don't overlap.
+  // lane=0 upper, lane=1 center (no shift), lane=2 lower.
+  static Offset _laneAdjust(Offset base, int lane) {
+    const kLaneSpacing = 0.07; // fraction of screen height per lane step
+    return Offset(base.dx, base.dy + (lane - 1) * kLaneSpacing);
+  }
+
   Widget _placed(double w, double h, Offset pos, Widget child,
       {Offset dash = Offset.zero}) {
     final p = Offset(w * pos.dx + dash.dx, h * pos.dy + dash.dy);
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeInOutCubic,
       left: p.dx,
       top: p.dy,
       child: child,
@@ -1109,7 +1130,7 @@ class _BattlePet extends StatelessWidget {
     final scale = _kScaleByPos[positionIndex.clamp(0, 2)];
     final opacity = _kOpacityByPos[positionIndex.clamp(0, 2)];
     final spriteSize = kBattleSpriteBase * scale;
-    final barWidth = (spriteSize * 0.50).clamp(80.0, 108.0);
+    final barWidth = (spriteSize * 0.40).clamp(60.0, 74.0);
     final hp = displayHp;
     final shield = displayShield;
     final isFainted = pet.isFainted || hp <= 0;
@@ -1379,29 +1400,40 @@ class BattleFloatingHpBar extends StatelessWidget {
     this.hpBarDuration = const Duration(milliseconds: 500),
   });
 
+  // Last Stand gold color — matches Axie Infinity classic orange-gold Last Stand bar
+  static const _kLastStandColor = Color(0xFFFFAA00);
+
   @override
   Widget build(BuildContext context) {
+    final inLastStand = pet.isInLastStand;
     final hpRatio = pet.maxHp > 0
         ? (currentHp / pet.maxHp).clamp(0.0, 1.0)
         : 0.0;
     final className = pet.creatureDef?.bodyClass.name.toLowerCase() ?? '';
     final classColor = _classColor(className);
-    final hpColor = hpRatio > 0.5
-        ? const Color(0xFFC0EB4B)
-        : hpRatio > 0.25
-            ? const Color(0xFFF59E0B)
-            : const Color(0xFFE53935);
+
+    // Axie classic HP color: green → yellow → red.
+    // Last Stand overrides to gold regardless of HP (HP is 0 but pet still fights).
+    final hpColor = inLastStand
+        ? _kLastStandColor
+        : hpRatio > 0.5
+            ? const Color(0xFFC0EB4B)
+            : hpRatio > 0.25
+                ? const Color(0xFFF59E0B)
+                : const Color(0xFFE53935);
+
     final statuses = _allStatuses(pet);
     final showShield = currentShield > 0;
     final effectiveHpDuration = hpBarDuration == Duration.zero
-      ? const Duration(milliseconds: 260)
-      : hpBarDuration;
+        ? const Duration(milliseconds: 260)
+        : hpBarDuration;
 
     return SizedBox(
-      width: width.clamp(82.0, 108.0),
+      width: width.clamp(60.0, 74.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ── Status icons row ──────────────────────────────────────────────
           if (statuses.isNotEmpty)
             SizedBox(
               height: 16,
@@ -1451,6 +1483,8 @@ class BattleFloatingHpBar extends StatelessWidget {
             )
           else
             const SizedBox(height: 2),
+
+          // ── HP row ────────────────────────────────────────────────────────
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -1463,42 +1497,71 @@ class BattleFloatingHpBar extends StatelessWidget {
                 const SizedBox(width: 20, height: 20),
               const SizedBox(width: 3),
               Container(
-                width: 18,
-                height: 18,
+                width: 22,
+                height: 22,
                 decoration: BoxDecoration(
-                  color: classColor,
+                  color: inLastStand ? _kLastStandColor : classColor,
                   borderRadius: BorderRadius.circular(3),
                 ),
                 alignment: Alignment.center,
-                child: Icon(
-                  _classIcon(className),
-                  size: 11,
-                  color: Colors.white,
-                ),
+                child: inLastStand
+                    ? Text(
+                        '${pet.lastStandTicks}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                      )
+                    : Icon(_classIcon(className), size: 11, color: Colors.white),
               ),
               const SizedBox(width: 3),
               Expanded(
                 child: Container(
-                  height: 18,
+                  height: 22,
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111111).withValues(alpha: 0.58),
+                    color: inLastStand
+                        ? _kLastStandColor.withValues(alpha: 0.18)
+                        : const Color(0xFF111111).withValues(alpha: 0.58),
                     borderRadius: BorderRadius.circular(3),
+                    border: inLastStand
+                        ? Border.all(
+                            color: _kLastStandColor.withValues(alpha: 0.7),
+                            width: 1)
+                        : null,
                   ),
                   child: Row(
                     children: [
-                      Text(
-                        '$currentHp',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          height: 1,
-                          shadows: [
-                            Shadow(color: Colors.black87, blurRadius: 2),
-                          ],
+                      // HP number or Last Stand label
+                      if (inLastStand)
+                        const Text(
+                          'LAST STAND',
+                          style: TextStyle(
+                            color: _kLastStandColor,
+                            fontSize: 7,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                            letterSpacing: 0.3,
+                            shadows: [
+                              Shadow(color: Colors.black87, blurRadius: 2),
+                            ],
+                          ),
+                        )
+                      else
+                        Text(
+                          '$currentHp',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                            shadows: [
+                              Shadow(color: Colors.black87, blurRadius: 2),
+                            ],
+                          ),
                         ),
-                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Stack(
@@ -1512,14 +1575,27 @@ class BattleFloatingHpBar extends StatelessWidget {
                             ),
                             LayoutBuilder(
                               builder: (context, constraints) {
+                                // In Last Stand, bar pulses at full width in gold
+                                final barWidth = inLastStand
+                                    ? constraints.maxWidth
+                                    : constraints.maxWidth * hpRatio;
                                 return AnimatedContainer(
                                   duration: effectiveHpDuration,
                                   curve: Curves.easeOutCubic,
-                                  width: constraints.maxWidth * hpRatio,
+                                  width: barWidth,
                                   height: 6,
                                   decoration: BoxDecoration(
                                     color: hpColor,
                                     borderRadius: BorderRadius.circular(2),
+                                    boxShadow: inLastStand
+                                        ? [
+                                            BoxShadow(
+                                              color: _kLastStandColor
+                                                  .withValues(alpha: 0.6),
+                                              blurRadius: 4,
+                                            )
+                                          ]
+                                        : null,
                                   ),
                                 );
                               },
@@ -1532,6 +1608,54 @@ class BattleFloatingHpBar extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+
+          // ── Morale badge (Axie classic — drives Last Stand + crit chance) ─
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.favorite,
+                          size: 7, color: Color(0xFFFF6B8A)),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${pet.morale}',
+                        style: const TextStyle(
+                          color: Color(0xFFFF6B8A),
+                          fontSize: 7,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.auto_fix_high,
+                          size: 7, color: Color(0xFF93C5FD)),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${pet.skill}',
+                        style: const TextStyle(
+                          color: Color(0xFF93C5FD),
+                          fontSize: 7,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2205,9 +2329,12 @@ class BattleFeed extends StatelessWidget {
 // ── BattleSkillCard ───────────────────────────────────────────────────────────
 //
 // The Axie-style card tile. Works in the hand and in the discard popup.
-// discardMode: shows red vignette + close icon, locks selection.
+//
+// Default:        part-card art + energy cost badge
+// Hover / hold:   full classic card template (name, stats, description)
+// discardMode:    always shows classic card (user needs to see what to discard)
 
-class BattleSkillCard extends StatelessWidget {
+class BattleSkillCard extends StatefulWidget {
   final TraitViewModel trait;
   final String petName;
   final bool isSelected;
@@ -2217,7 +2344,7 @@ class BattleSkillCard extends StatelessWidget {
   final String? cardArtPath;
   final String? cardTemplatePath;
   final int? comboIndex;
-  final Color? petColor; // Pet class color for badge
+  final Color? petColor;
   final VoidCallback? onTap;
 
   const BattleSkillCard({
@@ -2236,236 +2363,464 @@ class BattleSkillCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final usable = discardMode || trait.isUsable;
-    final tc =
-        discardMode ? const Color(0xFFFF6060) : _typeColor(trait.typeName);
-    final cardEntry = kBattleCardCatalogByTraitId[trait.id];
-    final resolvedTemplatePath = cardTemplatePath ??
-        cardEntry?.templatePath ??
-        cardArtPath ??
-        'assets/images/part-cards/default-card-art.png';
-    final resolvedImageName = cardEntry?.imageName ??
-        battleClassicImageNameFromPath(cardTemplatePath) ??
-        battleClassicImageNameFromPath(cardArtPath) ??
-        battleClassicImageNameFromPath(resolvedTemplatePath) ??
-        '';
+  State<BattleSkillCard> createState() => _BattleSkillCardState();
 
-    final cardW = discardMode ? 108.0 : 96.0;
-    final cardH = discardMode ? 148.0 : 134.0;
-    const lift = -14.0;
-
-    return GestureDetector(
-      onTap: usable && !isFizzled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 110),
-        width: cardW,
-        height: cardH,
-        transform: isSelected
-            ? (Matrix4.identity()..translateByDouble(0, lift, 0, 1))
-            : Matrix4.identity(),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(11),
-          boxShadow: [
-            if (isSelected) ...[
-              BoxShadow(
-                  color: tc.withValues(alpha: 0.85),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                  offset: const Offset(0, -2)),
-              BoxShadow(
-                  color: tc.withValues(alpha: 0.4),
-                  blurRadius: 36,
-                  spreadRadius: 4),
-            ],
-            if (discardMode)
-              const BoxShadow(
-                  color: Color(0xFFCC2020), blurRadius: 14, spreadRadius: 3),
-            const BoxShadow(
-                color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
-          ],
-        ),
-        child: Opacity(
-          opacity: isFizzled ? 0.3 : (usable ? 1.0 : 0.38),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned.fill(
-                  child: ClassicTraitCardWidget(
-                    imagePath: resolvedTemplatePath,
-                    imageName: resolvedImageName,
-                    name: '$petName - ${trait.name}',
-                    energy: trait.energyCost,
-                    attack: battleClassicCardAttack(trait, cardEntry),
-                    defense: battleClassicCardDefense(trait, cardEntry),
-                    description: trait.description,
-                    showDescription: true,
-                  ),
-                ),
-                if (isSelected)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: tc.withValues(alpha: 0.9), width: 2.5),
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.white.withValues(alpha: 0.14),
-                            Colors.transparent
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                if (!trait.isReady)
-                  Positioned(
-                    bottom: 4,
-                    left: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: AppColors.utility.withValues(alpha: 0.6)),
-                      ),
-                      child: Text('CD ${trait.cooldownRemaining}',
-                          style: TextStyle(
-                              color: AppColors.utility,
-                              fontSize: 7,
-                              fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                // Pet class color badge (top-left corner)
-                if (petColor != null)
-                  Positioned(
-                    top: 4,
-                    left: 4,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: petColor,
-                        border: Border.all(color: Colors.white70, width: 0.5),
-                        boxShadow: [
-                          BoxShadow(
-                              color: petColor!.withValues(alpha: 0.5),
-                              blurRadius: 4)
-                        ],
-                      ),
-                    ),
-                  ),
-                if (comboIndex != null)
-                  Positioned(
-                    top: 22,
-                    right: 4,
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: tc,
-                        border: Border.all(color: Colors.white70, width: 1),
-                        boxShadow: [
-                          BoxShadow(
-                              color: tc.withValues(alpha: 0.6), blurRadius: 6)
-                        ],
-                      ),
-                      child: Center(
-                        child: Text('$comboIndex',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w900)),
-                      ),
-                    ),
-                  ),
-                if (isPity && !discardMode)
-                  Positioned(
-                    bottom: 5,
-                    left: 5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 3, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.6)),
-                      ),
-                      child: const Text('★',
-                          style: TextStyle(color: Colors.amber, fontSize: 7)),
-                    ),
-                  ),
-                if (discardMode) ...[
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(9),
-                        gradient: RadialGradient(
-                          center: Alignment.center,
-                          radius: 1.1,
-                          colors: [
-                            Colors.transparent,
-                            const Color(0xFFCC2020).withValues(alpha: 0.35)
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 5,
-                    right: 5,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFFCC2020).withValues(alpha: 0.9),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black54, blurRadius: 4)
-                        ],
-                      ),
-                      child: const Icon(Icons.close,
-                          size: 13, color: Colors.white),
-                    ),
-                  ),
-                ],
-                if (isFizzled)
-                  Positioned.fill(
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      child: const Center(
-                        child: Text('✗',
-                            style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900)),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  static Color _typeColor(String t) => switch (t) {
+  static Color typeColor(String t) => switch (t) {
         'offensive' => AppColors.offensive,
         'defensive' => AppColors.defensive,
         'support' => AppColors.support,
         'utility' => AppColors.utility,
         _ => AppColors.primary,
       };
+}
+
+class _BattleSkillCardState extends State<BattleSkillCard> {
+  OverlayEntry? _overlay;
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
+
+  void _insertOverlay(
+    BuildContext context, {
+    required String imagePath,
+    required String imageName,
+    required int attack,
+    required int defense,
+  }) {
+    _removeOverlay();
+    _overlay = OverlayEntry(
+      builder: (_) => _HoverCardOverlay(
+        trait: widget.trait,
+        imagePath: imagePath,
+        imageName: imageName,
+        attack: attack,
+        defense: defense,
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_overlay!);
+  }
+
+  void _removeOverlay() {
+    _overlay?.remove();
+    _overlay = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.trait;
+    final usable = widget.discardMode || t.isUsable;
+    final tc = widget.discardMode
+        ? const Color(0xFFFF6060)
+        : BattleSkillCard.typeColor(t.typeName);
+
+    final cardEntry = kBattleCardCatalogByTraitId[t.id];
+    final resolvedTemplatePath = widget.cardTemplatePath ??
+        cardEntry?.templatePath ??
+        widget.cardArtPath ??
+        'assets/images/part-cards/default-card-art.png';
+    final resolvedImageName = cardEntry?.imageName ??
+        battleClassicImageNameFromPath(widget.cardTemplatePath) ??
+        battleClassicImageNameFromPath(widget.cardArtPath) ??
+        battleClassicImageNameFromPath(resolvedTemplatePath) ??
+        '';
+    final attack = battleClassicCardAttack(t, cardEntry);
+    final defense = battleClassicCardDefense(t, cardEntry);
+
+    final cardW = widget.discardMode ? 108.0 : 96.0;
+    final cardH = widget.discardMode ? 148.0 : 134.0;
+    const lift = -14.0;
+
+    return MouseRegion(
+      onEnter: (_) => _insertOverlay(context,
+          imagePath: resolvedTemplatePath,
+          imageName: resolvedImageName,
+          attack: attack,
+          defense: defense),
+      onExit: (_) => _removeOverlay(),
+      child: GestureDetector(
+        onTap: usable && !widget.isFizzled ? widget.onTap : null,
+        onLongPressStart: (_) => _insertOverlay(context,
+            imagePath: resolvedTemplatePath,
+            imageName: resolvedImageName,
+            attack: attack,
+            defense: defense),
+        onLongPressEnd: (_) => _removeOverlay(),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 110),
+          width: cardW,
+          height: cardH,
+          transform: widget.isSelected
+              ? (Matrix4.identity()..translateByDouble(0, lift, 0, 1))
+              : Matrix4.identity(),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(11),
+            boxShadow: [
+              if (widget.isSelected) ...[
+                BoxShadow(
+                    color: tc.withValues(alpha: 0.85),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(0, -2)),
+                BoxShadow(
+                    color: tc.withValues(alpha: 0.4),
+                    blurRadius: 36,
+                    spreadRadius: 4),
+              ],
+              if (widget.discardMode)
+                const BoxShadow(
+                    color: Color(0xFFCC2020), blurRadius: 14, spreadRadius: 3),
+              const BoxShadow(
+                  color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
+            ],
+          ),
+          child: Opacity(
+            opacity: widget.isFizzled ? 0.3 : (usable ? 1.0 : 0.38),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // ── Card face: always part-card art (classic shown in overlay) ──
+                  Positioned.fill(
+                    child: widget.discardMode
+                        ? ClassicTraitCardWidget(
+                            imagePath: resolvedTemplatePath,
+                            imageName: resolvedImageName,
+                            name: t.name,
+                            energy: t.energyCost,
+                            attack: attack,
+                            defense: defense,
+                            description: t.description,
+                            showDescription: true,
+                          )
+                        : _PartCardFace(
+                            artPath: widget.cardArtPath,
+                            energyCost: t.energyCost,
+                            canAfford: t.canAfford,
+                            frameColor: tc,
+                          ),
+                  ),
+
+                  // ── Shared overlays ────────────────────────────────────────
+                  if (widget.isSelected)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: tc.withValues(alpha: 0.9), width: 2.5),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.14),
+                              Colors.transparent,
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (!t.isReady)
+                    Positioned(
+                      bottom: 4,
+                      left: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.75),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                              color: AppColors.utility.withValues(alpha: 0.6)),
+                        ),
+                        child: Text('CD ${t.cooldownRemaining}',
+                            style: const TextStyle(
+                                color: AppColors.utility,
+                                fontSize: 7,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  if (widget.petColor != null)
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: widget.petColor,
+                          border:
+                              Border.all(color: Colors.white70, width: 0.5),
+                          boxShadow: [
+                            BoxShadow(
+                                color:
+                                    widget.petColor!.withValues(alpha: 0.5),
+                                blurRadius: 4)
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (widget.comboIndex != null)
+                    Positioned(
+                      top: 22,
+                      right: 4,
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: tc,
+                          border: Border.all(color: Colors.white70, width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                                color: tc.withValues(alpha: 0.6),
+                                blurRadius: 6)
+                          ],
+                        ),
+                        child: Center(
+                          child: Text('${widget.comboIndex}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900)),
+                        ),
+                      ),
+                    ),
+                  if (widget.isPity && !widget.discardMode)
+                    Positioned(
+                      bottom: 5,
+                      left: 5,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 3, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                              color: Colors.amber.withValues(alpha: 0.6)),
+                        ),
+                        child: const Text('★',
+                            style:
+                                TextStyle(color: Colors.amber, fontSize: 7)),
+                      ),
+                    ),
+                  if (widget.discardMode) ...[
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(9),
+                          gradient: RadialGradient(
+                            center: Alignment.center,
+                            radius: 1.1,
+                            colors: [
+                              Colors.transparent,
+                              const Color(0xFFCC2020).withValues(alpha: 0.35),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 5,
+                      right: 5,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color:
+                              const Color(0xFFCC2020).withValues(alpha: 0.9),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black54, blurRadius: 4)
+                          ],
+                        ),
+                        child: const Icon(Icons.close,
+                            size: 13, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                  if (widget.isFizzled)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        child: const Center(
+                          child: Text('✗',
+                              style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Default card face: part-card art + compact energy badge top-right.
+class _PartCardFace extends StatelessWidget {
+  final String? artPath;
+  final int energyCost;
+  final bool canAfford;
+  final Color frameColor;
+
+  const _PartCardFace({
+    required this.artPath,
+    required this.energyCost,
+    required this.canAfford,
+    required this.frameColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final energyColor =
+        canAfford ? AppColors.energyBlue : Colors.grey.shade500;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Part-card art
+        if (artPath != null)
+          Image.asset(
+            artPath!,
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+            errorBuilder: (_, __, ___) => Container(
+              color: Color.alphaBlend(
+                  frameColor.withValues(alpha: 0.35), const Color(0xFF101623)),
+            ),
+          )
+        else
+          Container(
+            color: Color.alphaBlend(
+                frameColor.withValues(alpha: 0.35), const Color(0xFF101623)),
+          ),
+
+        // Energy badge — top-right, away from pet-color dot (top-left)
+        Positioned(
+          top: 5,
+          right: 5,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: energyColor.withValues(alpha: 0.8)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.bolt_rounded, size: 10, color: energyColor),
+                const SizedBox(width: 2),
+                Text(
+                  '$energyCost',
+                  style: TextStyle(
+                    color: energyColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── _HoverCardOverlay ─────────────────────────────────────────────────────────
+// Full-screen overlay that shows the classic card centered + scaled up.
+// Rendered via OverlayEntry so it floats above the entire battle HUD.
+
+class _HoverCardOverlay extends StatefulWidget {
+  final TraitViewModel trait;
+  final String imagePath;
+  final String imageName;
+  final int attack;
+  final int defense;
+
+  const _HoverCardOverlay({
+    required this.trait,
+    required this.imagePath,
+    required this.imageName,
+    required this.attack,
+    required this.defense,
+  });
+
+  @override
+  State<_HoverCardOverlay> createState() => _HoverCardOverlayState();
+}
+
+class _HoverCardOverlayState extends State<_HoverCardOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+  late Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    )..forward();
+    _scale = Tween<double>(begin: 0.72, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack),
+    );
+    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.trait;
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (_, child) => Opacity(
+          opacity: _fade.value,
+          child: Center(
+            child: Transform.scale(
+              scale: _scale.value,
+              child: child,
+            ),
+          ),
+        ),
+        child: SizedBox(
+          width: 210,
+          height: 286, // 210 × (300/220) ≈ 286
+          child: ClassicTraitCardWidget(
+            imagePath: widget.imagePath,
+            imageName: widget.imageName,
+            name: t.name,
+            energy: t.energyCost,
+            attack: widget.attack,
+            defense: widget.defense,
+            description: t.description,
+            showDescription: true,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ── BattleCardEntrance ────────────────────────────────────────────────────────

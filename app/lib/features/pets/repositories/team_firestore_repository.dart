@@ -1,12 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../models/owned_pet.dart';
 import '../models/team_composition.dart';
 
-/// Syncs saved team compositions and the active team to Firestore.
-///
-/// Mirrors the SharedPreferences-backed PlayerRepository so player data
-/// persists across devices.  On web the Firestore client has known JS-interop
-/// issues, so the class degrades gracefully on that platform.
+/// Syncs player data (roster, teams, active team) to Firestore.
+/// Disabled on web — Firebase is not initialized on the web platform.
+/// Local SharedPreferences remains the authoritative store on web.
 class TeamFirestoreRepository {
   FirebaseFirestore? _db;
 
@@ -32,13 +31,46 @@ class TeamFirestoreRepository {
     try {
       await _teamsCol(uid).doc(team.id).set({
         'name':      team.name,
-        'petUids':   team.petUids,
+        'slots':     team.slots.map((s) => s.toJson()).toList(),
         'createdAt': team.createdAt.toIso8601String(),
         'updatedAt': team.updatedAt.toIso8601String(),
       }, SetOptions(merge: true));
     } catch (e) {
-      // Non-fatal — local state remains authoritative
       _log('upsertTeam failed: $e');
+    }
+  }
+
+  /// Persist the full pet roster on the user document.
+  Future<void> saveRoster(String uid, List<OwnedPet> roster) async {
+    final db = _fs();
+    if (db == null) return;
+    try {
+      await _userDoc(uid).set({
+        'roster':          roster.map((p) => p.toJson()).toList(),
+        'rosterUpdatedAt': DateTime.now().toIso8601String(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      _log('saveRoster failed: $e');
+    }
+  }
+
+  /// Load the pet roster from the user document.
+  /// Returns null if not found or on error (caller falls back to local).
+  Future<List<OwnedPet>?> loadRoster(String uid) async {
+    final db = _fs();
+    if (db == null) return null;
+    try {
+      final doc = await _userDoc(uid)
+          .get(const GetOptions(source: Source.serverAndCache));
+      if (!doc.exists) return null;
+      final raw = doc.data()?['roster'];
+      if (raw == null) return null;
+      return (raw as List)
+          .map((e) => OwnedPet.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _log('loadRoster failed: $e');
+      return null;
     }
   }
 
@@ -80,13 +112,10 @@ class TeamFirestoreRepository {
           .get(const GetOptions(source: Source.serverAndCache));
       return snap.docs.map((d) {
         final data = d.data();
-        return TeamComposition(
-          id:        d.id,
-          name:      data['name'] as String,
-          petUids:   List<String>.from(data['petUids'] as List),
-          createdAt: DateTime.parse(data['createdAt'] as String),
-          updatedAt: DateTime.parse(data['updatedAt'] as String),
-        );
+        return TeamComposition.fromJson({
+          ...data,
+          'id': d.id,
+        });
       }).toList();
     } catch (e) {
       _log('loadTeams failed: $e');

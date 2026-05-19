@@ -1246,29 +1246,29 @@ class ActionResolver {
     final alive = _aliveCandidates(enemyTeam);
     if (alive.isEmpty) return null;
 
-    // Center-front lock: when enemy front is alive, it is the default closest.
-    final enemyFront = enemyTeam.isNotEmpty ? enemyTeam[0] : null;
-    if (enemyFront != null && !enemyFront.isFainted) {
-      return _preferredTarget([enemyFront]);
+    // Use pet.row field: smallest row = closest (front).
+    final rowsSorted = alive.map((p) => p.row).toSet().toList()..sort();
+    for (final r in rowsSorted) {
+      final rowPets = alive.where((p) => p.row == r).toList();
+      if (rowPets.length == 1) return _preferredTarget(rowPets);
+      // Multiple pets share this row — pick closest lane to actor.
+      rowPets.sort((a, b) {
+        final da = (a.lane - actor.lane).abs();
+        final db = (b.lane - actor.lane).abs();
+        if (da != db) return da.compareTo(db);
+        return _deterministicMidLaneChoice(actor, a, b) ? -1 : 1;
+      });
+      // If top two are equidistant, apply 50/50.
+      if (rowPets.length >= 2) {
+        final top = rowPets[0];
+        final second = rowPets[1];
+        if ((top.lane - actor.lane).abs() == (second.lane - actor.lane).abs()) {
+          final chooseFirst = _deterministicMidLaneChoice(actor, top, second);
+          return _preferredTarget(chooseFirst ? [top, second] : [second, top]);
+        }
+      }
+      return _preferredTarget(rowPets);
     }
-
-    // Split path: front is down and two parallel options remain.
-    final mid = enemyTeam.length > 1 && !enemyTeam[1].isFainted ? enemyTeam[1] : null;
-    final back = enemyTeam.length > 2 && !enemyTeam[2].isFainted ? enemyTeam[2] : null;
-    if (mid != null && back != null) {
-      final actorLane = actorTeam.indexWhere((p) => p.id == actor.id);
-      final preferredFirst = switch (actorLane) {
-        1 => [mid, back],
-        2 => [back, mid],
-        _ => _deterministicMidLaneChoice(actor, mid, back)
-            ? [mid, back]
-            : [back, mid], // deterministic 50/50 for middle lane
-      };
-      return _preferredTarget(preferredFirst);
-    }
-
-    if (mid != null) return _preferredTarget([mid]);
-    if (back != null) return _preferredTarget([back]);
     return _preferredTarget(alive);
   }
 
@@ -1324,7 +1324,12 @@ class ActionResolver {
 
   List<Pet> _backRowCandidates(List<Pet> team) {
     final alive = _aliveCandidates(team);
-    return alive.reversed.toList();
+    if (alive.isEmpty) return [];
+    // Back row = pets with the highest row value.
+    final maxRow = alive.map((p) => p.row).reduce((a, b) => a > b ? a : b);
+    final backPets = alive.where((p) => p.row == maxRow).toList();
+    final rest = alive.where((p) => p.row != maxRow).toList();
+    return [...backPets, ...rest];
   }
 
   Pet? _lowestHp(List<Pet> team) {

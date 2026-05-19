@@ -25,8 +25,11 @@ class StageConfig {
     required this.enemyDefs,
   });
 
-  List<Pet> buildEnemyTeam() =>
-      enemyDefs.map((d) => d.toPet()).toList();
+    List<Pet> buildEnemyTeam() => enemyDefs
+      .asMap()
+      .entries
+      .map((entry) => entry.value.toPet(row: entry.key, lane: 1))
+      .toList();
 
   String get difficultyLabel => switch (recommendedPurity) {
     0 || 1 => 'Beginner',

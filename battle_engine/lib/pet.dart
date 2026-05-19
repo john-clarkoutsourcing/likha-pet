@@ -47,6 +47,14 @@ class Pet {
   final int morale;  // increases crit chance and combo resilience
   final int skill;   // adds bonus damage for multi-card combos
 
+  /// Row on the 3×3 formation grid: 0 = Front, 1 = Mid, 2 = Back.
+  /// Front is targeted first by default; Back is furthest.
+  final int row;
+
+  /// Lane (column) on the 3×3 formation grid: 0 = Upper, 1 = Center, 2 = Lower.
+  /// Used for split-path targeting when enemies share the same distance.
+  final int lane;
+
   int hp;
   int shield;
   bool isFainted;
@@ -70,6 +78,8 @@ class Pet {
     this.maxHp         = kBaseHp,
     this.morale        = 20,
     this.skill         = 20,
+    this.row           = 0,
+    this.lane          = 1,
     int? hp,
     int energy         = kBaseEnergy,
     this.shield        = 0,

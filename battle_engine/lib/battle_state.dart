@@ -66,6 +66,8 @@ class PetSnapshot {
   final List<DebuffSnapshot> debuffs;
   final List<BuffSnapshot> buffs;
   final Map<String, int> traitCooldowns;
+  final bool isInLastStand;
+  final int lastStandTicks;
 
   const PetSnapshot({
     required this.id,
@@ -83,6 +85,8 @@ class PetSnapshot {
     required this.debuffs,
     required this.buffs,
     required this.traitCooldowns,
+    this.isInLastStand = false,
+    this.lastStandTicks = 0,
   });
 
   factory PetSnapshot.fromLive(Pet pet) => PetSnapshot(
@@ -103,6 +107,8 @@ class PetSnapshot {
     traitCooldowns: {
       for (final t in pet.traits) t.id: t.cooldownRemaining,
     },
+    isInLastStand: pet.isInLastStand,
+    lastStandTicks: pet.lastStandTicks,
   );
 
   Map<String, dynamic> toJson() => {

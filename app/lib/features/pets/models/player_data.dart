@@ -65,8 +65,11 @@ class PlayerData {
       ? 0
       : completedStages.map(int.parse).reduce((a, b) => a > b ? a : b);
 
-  List<OwnedPet> get activeRoster =>
-      activeTeam.map((uid) => roster.firstWhere((p) => p.uid == uid)).toList();
+  List<OwnedPet> get activeRoster => activeTeam
+      .map((uid) => roster.cast<OwnedPet?>()
+          .firstWhere((p) => p?.uid == uid, orElse: () => null))
+      .whereType<OwnedPet>()
+      .toList();
 
   OwnedPet? petById(String uid) =>
       roster.cast<OwnedPet?>().firstWhere((p) => p?.uid == uid, orElse: () => null);

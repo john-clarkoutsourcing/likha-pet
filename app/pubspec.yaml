@@ -67,17 +67,6 @@ flutter:
     - assets/images/part-icons/
     - assets/images/status/
     - assets/images/status/classic/
-    # Spine skeletal animations — all 15 starter creatures + dusk
-    - assets/spines/aquatic/
-    - assets/spines/plant/
-    - assets/spines/beast/
-    - assets/spines/bug/
-    - assets/spines/reptile/
-    - assets/spines/bird/
-    - assets/spines/dusk/
-    - assets/spines/soul/
-    # Shared mixer atlas — one 4096×4096 PNG contains ALL body parts for ALL classes
-    - assets/spines/mixer/
     # Creature data (genes, animations, samples, variants)
     - assets/data/
     # Pet renderer — self-contained WebView bundle (no server required)

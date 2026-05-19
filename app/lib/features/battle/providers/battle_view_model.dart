@@ -7,8 +7,7 @@ import 'package:likha_pet_battle_engine/skill_card.dart';
 import 'package:likha_pet_battle_engine/trait.dart';
 import '../data/creature_registry.dart' show CreatureDefinition;
 import '../data/trait_card_catalog.dart';
-import '../widgets/pet_character_widget.dart'
-    show PetCharacterConfig, PetCharacterAnimState;
+import '../widgets/pet_character_widget.dart' show PetCharacterAnimState;
 import '../widgets/pet_sprite_widget.dart' show PetSpriteConfig;
 
 // ── PvpMatchEndData ───────────────────────────────────────────────────────────
@@ -386,6 +385,9 @@ class TurnOrderEntry {
   final String petId;
   final String name;
   final int speed;
+  final int hp;     // tiebreaker: lowest hp acts first
+  final int skill;  // tiebreaker: highest skill acts first
+  final int morale; // tiebreaker: highest morale acts first
   final bool isPlayer;
   final bool isFainted;
   final String? texturePath; // avatar shown in the attack-order HUD strip
@@ -394,6 +396,9 @@ class TurnOrderEntry {
     required this.petId,
     required this.name,
     required this.speed,
+    this.hp    = 0,
+    this.skill  = 0,
+    this.morale = 0,
     required this.isPlayer,
     required this.isFainted,
     this.texturePath,
@@ -431,13 +436,19 @@ class PetViewModel {
   final int poisonStacks;
   final List<TraitViewModel> traits;
   final PetSpriteConfig? spriteConfig;
-  final PetCharacterConfig? characterConfig;
 
   /// Card art path for each part slot. Key = 'horn'|'back'|'tail'|'mouth'.
   final Map<String, String> partCardArt;
 
   /// Full creature definition — used to render via PetRendererWidget.
   final CreatureDefinition? creatureDef;
+
+  /// Axie classic Last Stand — pet is at 0 HP but still fighting on morale.
+  final bool isInLastStand;
+  final int lastStandTicks; // remaining turns in Last Stand (1–4)
+
+  /// 3×3 lane (0=upper, 1=center, 2=lower) — used for visual y-offset within a row.
+  final int lane;
 
   const PetViewModel({
     required this.id,
@@ -460,9 +471,11 @@ class PetViewModel {
     this.poisonStacks = 0,
     required this.traits,
     this.spriteConfig,
-    this.characterConfig,
     this.partCardArt = const {},
     this.creatureDef,
+    this.isInLastStand = false,
+    this.lastStandTicks = 0,
+    this.lane = 1,
   });
 
   double get hpPercent => maxHp > 0 ? (hp / maxHp).clamp(0.0, 1.0) : 0.0;
@@ -481,7 +494,6 @@ class PetViewModel {
     Pet livePet,
     int position, {
     PetSpriteConfig? spriteConfig,
-    PetCharacterConfig? characterConfig,
     Map<String, String> partCardArt = const {},
     CreatureDefinition? creatureDef,
   }) =>
@@ -516,9 +528,11 @@ class PetViewModel {
             .map((t) => TraitViewModel.fromTrait(t, livePet))
             .toList(),
         spriteConfig: spriteConfig,
-        characterConfig: characterConfig,
         partCardArt: partCardArt,
         creatureDef: creatureDef,
+        isInLastStand: snap.isInLastStand,
+        lastStandTicks: snap.lastStandTicks,
+        lane: livePet.lane,
       );
 
   factory PetViewModel.initial(
@@ -529,7 +543,6 @@ class PetViewModel {
     List<Trait> traits,
     Pet livePet, {
     PetSpriteConfig? spriteConfig,
-    PetCharacterConfig? characterConfig,
     Map<String, String> partCardArt = const {},
     CreatureDefinition? creatureDef,
   }) =>
@@ -551,9 +564,9 @@ class PetViewModel {
         traits:
             traits.map((t) => TraitViewModel.fromTrait(t, livePet)).toList(),
         spriteConfig: spriteConfig,
-        characterConfig: characterConfig,
         partCardArt: partCardArt,
         creatureDef: creatureDef,
+        lane: livePet.lane,
       );
 }
 

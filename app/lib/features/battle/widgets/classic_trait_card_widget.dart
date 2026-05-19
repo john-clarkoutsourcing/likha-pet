@@ -120,9 +120,10 @@ class ClassicTraitCardWidget extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
+                              fontFamily: 'Fredoka',
                               color: const Color(0xFF442215),
                               fontSize: nameFontSize,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w700,
                               shadows: const [
                                 Shadow(color: Colors.black26, blurRadius: 2)
                               ],

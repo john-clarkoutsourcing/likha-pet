@@ -45,30 +45,40 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    // Load local state first (fast path)
+    // 1. Load local state first (fast path — works offline)
     final saved = await _repo.load();
     if (saved != null && saved.hasStarters) {
       state = saved;
     }
 
-    // Merge Firestore teams if available — wrapped in try/catch so a
-    // down/unreachable emulator or network error never blocks initialization.
+    // 2. Firestore sync — roster is authoritative source across devices/browsers
     if (_uid != null) {
       try {
-        final fsTeams      = await _teamFs.loadTeams(_uid!);
-        final fsActiveTeam = await _teamFs.loadActiveTeam(_uid!);
+        final results = await Future.wait([
+          _teamFs.loadRoster(_uid!),
+          _teamFs.loadTeams(_uid!),
+          _teamFs.loadActiveTeam(_uid!),
+        ]);
 
-        if (fsTeams.isNotEmpty) {
-          final merged = state.copyWith(
-            savedTeams: fsTeams,
-            activeTeam: fsActiveTeam ?? state.activeTeam,
-          );
-          state = merged;
-          await _repo.save(state);
-        }
+        final fsRoster    = results[0] as List<OwnedPet>?;
+        final fsTeams     = results[1] as List<TeamComposition>;
+        final fsActiveTeam = results[2] as List<String>?;
+
+        // Prefer Firestore roster over local when it has more pets —
+        // handles the case where local storage was cleared or the user
+        // is on a different device/browser.
+        final bestRoster = (fsRoster != null && fsRoster.length >= state.roster.length)
+            ? fsRoster
+            : state.roster;
+
+        state = state.copyWith(
+          roster:     bestRoster,
+          savedTeams: fsTeams.isNotEmpty ? fsTeams : state.savedTeams,
+          activeTeam: fsActiveTeam ?? state.activeTeam,
+        );
+        await _repo.save(state);
       } catch (_) {
-        // Firestore unavailable (emulator down, offline, etc.) — local data
-        // is already loaded above, so we can continue without team sync.
+        // Firestore unavailable — local data is already loaded above.
       }
     }
 
@@ -103,24 +113,30 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   /// Auto-generates team name from pet classes (e.g., "PPR").
   void saveTeamComposition(String? customName) {
     if (state.activeTeam.length != 3) return;
-    
+
     final teamId = _uuid.v4();
     final roster = state.roster;
-    
+
     // Generate auto name from pet classes
     final petClasses = state.activeTeam
         .map((uid) => roster.firstWhere((p) => p.uid == uid))
         .map((p) => p.classLabel.isNotEmpty ? p.classLabel[0] : '?')
         .join('');
-    
-    final teamName = customName?.isEmpty == false 
+
+    final teamName = customName?.isEmpty == false
         ? customName! 
         : petClasses.isNotEmpty ? petClasses : 'Team ${state.savedTeams.length + 1}';
+
+    final slots = List.generate(state.activeTeam.length, (i) => TeamSlot(
+      petUid: state.activeTeam[i],
+      row: BattleRow.fromIndex(i),
+      lane: BattleLane.center,
+    ));
     
     final newTeam = TeamComposition(
       id: teamId,
       name: teamName,
-      petUids: state.activeTeam,
+      slots: slots,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -173,12 +189,13 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   }
 
   /// Create a new team composition directly from a name and pet UIDs.
-  void createTeamComposition(String name, List<String> petUids) {
-    assert(petUids.length == 3, 'Team must have exactly 3 pets');
+  void createTeamComposition(String name, List<TeamSlot> slots) {
+    if (slots.isEmpty) return;
+    final petUids = slots.map((s) => s.petUid).toList();
     final newTeam = TeamComposition(
       id: _uuid.v4(),
       name: name,
-      petUids: petUids,
+      slots: slots,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -193,11 +210,11 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
   }
 
   /// Replace the pets and/or name of an existing saved team composition.
-  void updateTeamComposition(String teamId, String name, List<String> petUids) {
-    assert(petUids.length == 3, 'Team must have exactly 3 pets');
+  void updateTeamComposition(String teamId, String name, List<TeamSlot> slots) {
+    if (slots.isEmpty) return;
     final updated = state.savedTeams.map((t) {
       if (t.id != teamId) return t;
-      return t.copyWith(name: name, petUids: petUids, updatedAt: DateTime.now());
+      return t.copyWith(name: name, slots: slots, updatedAt: DateTime.now());
     }).toList();
     state = state.copyWith(savedTeams: updated);
     _persist();
@@ -385,6 +402,9 @@ class PlayerNotifier extends StateNotifier<PlayerData> {
 
   void _persist() {
     _repo.save(state);
+    if (_uid != null) {
+      _teamFs.saveRoster(_uid!, state.roster);
+    }
   }
 }
 

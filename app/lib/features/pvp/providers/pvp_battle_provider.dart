@@ -18,12 +18,12 @@ import '../../../features/battle/data/creature_registry.dart';
 import '../../../features/battle/engine/interactive_battle_engine.dart';
 import '../../../features/battle/providers/battle_view_model.dart';
 import '../../../features/battle/services/battle_audio_service.dart';
-import '../../../features/battle/services/mixed_skeleton_service.dart';
 import '../../../features/battle/widgets/pet_character_widget.dart'
-    show PetCharacterAnimState, PetCharacterConfig;
+    show PetCharacterAnimState;
 import '../../../features/battle/widgets/pet_sprite_widget.dart'
     show PetSpriteConfig;
 import '../../../features/pets/models/owned_pet.dart';
+import '../../../features/pets/models/team_composition.dart';
 import '../models/battle_action_log.dart';
 import '../models/pvp_message.dart';
 import '../services/pvp_socket.dart';
@@ -35,15 +35,27 @@ import '../services/pvp_firestore_service.dart';
 class PvpBattleArgs {
   final PvpMatchFound matchFound;
   final List<OwnedPet> myTeam;
+  final List<TeamSlot> myTeamSlots;
   final String myTeamName;
   const PvpBattleArgs({
     required this.matchFound,
     required this.myTeam,
+    this.myTeamSlots = const [],
     this.myTeamName = 'My Team',
   });
 }
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
+
+// ── Animation timing constants (must match pve_battle_provider.dart) ──────────
+const _kPvpDashWaitMs       = 480;
+const _kPvpImpactWaitMs     = 700;
+const _kPvpHitWaitMs        = 480;
+const _kPvpRecoilWaitMs     = 480;
+const _kPvpGapMs            = 100;
+const _kPvpProjectileWaitMs = 620;
+const _kPvpEffectWindupMs   = 500;
+const _kPvpEffectResultMs   = 480;
 
 class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
   static const String _audioOwner = 'pvp_battle';
@@ -71,7 +83,6 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     Offset(0.75, 0.50),
   ];
 
-  final Map<String, PetCharacterConfig> _mixedSkeletonConfigs = {};
   final Map<String, CreatureDefinition> _petDefs = {};
   int _visualEventCounter = 0;
 
@@ -223,14 +234,35 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     // Build _playerPets and _submitUidToPet in ONE pass so every UID maps to
     // the exact Pet object created from it.  Using separate loops caused index
     // drift when some OwnedPets were filtered (bodyId not in catalogue).
-    for (final owned in args.myTeam) {
+    for (var i = 0; i < args.myTeam.length; i++) {
+      final owned = args.myTeam[i];
       if (!kBodyCatalogue.containsKey(owned.bodyId)) continue;
       final def = owned.toCreatureDefinition();
       _petDefs[owned.uid] = def;
-      final pet = def.toPet(displayName: owned.name);
+      final slot = i < args.myTeamSlots.length ? args.myTeamSlots[i] : null;
+      final pet = def.toPet(
+        displayName: owned.name,
+        row: slot?.row.index ?? i,
+        lane: slot?.lane.index ?? 1,
+      );
       _playerPets.add(pet);
       _submitUidToPet[owned.uid] = pet; // guaranteed 1-to-1 mapping
       _myOwnedTeam.add(owned); // parallel list for petStatesSnapshot
+    }
+
+    // Sort both parallel lists by row so list index 0=FRONT,1=MID,2=BACK,
+    // matching the battlefield visual positions.
+    if (_playerPets.length == _myOwnedTeam.length) {
+      final paired = List.generate(
+        _playerPets.length,
+        (i) => (pet: _playerPets[i], owned: _myOwnedTeam[i]),
+      )..sort((a, b) => a.pet.row.compareTo(b.pet.row));
+      _playerPets
+        ..clear()
+        ..addAll(paired.map((p) => p.pet));
+      _myOwnedTeam
+        ..clear()
+        ..addAll(paired.map((p) => p.owned));
     }
 
     // 🔍 DIAGNOSTIC: Log own team stats
@@ -266,9 +298,12 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         final def = owned.toCreatureDefinition();
         _petDefs[owned.uid] = def;
         pet = def.toPet(
-            displayName: '${match.opponent.displayName}\'s ${def.className}');
+          displayName: '${match.opponent.displayName}\'s ${def.className}',
+          row: i,
+          lane: 1,
+        );
       } else {
-        pet = kCreatureRegistry.values.first.toPet();
+        pet = kCreatureRegistry.values.first.toPet(row: i, lane: 1);
       }
       enemyList.add(pet);
       _submitUidToPet[ref.uid] = pet; // opponent UID → enemy Pet
@@ -329,43 +364,23 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     // Subscribe to WS messages
     _wsSub = PvpSocket.instance.messages.listen(_onWsMessage);
 
-    _initializeMixedSkeletons().then((_) {
-      state = PveBattleViewModel(
-        currentRound: 1,
-        playerTeam: _toViewModels(_playerPets, isPlayer: true),
-        enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
-        roundLog: '',
-        isBattleOver: false,
-        playerTeamName: _myTeamName,
-        enemyTeamName: match.opponent.displayName,
-        turnOrder: _buildTurnOrder(),
-        selectedPetId: null,
-        pendingSkills: const {},
-        hand: _buildHandVMs(_engine.currentPlayerHand, const {}),
-        deckDrawSize: _engine.playerDeckDrawSize,
-        deckDiscardSize: _engine.playerDeckDiscardSize,
-        playerTeamEnergy: _engine.playerEnergy.energy,
-        enemyTeamEnergy: _engine.enemyEnergy.energy,
-      );
-    }).catchError((_) {
-      state = PveBattleViewModel(
-        currentRound: 1,
-        playerTeam: _toViewModels(_playerPets, isPlayer: true),
-        enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
-        roundLog: '',
-        isBattleOver: false,
-        playerTeamName: _myTeamName,
-        enemyTeamName: match.opponent.displayName,
-        turnOrder: _buildTurnOrder(),
-        selectedPetId: null,
-        pendingSkills: const {},
-        hand: _buildHandVMs(_engine.currentPlayerHand, const {}),
-        deckDrawSize: _engine.playerDeckDrawSize,
-        deckDiscardSize: _engine.playerDeckDiscardSize,
-        playerTeamEnergy: _engine.playerEnergy.energy,
-        enemyTeamEnergy: _engine.enemyEnergy.energy,
-      );
-    });
+    state = PveBattleViewModel(
+      currentRound: 1,
+      playerTeam: _toViewModels(_playerPets, isPlayer: true),
+      enemyTeam: _toViewModels(_enemyPets, isPlayer: false),
+      roundLog: '',
+      isBattleOver: false,
+      playerTeamName: _myTeamName,
+      enemyTeamName: match.opponent.displayName,
+      turnOrder: _buildTurnOrder(),
+      selectedPetId: null,
+      pendingSkills: const {},
+      hand: _buildHandVMs(_engine.currentPlayerHand, const {}),
+      deckDrawSize: _engine.playerDeckDrawSize,
+      deckDiscardSize: _engine.playerDeckDiscardSize,
+      playerTeamEnergy: _engine.playerEnergy.energy,
+      enemyTeamEnergy: _engine.enemyEnergy.energy,
+    );
   }
 
   // ── WS message handling ────────────────────────────────────────────────────
@@ -1109,6 +1124,8 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           'spd': _playerPets[i].speed,
           'skl': _playerPets[i].skill,
           'mor': _playerPets[i].morale,
+          'row': _playerPets[i].row,
+          'lane': _playerPets[i].lane,
           'dex': 0,
           'def': 0,
           'statusEffects': [],
@@ -1382,7 +1399,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           petDashTargets:
               dashTargetId != null ? {actorId: dashTargetId} : const {},
         );
-        await Future.delayed(const Duration(milliseconds: 550));
+        await Future.delayed(const Duration(milliseconds: _kPvpDashWaitMs));
         if (!mounted) return;
 
         final preHp = {
@@ -1411,7 +1428,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           petDashOffsets:
               dashDir != Offset.zero ? {actorId: dashDir} : const {},
         );
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: _kPvpImpactWaitMs));
         if (!mounted) return;
 
         if (_playerPets.every((p) => p.isFainted) ||
@@ -1428,11 +1445,11 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           petDashOffsets: const {},
           petDashTargets: const {},
         );
-        await Future.delayed(const Duration(milliseconds: 450));
+        await Future.delayed(const Duration(milliseconds: _kPvpRecoilWaitMs));
         if (!mounted) return;
         state = state.copyWith(
             petAnimStates: const {}, petEffectVfx: const {}, petAttackSlots: const {});
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: _kPvpGapMs));
         if (!mounted) return;
       } else if (isRanged) {
         // ── RANGED ────────────────────────────────────────────────────────
@@ -1448,7 +1465,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           pendingProjectileClass: action.actor.creatureClass.name,
         );
         BattleAudioService.instance.playAttack('damage');
-        await Future.delayed(const Duration(milliseconds: 700));
+        await Future.delayed(const Duration(milliseconds: _kPvpProjectileWaitMs));
         if (!mounted) return;
 
         final preHp = {
@@ -1473,7 +1490,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           petEffectVfx: const {},
           clearPendingProjectile: true,
         );
-        await Future.delayed(const Duration(milliseconds: 450));
+        await Future.delayed(const Duration(milliseconds: _kPvpHitWaitMs));
         if (!mounted) return;
 
         if (_playerPets.every((p) => p.isFainted) ||
@@ -1483,7 +1500,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           break;
         }
         state = state.copyWith(petAnimStates: const {}, petEffectVfx: const {});
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: _kPvpGapMs));
         if (!mounted) return;
       } else {
         // ── AOE / SUPPORT ─────────────────────────────────────────────────
@@ -1498,7 +1515,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           petAttackSlots: {actorId: partSlot},
         );
         BattleAudioService.instance.playAttack(effectType);
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: _kPvpEffectWindupMs));
         if (!mounted) return;
 
         final preHp = {
@@ -1521,7 +1538,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
           petAnimStates: {actorId: _animStateForEffect(effectType), ...targetAnims},
           petAttackSlots: {actorId: partSlot},
         );
-        await Future.delayed(const Duration(milliseconds: 400));
+        await Future.delayed(const Duration(milliseconds: _kPvpEffectResultMs));
         if (!mounted) return;
 
         if (_playerPets.every((p) => p.isFainted) ||
@@ -1534,7 +1551,7 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         }
         state = state.copyWith(
             petAnimStates: const {}, petEffectVfx: const {}, petAttackSlots: const {});
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: _kPvpGapMs));
         if (!mounted) return;
       }
     }
@@ -1777,21 +1794,45 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
         TurnOrderEntry(
             petId: p.id,
             name: p.name,
-            speed: p.speed,
+            speed: p.effectiveSpeed,
+            hp: p.hp,
+            skill: p.skill,
+            morale: p.morale,
             isPlayer: true,
             isFainted: p.isFainted,
-            texturePath: null),
+            texturePath: _avatarPath(p.id)),
       for (final p in _enemyPets)
         TurnOrderEntry(
             petId: p.id,
             name: p.name,
-            speed: p.speed,
+            speed: p.effectiveSpeed,
+            hp: p.hp,
+            skill: p.skill,
+            morale: p.morale,
             isPlayer: false,
             isFainted: p.isFainted,
-            texturePath: null),
+            texturePath: _avatarPath(p.id)),
     ];
-    all.sort((a, b) => b.speed.compareTo(a.speed));
+    all.sort((a, b) {
+      if (a.speed != b.speed) return b.speed.compareTo(a.speed);
+      if (a.hp != b.hp) return a.hp.compareTo(b.hp);
+      if (a.skill != b.skill) return b.skill.compareTo(a.skill);
+      if (a.morale != b.morale) return b.morale.compareTo(a.morale);
+      return a.petId.compareTo(b.petId);
+    });
     return all;
+  }
+
+  String? _avatarPath(String petId) {
+    final def = _defFor(petId);
+    if (def != null) {
+      return def.partCardArt['horn'] ??
+          def.partCardArt['back'] ??
+          def.partCardArt['tail'] ??
+          def.partCardArt['mouth'];
+    }
+    final cls = kCreatureRegistry[petId]?.className;
+    return cls != null ? 'assets/images/icons/mini-$cls.png' : null;
   }
 
   static const _kRangedTraitIds = {'bird_tail', 'bird_horn'};
@@ -1845,26 +1886,22 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
       };
 
   List<PetViewModel> _toViewModels(List<Pet> pets, {required bool isPlayer}) =>
-      [for (var i = 0; i < pets.length; i++) _petVM(pets[i], i)];
+      [for (final pet in pets) _petVM(pet, pet.row)];
 
   List<PetViewModel> _snapshotsToVMs(
           List<PetSnapshot> snaps, List<Pet> livePets) =>
-      [
-        for (var i = 0; i < snaps.length; i++) _snapVM(snaps[i], livePets[i], i)
-      ];
+      [for (var i = 0; i < snaps.length; i++) _snapVM(snaps[i], livePets[i], livePets[i].row)];
 
   CreatureDefinition? _defFor(String petId) =>
       _petDefs[petId] ?? kCreatureRegistry[petId];
 
   PetViewModel _petVM(Pet pet, int position) {
     final def = _defFor(pet.id);
-    final cfg = _mixedSkeletonConfigs[pet.id] ?? def?.spineConfig;
     return _snapVM(
       PetSnapshot.fromLive(pet),
       pet,
       position,
       spriteConfig: def?.spriteConfig,
-      characterConfig: cfg,
       partCardArt: def?.partCardArt ?? const {},
       creatureDef: def,
     );
@@ -1875,36 +1912,15 @@ class PvpBattleNotifier extends StateNotifier<PveBattleViewModel> {
     Pet livePet,
     int position, {
     PetSpriteConfig? spriteConfig,
-    PetCharacterConfig? characterConfig,
     Map<String, String> partCardArt = const {},
     CreatureDefinition? creatureDef,
   }) {
     final def = _defFor(livePet.id);
-    final cfg = _mixedSkeletonConfigs[livePet.id] ?? def?.spineConfig;
     return PetViewModel.fromSnapshot(snap, livePet.traits, livePet, position,
         spriteConfig: spriteConfig ?? def?.spriteConfig,
-        characterConfig: characterConfig ?? cfg,
         partCardArt:
             partCardArt.isNotEmpty ? partCardArt : def?.partCardArt ?? const {},
         creatureDef: creatureDef ?? def);
-  }
-
-  Future<void> _initializeMixedSkeletons() async {
-    try {
-      final service = await MixedSkeletonService.instance();
-      for (final pet in [..._playerPets, ..._enemyPets]) {
-        final def = _defFor(pet.id);
-        if (def == null) continue;
-        try {
-          final skeleton = await service.buildMixedSkeleton(def);
-          _mixedSkeletonConfigs[pet.id] = PetCharacterConfig(
-            texturePath: 'assets/spines/mixer/likha-2d-v3-all.png',
-            spineAtlasPath: 'assets/spines/mixer/likha-2d-v3-all.atlas',
-            skeletonJson: skeleton,
-          );
-        } catch (_) {}
-      }
-    } catch (_) {}
   }
 
   @override

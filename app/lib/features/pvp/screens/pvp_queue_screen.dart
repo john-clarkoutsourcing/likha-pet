@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../pets/models/owned_pet.dart';
+import '../../pets/models/team_composition.dart';
 import '../../pets/providers/player_provider.dart';
 import '../providers/pvp_battle_provider.dart';
 import '../providers/pvp_queue_provider.dart';
@@ -99,6 +100,7 @@ class _PvpQueueScreenState extends ConsumerState<PvpQueueScreen> {
     }
 
     final team = playerData.activeRoster;
+    final teamSlots = playerData.activeComposition?.slots ?? const <TeamSlot>[];
 
     // Navigate to battle when a match is found
     ref.listen(pvpQueueProvider, (prev, next) {
@@ -118,6 +120,7 @@ class _PvpQueueScreenState extends ConsumerState<PvpQueueScreen> {
         ref.read(pvpBattleArgsProvider.notifier).state = PvpBattleArgs(
           matchFound: match,
           myTeam: team,
+          myTeamSlots: teamSlots,
           myTeamName: teamName,
         );
         context.go(Routes.pvpBattle);
